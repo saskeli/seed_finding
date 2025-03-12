@@ -8,7 +8,7 @@ ifdef VERBOSE
 DEBUG_FLAGS += -DVERBOSE
 endif
 
-HEADERS = include/kmer.hpp
+HEADERS = include/gapmer.hpp
 
 .PHONY: clean all fast debug
 
