@@ -8,6 +8,8 @@ ifdef VERBOSE
 DEBUG_FLAGS += -DVERBOSE
 endif
 
+INCLUDE = -isystem deps/sdsl-lite/include -isystem deps/seqio/include
+
 HEADERS = include/gapmer.hpp
 
 .PHONY: clean all fast debug
@@ -23,7 +25,7 @@ fast: huddinge
 debug: huddinge_deb
 
 huddinge: huddinge.cpp $(HEADERS)
-	g++ $(CFLAGS) $(PERF_FLAGS) huddinge.cpp -o huddinge
+	g++ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
 huddinge_deb: huddinge.cpp $(HEADERS)
-	g++ $(CFLAGS) $(DEBUG_FLAGS) huddinge.cpp -o huddinge_deb
+	g++ $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
