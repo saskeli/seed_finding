@@ -1,5 +1,6 @@
 #include <vector>
 #include <array>
+#include <algorithm>
 
 #include "SeqIO/SeqIO.hh"
 
@@ -30,7 +31,23 @@ class fm_index {
             buckets[km.value()].push_back(i);
         }
     }
-    
+    #pragma omp parallel for
+    for (uint16_t i = 0; i < 256; ++i) {
+        std::sort(buckets[i].begin(), buckets[i].end(), [&](uint64_t lhs, uint64_t rhs) {
+            uint64_t a_comp = lhs + 5;
+            uint64_t b_comp = rhs + 5;
+            while (true) {
+                a_comp -= a_comp >= total_len ? total_len : 0;
+                b_comp -= b_comp >= total_len ? total_len : 0;
+                if (seq[a_comp] == seq[b_comp]) {
+                    ++a_comp;
+                    ++b_comp;
+                } else {
+                    return seq[a_comp] > seq[b_comp];
+                }
+            }
+        });
+    }
   }
 };
 } // namespace sf
