@@ -1,6 +1,6 @@
 CFLAGS = -std=c++2a -Wall -Wextra -Wshadow -pedantic -march=native
 
-PERF_FLAGS = -Ofast -DNDEBUG
+PERF_FLAGS = -Ofast -DNDEBUG -fopenmp
 
 DEBUG_FLAGS = -g -DDEBUG
 
@@ -10,7 +10,7 @@ endif
 
 INCLUDE = -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
-HEADERS = include/gapmer.hpp
+HEADERS = include/gapmer.hpp include/fm_index.hpp
 
 .PHONY: clean all fast debug
 

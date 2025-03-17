@@ -3,9 +3,8 @@
 #include <iostream>
 #include <bitset>
 #include <string>
-//#include "sdsl/bit_vectors.hpp"
 
-#include "include/gapmer.hpp"
+#include "include/fm_index.hpp"
 
 int main(int argc, char const *argv[]) {
     if (argc < 2) {
@@ -13,6 +12,7 @@ int main(int argc, char const *argv[]) {
         exit(1);
     }
     
+    sf::fm_index index(argv[1]);
 
     return 0;
 }
