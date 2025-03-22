@@ -10,7 +10,11 @@ endif
 
 INCLUDE = -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
+LIBS = -L sdsl-lite/lib -lsdsl
+
 HEADERS = include/gapmer.hpp include/fm_index.hpp
+
+SDSL_A = deps/sdsl-lite/lib/libsdsl.a
 
 .PHONY: clean all fast debug
 
@@ -24,8 +28,20 @@ fast: huddinge
 
 debug: huddinge_deb
 
-huddinge: huddinge.cpp $(HEADERS)
+huddinge: huddinge.cpp include/util.hpp
 	g++ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
+
+seed_finder: seed_finder.cpp $(HEADERS) $(SDSL_A)
+	g++ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
+
+comp: comp.cpp include/util.hpp
+	g++ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
 
 huddinge_deb: huddinge.cpp $(HEADERS)
 	g++ $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
+
+seed_finder_deb: seed_finder.cpp $(HEADERS) $(SDSL_A)
+	g++ $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
+
+$(SDSL_A):
+	(cd deps/sdsl-lite && cmake CMakelists.txt && make)

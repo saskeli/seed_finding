@@ -26,9 +26,16 @@
 *.a
 *.lib
 
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
 # Executables
 *.exe
 *.out
 *.app
 huddinge
 huddinge_deb
+comp
+seed_finder
+seed_finder_deb

@@ -1,25 +1,58 @@
 #include <algorithm>
 #include <array>
 #include <vector>
+#include <generator>
+
+#ifdef DEBUG
+#include <unordered_map>
+#endif
 
 #include "SeqIO/SeqIO.hh"
 #include "gapmer.hpp"
-
 #include "sdsl/bit_vectors.hpp"
 #include "sdsl/hyb_vector.hpp"
 
 namespace sf {
 
-template <uint16_t SA_gap_size = 64, uint64_t block_size = 2048> 
+template <uint16_t SA_gap_size = 64, uint16_t block_size = 2048>
 class fm_index {
  private:
+  static const constexpr uint64_t max_run_length = 0b111111;
+
   std::vector<uint64_t> sample_locations_;
+  std::vector<std::array<uint64_t, 4>> partial_sums_;
+  uint64_t* bwt_;
   std::array<uint64_t, 5> C_ = {0, 0, 0, 0, 0};
   sdsl::hyb_vector<> samples_;
   sdsl::hyb_vector<> bwt_starts_;
+  uint64_t size_;
+
+  uint8_t at(uint64_t i) {
+    uint64_t w = bwt_[i / 32];
+    w >>= (i % 32) * 2;
+    return w & 0b11;
+  }
+
+  uint64_t rank(uint64_t i, uint8_t v) {
+    uint64_t block = i / block_size;
+    uint64_t count = partial_sums_[block][v];
+    for (uint64_t idx = block * block_size; idx < i; ++idx) {
+      count += at(idx) == v;
+    }
+    return count;
+  }
+
+  fm_index(fm_index&) = delete;
+  fm_index(fm_index&&) = delete;
+  fm_index& operator=(fm_index&) = delete;
+  fm_index& operator=(fm_index&&) = delete;
 
  public:
-  fm_index(const char* fasta_path): sample_locations_() {
+  ~fm_index() {
+    free(bwt_);
+  }
+
+  fm_index(const char* fasta_path) : sample_locations_(), partial_sums_() {
     std::vector<uint64_t> starts;
     seq_io::Reader r(fasta_path);
     std::string seq;
@@ -32,26 +65,36 @@ class fm_index {
       seq.append(r.read_buf, len);
     }
     C_[4] = seq.size();
+#ifdef DEBUG
+    std::cout << C_[4] << " total characters" << std::endl;
+#endif
     sdsl::bit_vector samples(C_[4]);
     sdsl::bit_vector bwt_starts(C_[4]);
     sdsl::bit_vector seq_starts(C_[4]);
     for (auto v : starts) {
-        seq_starts[v] = 1;
+      seq_starts[v] = 1;
     }
 
-    std::string bwt = "";
-    seq.append(seq.c_str(), 4);
+    bwt_ = (uint64_t*)calloc((2 * C_[4] + 63) / 64, sizeof(uint64_t));
+    uint64_t bwt_position = 0;
+    seq.append(seq.c_str(), 16);
+    std::array<uint64_t, 4> partial{};
+    std::array<std::vector<uint64_t>, 256> buckets{};
     for (uint64_t c_i = 0; c_i < 4; ++c_i) {
       if (c_i > 0) {
         C_[c_i] = C_[c_i - 1];
       }
       char nuc = v_to_nuc[c_i];
-      std::array<std::vector<uint64_t>, 256> buckets;
+
+      for (uint64_t i = 0; i < 256; ++i) {
+        buckets[i].clear();
+      }
       for (uint64_t i = 0; i < C_[4]; ++i) {
         if (seq[i] == nuc) {
           ++C_[c_i];
           sf::gapmer km(seq.c_str() + i, 5);
-          buckets[km.value() % 256].push_back(i);
+          uint64_t v = km.value() % 256;
+          buckets[v].push_back(i);
         }
       }
 #pragma omp parallel for
@@ -74,23 +117,83 @@ class fm_index {
       }
       for (uint16_t i = 0; i < 256; ++i) {
         for (auto v : buckets[i]) {
+          if (bwt_position % block_size == 0) [[unlikely]] {
+            partial_sums_.push_back(partial);
+          }
           uint64_t bwt_i = v ? v - 1 : C_[4] - 1;
           if (seq_starts[bwt_i]) [[unlikely]] {
-            bwt_starts[bwt.size()] = 1;
+            bwt_starts[bwt_position] = 1;
           }
           if (bwt_i % SA_gap_size == 0) [[unlikely]] {
             sample_locations_.push_back(bwt_i);
-            samples[bwt.size()] = 1;
+            samples[bwt_position] = 1;
           }
-          bwt.push_back(seq[bwt_i]);
+          uint64_t c_v = nuc_to_v[seq[bwt_i]];
+          ++partial[c_v];
+          c_v <<= ((bwt_position % 32) * 2);
+          bwt_[bwt_position / 32] |= c_v;
+          ++bwt_position;
         }
       }
     }
+    if (bwt_position % block_size == 0) [[unlikely]] {
+      partial_sums_.push_back(partial);
+    }
+
+#ifdef DEBUG
+    assert(C_[3] == C_[4]);
+#endif
+    for (uint16_t i = 4; i > 0; --i) {
+      C_[i] = C_[i - 1];
+    }
+    C_[0] = 0;
+
+#ifdef DEBUG
+    uint64_t run_count = 0;
+    uint8_t ch = bwt_[0] & 0b11;
+    uint64_t rl = 1;
+    std::unordered_map<uint64_t, uint64_t> rls;
+    for (size_t i = 1; i < C_[4]; ++i) {
+      uint8_t o_ch = (bwt_[i / 32] >> ((i % 32) * 2)) & 0b11;
+      if (ch == o_ch) {
+        ++rl;
+      } else {
+        rls[rl] = rls.contains(rl) ? rls[rl] + 1 : 1;
+        run_count += 1;
+        rl = 1;
+      }
+      ch = o_ch;
+    }
+    rls[rl] = rls.contains(rl) ? rls[rl] + 1 : 1;
+    std::cout << "BWT size = " << C_[4] << "\n"
+              << "BWT runs = " << run_count << "\n"
+              << "mean rl  = " << double(C_[4]) / run_count << "\n"
+              << "C = [" << C_[0] << ", " << C_[1] << ", " << C_[2]
+              << ", " << C_[3] << ", " << C_[4] << "]" << std::endl;
+#ifdef VERBOSE
+    std::cout << "run counts:\n";
+    for (auto it : rls) {
+      std::cout << it.first << ": " << it.second << std::endl;
+    }
+#endif
+#endif
 
     samples_ = sdsl::hyb_vector<>(samples);
     bwt_starts_ = sdsl::hyb_vector<>(bwt_starts);
-    //TODO: Make blockRLBWT
-    
   }
+
+  std::pair<uint64_t, uint64_t> find(std::string& s) {
+    uint64_t i = s.size() - 1;
+    uint8_t c = nuc_to_v[s[i--]];
+    uint64_t a = C_[c];
+    uint64_t b = C_[c + 1];
+    for (; i < s.size(); --i) {
+      c = nuc_to_v[s[i]];
+      a = C_[c] + rank(a, c);
+      b = C_[c] + rank(b, c);
+    }
+    return {a, b};
+  }
+
 };
 }  // namespace sf
