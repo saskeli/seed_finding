@@ -3,12 +3,16 @@
 #include "include/fm_index.hpp"
 
 int main(int argc, char const *argv[]) {
-    if (argc < 2) {
-        std::cerr << "Input fasta is required" << std::endl;
+    if (argc < 3) {
+        std::cerr << "Input fasta and sequence is required" << std::endl;
+        exit(1);
     }
     sf::fm_index<> index(argv[1]);
 
-    std::string s = "AGTTTTTAAGTTAGTAGTGGCCAGTCTC";
-    std::cout << index.count(s) << " instances of " << s << std::endl;
+    std::string s = argv[2];
+    std::cout << "Instances of " << s << std::endl;
+    for (auto l : index.locate(s)) {
+        std::cout << "at " << l << std::endl;
+    }
     return 0;
 }

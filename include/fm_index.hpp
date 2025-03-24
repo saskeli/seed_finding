@@ -7,10 +7,11 @@
 #include <unordered_map>
 #endif
 
-#include "SeqIO/SeqIO.hh"
 #include "gapmer.hpp"
+#include "SeqIO/SeqIO.hh"
 #include "sdsl/bit_vectors.hpp"
 #include "sdsl/hyb_vector.hpp"
+
 
 namespace sf {
 
@@ -24,22 +25,58 @@ class fm_index {
   uint64_t* bwt_;
   std::array<uint64_t, 5> C_ = {0, 0, 0, 0, 0};
   sdsl::hyb_vector<> samples_;
-  sdsl::hyb_vector<> bwt_starts_;
+  sdsl::hyb_vector<>::rank_1_type samples_rs_; 
+  sdsl::hyb_vector<> seq_starts_;
+  sdsl::hyb_vector<>::rank_1_type seq_starts_rs_;
   uint64_t size_;
 
-  uint8_t at(uint64_t i) {
+  uint8_t at(uint64_t i) const {
     uint64_t w = bwt_[i / 32];
     w >>= (i % 32) * 2;
     return w & 0b11;
   }
 
-  uint64_t rank(uint64_t i, uint8_t v) {
+  uint64_t rank(uint64_t i, uint8_t v) const {
     uint64_t block = i / block_size;
     uint64_t count = partial_sums_[block][v];
     for (uint64_t idx = block * block_size; idx < i; ++idx) {
       count += at(idx) == v;
     }
     return count;
+  }
+
+  uint64_t lf(const uint64_t& i) const {
+    uint8_t c = at(i);
+    return C_[c] + rank(i, c);
+  }
+
+  std::pair<uint64_t, uint64_t> find(const std::string& s) const{
+    uint64_t i = s.size() - 1;
+    uint8_t c = nuc_to_v[s[i--]];
+    uint64_t a = C_[c];
+    uint64_t b = C_[c + 1];
+    for (; i < s.size(); --i) {
+      c = nuc_to_v[s[i]];
+      a = C_[c] + rank(a, c);
+      b = C_[c] + rank(b, c);
+    }
+    return {a, b};
+  }
+
+  std::pair<uint64_t, uint64_t> find(const gapmer& mer, uint16_t start, uint16_t end) const {
+    uint64_t i = end - 1;
+    uint8_t c = mer.at(i--);
+    uint64_t a = C_[c];
+    uint64_t b = C_[c + 1];
+    for (; i <  end; --i) {
+      if (i < start) {
+        break;
+      }
+      c = mer.at(i);
+      a = C_[c] + rank(a, c);
+      b = C_[c] + rank(b, c);
+    }
+    return {a, b};
   }
 
   fm_index(fm_index&) = delete;
@@ -74,6 +111,8 @@ class fm_index {
     for (auto v : starts) {
       seq_starts[v] = 1;
     }
+    seq_starts_ = sdsl::hyb_vector<>(seq_starts);
+    seq_starts_rs_ = sdsl::hyb_vector<>::rank_1_type(&seq_starts_);
 
     bwt_ = (uint64_t*)calloc((2 * C_[4] + 63) / 64, sizeof(uint64_t));
     uint64_t bwt_position = 0;
@@ -121,9 +160,6 @@ class fm_index {
             partial_sums_.push_back(partial);
           }
           uint64_t bwt_i = v ? v - 1 : C_[4] - 1;
-          if (seq_starts[bwt_i]) [[unlikely]] {
-            bwt_starts[bwt_position] = 1;
-          }
           if (bwt_i % SA_gap_size == 0) [[unlikely]] {
             sample_locations_.push_back(bwt_i);
             samples[bwt_position] = 1;
@@ -179,20 +215,96 @@ class fm_index {
 #endif
 
     samples_ = sdsl::hyb_vector<>(samples);
-    bwt_starts_ = sdsl::hyb_vector<>(bwt_starts);
+    samples_rs_ = sdsl::hyb_vector<>::rank_1_type(&samples_);
   }
 
-  std::pair<uint64_t, uint64_t> find(std::string& s) {
-    uint64_t i = s.size() - 1;
-    uint8_t c = nuc_to_v[s[i--]];
-    uint64_t a = C_[c];
-    uint64_t b = C_[c + 1];
-    for (; i < s.size(); --i) {
-      c = nuc_to_v[s[i]];
-      a = C_[c] + rank(a, c);
-      b = C_[c] + rank(b, c);
+  uint64_t count(const gapmer& mer, uint16_t gap) const {
+    // TODO: Implement this :)
+    return 0;
+  }
+
+  uint64_t count(const gapmer& mer) const {
+    auto gap_len = mer.gap_length();
+    if (gap_len) {
+      return count(mer, gap_len);
     }
-    return {a, b};
+    auto mer_len = mer.length();
+    auto I = find(mer, 0, mer_len);
+    uint64_t acc = 0;
+    for (uint64_t s_idx = I.first; s_idx < I.second; ++s_idx) {
+      uint64_t idx = s_idx;
+      uint64_t steps = 0;
+      for (; steps < SA_gap_size; ++steps) {
+        if (samples_[idx]) [[unlikely]] {
+          break;
+        }
+        idx = lf(idx);
+      }
+      uint64_t loc = samples_rs_.rank(idx);
+      loc = sample_locations_[loc];
+      loc += steps + 1;
+      loc -= loc >= C_[4] ? C_[4] : 0;
+      if (loc + s.size() > C_[4]) [[unlikely]] {
+        continue;
+      }
+      acc += seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + s.size()):
+    }
+    return ret;
+  }
+
+  std::vector<uint64_t> locate(const std::string& s) const {
+    auto gap_s = s.find(".");
+    std::vector<uint64_t> ret;
+    if (gap_s != std::string::npos) {
+      uint64_t gap_e = gap_s + 1;
+      for (; gap_e < s.size(); ++gap_e) {
+        if (s[gap_e] != '.') {
+          break;
+        }
+      }
+      if (gap_s == 0) [[unlikely]] {
+        if (gap_e == s.size()) {
+          return ret;
+        }
+        return locate(s.substr(gap_e));
+      } else if (gap_e == s.size()) {
+        return locate(s.substr(0, gap_s));
+      }
+      auto a_locs = locate(s.substr(0, gap_s));
+      auto b_locs = locate(s.substr(gap_e));
+      std::sort(b_locs.begin(), b_locs.end());
+      for (auto a_loc : a_locs) {
+        if (std::binary_search(b_locs.begin(), b_locs.end(), a_loc + gap_e)) {
+          if (seq_starts_rs_.rank(a_loc + 1) == seq_starts_rs_.rank(a_loc + gap_e + 1)) {
+            ret.push_back(a_loc);
+          }
+        }
+      }
+      return ret;
+    }
+    auto I = find(s);
+    
+    for (uint64_t s_idx = I.first; s_idx < I.second; ++s_idx) {
+      uint64_t idx = s_idx;
+      uint64_t steps = 0;
+      for (; steps < SA_gap_size; ++steps) {
+        if (samples_[idx]) [[unlikely]] {
+          break;
+        }
+        idx = lf(idx);
+      }
+      uint64_t loc = samples_rs_.rank(idx);
+      loc = sample_locations_[loc];
+      loc += steps + 1;
+      loc -= loc >= C_[4] ? C_[4] : 0;
+      if (loc + s.size() > C_[4]) [[unlikely]] {
+        continue;
+      }
+      if (seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + s.size())) {
+        ret.push_back(loc);
+      }
+    }
+    return ret;
   }
 
 };

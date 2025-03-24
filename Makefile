@@ -10,7 +10,7 @@ endif
 
 INCLUDE = -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
-LIBS = -L sdsl-lite/lib -lsdsl
+LIBS = -L deps/sdsl-lite/lib -lsdsl -lz
 
 HEADERS = include/gapmer.hpp include/fm_index.hpp
 
