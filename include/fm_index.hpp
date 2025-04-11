@@ -1,17 +1,16 @@
 #include <algorithm>
 #include <array>
-#include <vector>
 #include <generator>
+#include <vector>
 
 #ifdef DEBUG
 #include <unordered_map>
 #endif
 
-#include "gapmer.hpp"
 #include "SeqIO/SeqIO.hh"
+#include "gapmer.hpp"
 #include "sdsl/bit_vectors.hpp"
 #include "sdsl/hyb_vector.hpp"
-
 
 namespace sf {
 
@@ -25,7 +24,7 @@ class fm_index {
   uint64_t* bwt_;
   std::array<uint64_t, 5> C_ = {0, 0, 0, 0, 0};
   sdsl::hyb_vector<> samples_;
-  sdsl::hyb_vector<>::rank_1_type samples_rs_; 
+  sdsl::hyb_vector<>::rank_1_type samples_rs_;
   sdsl::hyb_vector<> seq_starts_;
   sdsl::hyb_vector<>::rank_1_type seq_starts_rs_;
   uint64_t size_;
@@ -50,7 +49,7 @@ class fm_index {
     return C_[c] + rank(i, c);
   }
 
-  std::pair<uint64_t, uint64_t> find(const std::string& s) const{
+  std::pair<uint64_t, uint64_t> find(const std::string& s) const {
     uint64_t i = s.size() - 1;
     uint8_t c = nuc_to_v[s[i--]];
     uint64_t a = C_[c];
@@ -63,16 +62,17 @@ class fm_index {
     return {a, b};
   }
 
-  std::pair<uint64_t, uint64_t> find(const gapmer& mer, uint16_t start, uint16_t end) const {
+  std::pair<uint64_t, uint64_t> find(const gapmer& mer, uint16_t start,
+                                     uint16_t end) const {
     uint64_t i = end - 1;
-    uint8_t c = mer.at(i--);
+    uint8_t c = mer.nuc(i--);
     uint64_t a = C_[c];
     uint64_t b = C_[c + 1];
-    for (; i <  end; --i) {
+    for (; i < end; --i) {
       if (i < start) {
         break;
       }
-      c = mer.at(i);
+      c = mer.nuc(i);
       a = C_[c] + rank(a, c);
       b = C_[c] + rank(b, c);
     }
@@ -85,9 +85,7 @@ class fm_index {
   fm_index& operator=(fm_index&&) = delete;
 
  public:
-  ~fm_index() {
-    free(bwt_);
-  }
+  ~fm_index() { free(bwt_); }
 
   fm_index(const char* fasta_path) : sample_locations_(), partial_sums_() {
     std::vector<uint64_t> starts;
@@ -204,8 +202,8 @@ class fm_index {
     std::cout << "BWT size = " << C_[4] << "\n"
               << "BWT runs = " << run_count << "\n"
               << "mean rl  = " << double(C_[4]) / run_count << "\n"
-              << "C = [" << C_[0] << ", " << C_[1] << ", " << C_[2]
-              << ", " << C_[3] << ", " << C_[4] << "]" << std::endl;
+              << "C = [" << C_[0] << ", " << C_[1] << ", " << C_[2] << ", "
+              << C_[3] << ", " << C_[4] << "]" << std::endl;
 #ifdef VERBOSE
     std::cout << "run counts:\n";
     for (auto it : rls) {
@@ -218,9 +216,66 @@ class fm_index {
     samples_rs_ = sdsl::hyb_vector<>::rank_1_type(&samples_);
   }
 
-  uint64_t count(const gapmer& mer, uint16_t gap) const {
-    // TODO: Implement this :)
-    return 0;
+  uint64_t count(const gapmer& mer, uint16_t gap_len) const {
+    // TODO: Would be better to compute a locations first.
+    // can easily check if the match is impossible due to overlapping
+    // a read end if we start with the prefix.
+    auto a_I = find(mer, 0, mer.gap_start());
+    auto b_I = find(mer, mer.gap_start(), mer.length());
+    uint32_t gap_e = gap_len + mer.gap_start();
+
+    // get all the suffix start locations in vector
+    std::vector<uint64_t> b_loc;
+    for (uint64_t s_idx = b_I.first; s_idx < b_I.second; ++s_idx) {
+      uint64_t idx = s_idx;
+      uint64_t steps = 0;
+      for (; steps < SA_gap_size; ++steps) {
+        if (samples_[idx]) [[unlikely]] {
+          break;
+        }
+        idx = lf(idx);
+      }
+      uint64_t loc = samples_rs_.rank(idx);
+      loc = sample_locations_[loc];
+      loc += steps + 1;
+      loc -= loc >= C_[4] ? C_[4] : 0;
+      if (loc + mer.length() - mer.gap_start() > C_[4]) [[unlikely]] {
+        continue;
+      }
+      if (seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + (mer.length() - mer.gap_start()))) {
+        b_loc.push_back(loc);
+      }
+    }
+    std::sort(b_loc.begin(), b_loc.end());
+
+    uint64_t acc = 0;
+    // match prefix locations to suffis locations.
+    for (uint64_t s_idx = a_I.first; s_idx < a_I.second; ++s_idx) {
+      uint64_t idx = s_idx;
+      uint64_t steps = 0;
+      for (; steps < SA_gap_size; ++steps) {
+        if (samples_[idx]) [[unlikely]] {
+          break;
+        }
+        idx = lf(idx);
+      }
+      uint64_t loc = samples_rs_.rank(idx);
+      loc = sample_locations_[loc];
+      loc += steps + 1;
+      loc -= loc >= C_[4] ? C_[4] : 0;
+      if (loc + mer.gap_start() > C_[4]) [[unlikely]] {
+        continue;
+      }
+      if (seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + mer.gap_start())) {
+        if (std::binary_search(b_loc.begin(), b_loc.end(), loc + gap_e)) {
+          if (seq_starts_rs_.rank(loc + 1) ==
+              seq_starts_rs_.rank(loc + gap_e + 1)) {
+            ++acc;
+          }
+        }
+      }
+    }
+    return acc;
   }
 
   uint64_t count(const gapmer& mer) const {
@@ -244,12 +299,13 @@ class fm_index {
       loc = sample_locations_[loc];
       loc += steps + 1;
       loc -= loc >= C_[4] ? C_[4] : 0;
-      if (loc + s.size() > C_[4]) [[unlikely]] {
+      if (loc + mer.length() > C_[4]) [[unlikely]] {
         continue;
       }
-      acc += seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + s.size()):
+      acc +=
+          seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + mer.length());
     }
-    return ret;
+    return acc;
   }
 
   std::vector<uint64_t> locate(const std::string& s) const {
@@ -275,7 +331,8 @@ class fm_index {
       std::sort(b_locs.begin(), b_locs.end());
       for (auto a_loc : a_locs) {
         if (std::binary_search(b_locs.begin(), b_locs.end(), a_loc + gap_e)) {
-          if (seq_starts_rs_.rank(a_loc + 1) == seq_starts_rs_.rank(a_loc + gap_e + 1)) {
+          if (seq_starts_rs_.rank(a_loc + 1) ==
+              seq_starts_rs_.rank(a_loc + gap_e + 1)) {
             ret.push_back(a_loc);
           }
         }
@@ -283,7 +340,7 @@ class fm_index {
       return ret;
     }
     auto I = find(s);
-    
+
     for (uint64_t s_idx = I.first; s_idx < I.second; ++s_idx) {
       uint64_t idx = s_idx;
       uint64_t steps = 0;
@@ -306,6 +363,5 @@ class fm_index {
     }
     return ret;
   }
-
 };
 }  // namespace sf
