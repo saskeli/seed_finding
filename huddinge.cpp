@@ -32,7 +32,7 @@ input_mer  Possibly gapped input mer consisting of \"[ACGT.]*\".
   exit(0);
 }
 
-const uint16_t max_gap = 6;
+const constexpr uint16_t max_gap = MAX_GAP;
 
 bool single_gapped(const std::string& input_mer) {
   bool gap_foud = false;
@@ -251,13 +251,11 @@ void string_gen(const std::string& input_mer, auto callback) {
 template <class G, bool middle_gap_only>
 bool compare_single(G g) {
   std::unordered_set<std::string> a;
-  auto callback = [&](G o) { a.insert(o.to_string()); };
-  sf::gap_mer_neighbour_generation<G, decltype(callback), middle_gap_only,
-                                   max_gap>(g, callback);
-
   std::unordered_set<std::string> b;
-  auto o_callback = [&](G o) { b.insert(o.to_string()); };
-  g.huddinge_neighbours(o_callback);
+
+  if (sf::compare_generation<G, middle_gap_only, max_gap>(g, a, b)) {
+    return true;
+  }
 
   std::vector<std::string> m_g;
   for (auto a_e : a) {
@@ -273,20 +271,17 @@ bool compare_single(G g) {
     }
   }
 
-  if (m_g.size() || m_b.size()) {
-    std::cout << "Problem when generating " << g.to_string()
-              << " neighbours: " << std::endl;
-    std::cout << "Missing from neighbour generation" << std::endl;
-    for (auto s : m_g) {
-      std::cout << s << std::endl;
-    }
-    std::cout << "Missing from brute force" << std::endl;
-    for (auto s : m_b) {
-      std::cout << s << std::endl;
-    }
-    return false;
+  std::cout << "Problem when generating " << g.to_string()
+            << " neighbours: " << std::endl;
+  std::cout << "Missing from neighbour generation" << std::endl;
+  for (auto s : m_g) {
+    std::cout << s << std::endl;
   }
-  return true;
+  std::cout << "Missing from brute force" << std::endl;
+  for (auto s : m_b) {
+    std::cout << s << std::endl;
+  }
+  return false;
 }
 
 template <class G, bool middle_gap_only>

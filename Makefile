@@ -1,4 +1,8 @@
-CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native
+ifndef MAX_GAP
+MAX_GAP = 6
+endif
+
+CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)
 
 PERF_FLAGS = -Ofast -DNDEBUG -fopenmp
 
@@ -10,9 +14,9 @@ endif
 
 INCLUDE = -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
-LIBS = -L deps/sdsl-lite/lib -lsdsl -lz
+LIBS = -L deps/sdsl-lite/lib -lsdsl -lz -lgsl -lgslcblas -lm
 
-HEADERS = include/gapmer.hpp include/fm_index.hpp
+HEADERS = include/gapmer.hpp include/fm_index.hpp include/gapmer_count.hpp include/seed_finder.hpp
 
 SDSL_DIR = deps/sdsl-lite/lib
 
@@ -20,7 +24,7 @@ SDSL_A = $(SDSL_DIR)/libsdsl.a
 
 GTEST_DIR = deps/googletest
 
-GFLAGS = -lpthread -DDEBUG -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -pthread -L $(GTEST_DIR)/lib
+GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -pthread -L $(GTEST_DIR)/lib
 
 GTEST_HEADERS = $(GTEST_DIR)/googletest/include/gtest/*.h \
                 $(GTEST_DIR)/googletest/include/gtest/internal/*.h
@@ -79,18 +83,19 @@ $(SDSL_A): | $(SDSL_DIR)
 test/test.o: $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
 	g++ $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
 
-test/test: test/test.o $(GTEST_DIR)/lib/libgtest_main.a
-	g++ $(CFLAGS) $(GFLAGS) -O3 test/test.o -o test/test -lgtest_main -lgtest
+test/test: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
+	g++ $(CFLAGS) $(GFLAGS) -O3 test/test.cpp -o test/test -lgtest_main -lgtest
 
 test: test/test
 	test/test $(ARG)
 
-test/cover: $(GTEST_DIR)/lib/libgtest_main.a
+test/cover: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
 	g++ -g --coverage -O1 $(CFLAGS) $(GFLAGS) test/test.cpp -o test/cover -lgtest_main -lgtest -lgcov
 
 cover: test/cover
+	rm -f *.gcov test/*.gcda coverage.info
 	test/cover
-	gcov test/test.cpp --object-file test/cover
-	lcov -c -d . --ignore-errors mismatch --ignore-errors inconsistent -o index.info
-	genhtml index.info -o target
+	lcov -c --ignore-errors inconsistent,unused --directory test --output-file coverage.info --gcov-tool gcov
+	lcov --remove coverage.info "/usr*" --output-file coverage.info
+	genhtml coverage.info -o target
 

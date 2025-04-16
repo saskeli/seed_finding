@@ -1,32 +1,63 @@
 #include <iostream>
+#include <string>
 
-#include "include/fm_index.hpp"
-#include "include/gapmer.hpp"
+#include "include/seed_finder.hpp"
 
-int main(int argc, char const *argv[]) {
-  if (argc < 3) {
-    std::cerr << "Input fasta and sequence is required" << std::endl;
-    exit(1);
-  }
-  sf::fm_index<> index(argv[1]);
+void help(const char* call) {
+  std::cout << R"(
+Attempt seed extraction from selex data.
 
-  std::string s = argv[2];
-  auto gap_s = s.find(".");
-  if (gap_s != std::string::npos) {
-    uint64_t gap_l = gap_s + 1;
-    for (; gap_l < s.size(); ++gap_l) {
-      if (s[gap_l] != '.') {
-        break;
-      }
+Usage: )" << call
+            << R"( [OPTION]... [-b bg_fasta] <sig_fasta>
+
+-b bg_fasta  Background fasta file. Required for now.
+sig_fasta    Signal fasta file.
+-a           Gap any location, not just middle.
+-p <val>     p value to use. default 0.01.
+-h           Print this and terminate. Overrides all other options.
+
+)" << std::endl;
+  exit(0);
+}
+
+const constexpr uint16_t max_gap = MAX_GAP;
+
+int main(int argc, char const* argv[]) {
+  std::string bg_path = "";
+  std::string sig_path = "";
+  bool middle_gap_only = true;
+  double p = 0.01;
+  for (int i = 1; i < argc; ++i) {
+    std::string arg(argv[i]);
+    if (arg == "-h") {
+      help(argv[0]);
+    } else if (arg == "-a") {
+      middle_gap_only = false;
+    } else if (arg == "-b") {
+      bg_path = argv[++i];
+    } else if (arg == "-p") {
+      p = std::stod(argv[++i]);
+    } else {
+      sig_path = arg;
     }
-    gap_l -= gap_s;
-    std::cout << s << " with " << s.size() - gap_l << " defined bases, gap start " << gap_s
-              << " and gap length " << gap_l << std::endl;
-    sf::gapmer mer(s.c_str(), s.size() - gap_l, gap_s, gap_l);
-    std::cout << index.count(mer) << " instances of " << mer.to_string() << std::endl;
+  }
+  if (bg_path.size() == 0 || sig_path.size() == 0) {
+    std::cerr << "Input fasta files are required." << std::endl;
+    help(argv[0]);
+  }
+  
+  if (middle_gap_only) {
+    sf::seed_finder<true, max_gap> sf(bg_path.c_str(), sig_path.c_str(), p);
+    sf.find_seeds();
+    for (auto g : sf.get_seeds()) {
+      std::cout << g.to_string() << std::endl;
+    }
   } else {
-    sf::gapmer mer(s.c_str(), s.size());
-    std::cout << index.count(mer) << " instances of " << mer.to_string() << std::endl;
+    sf::seed_finder<false, max_gap> sf(bg_path.c_str(), sig_path.c_str(), p);
+    sf.find_seeds();
+    for (auto g : sf.get_seeds()) {
+      std::cout << g.to_string() << std::endl;
+    }
   }
 
   return 0;

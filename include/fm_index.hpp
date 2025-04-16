@@ -62,6 +62,7 @@ class fm_index {
     return {a, b};
   }
 
+  template <class gapmer>
   std::pair<uint64_t, uint64_t> find(const gapmer& mer, uint16_t start,
                                      uint16_t end) const {
     uint64_t i = end - 1;
@@ -216,6 +217,7 @@ class fm_index {
     samples_rs_ = sdsl::hyb_vector<>::rank_1_type(&samples_);
   }
 
+  template <class gapmer>
   uint64_t count(const gapmer& mer, uint16_t gap_len) const {
     // TODO: Would be better to compute a locations first.
     // can easily check if the match is impossible due to overlapping
@@ -242,7 +244,8 @@ class fm_index {
       if (loc + mer.length() - mer.gap_start() > C_[4]) [[unlikely]] {
         continue;
       }
-      if (seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + (mer.length() - mer.gap_start()))) {
+      if (seq_starts_rs_.rank(loc + 1) ==
+          seq_starts_rs_.rank(loc + (mer.length() - mer.gap_start()))) {
         b_loc.push_back(loc);
       }
     }
@@ -266,7 +269,8 @@ class fm_index {
       if (loc + mer.gap_start() > C_[4]) [[unlikely]] {
         continue;
       }
-      if (seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + mer.gap_start())) {
+      if (seq_starts_rs_.rank(loc + 1) ==
+          seq_starts_rs_.rank(loc + mer.gap_start())) {
         if (std::binary_search(b_loc.begin(), b_loc.end(), loc + gap_e)) {
           if (seq_starts_rs_.rank(loc + 1) ==
               seq_starts_rs_.rank(loc + gap_e + 1)) {
@@ -278,6 +282,7 @@ class fm_index {
     return acc;
   }
 
+  template <class gapmer>
   uint64_t count(const gapmer& mer) const {
     auto gap_len = mer.gap_length();
     if (gap_len) {
@@ -302,8 +307,8 @@ class fm_index {
       if (loc + mer.length() > C_[4]) [[unlikely]] {
         continue;
       }
-      acc +=
-          seq_starts_rs_.rank(loc + 1) == seq_starts_rs_.rank(loc + mer.length());
+      acc += seq_starts_rs_.rank(loc + 1) ==
+             seq_starts_rs_.rank(loc + mer.length());
     }
     return acc;
   }

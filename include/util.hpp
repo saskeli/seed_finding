@@ -1,6 +1,10 @@
 #pragma once
 #include <array>
 #include <cstdint>
+#include <unordered_set>
+#include <string>
+
+#include "gapmer.hpp"
 
 namespace sf {
 const static constexpr std::array<char, 4> v_to_nuc = {'A', 'C', 'G', 'T'};
@@ -114,6 +118,25 @@ void gap_mer_neighbour_generation(G g, F& callback) {
   };
   gap_mer_generation<G, decltype(second_callback), middle_gap_only, max_gap>(
       g.length(), second_callback);
+}
+
+template <class G, bool middle_gap_only, uint16_t max_gap>
+bool compare_generation(G g, std::unordered_set<std::string>& a, std::unordered_set<std::string>& b) {
+  auto callback = [&](G o) { a.insert(o.to_string()); };
+  gap_mer_neighbour_generation<G, decltype(callback), middle_gap_only,
+                                   max_gap>(g, callback);
+
+  auto o_callback = [&](G o) { b.insert(o.to_string()); };
+  g.huddinge_neighbours(o_callback);
+
+  return a == b;
+}
+
+template <class G, bool middle_gap_only, uint16_t max_gap>
+bool compare_generation(G g) {
+  std::unordered_set<std::string> a;
+  std::unordered_set<std::string> b;
+  return compare_generation<G, middle_gap_only, max_gap>(g, a, b);
 }
 
 }  // namespace sf

@@ -73,6 +73,7 @@ class gapmer {
     return *this;
   }
 
+  template <bool no_smaller, bool no_larger>
   void middle_gap_neighbours(auto& callback) const {
     const uint64_t val = value();
     const uint8_t len = length();
@@ -89,65 +90,67 @@ class gapmer {
       }
     };
 
-#ifdef DEBUG
-    std::cout << "defined bases + 1\n  start" << std::endl;
-#endif
-
-    // For defined bases + 1
-    // Add one nuc to each gap (implicit gap at start and end)
-
-    // Start:
-    // Middle gapped mers can only be added to at the start if
-    // length is even or unven length with gap closer to start.
     uint8_t new_len = len + 1;
     uint64_t h_val = ONE << (len * 2);
-    // ACGTGC -> nACGTGC
-    // AC.TGC -> nAC.TGC
-    // ACG.TGC -> nACG.TGC
-    if (gap_l == 0 || prefix_len == len / 2) {
-      uint8_t n_gap_s = gap_s + (gap_l ? 1 : 0);
-      gapmer(val, new_len, n_gap_s, gap_l).hamming(h_val, callback);
-    }
-#ifdef DEBUG
-    std::cout << "  middle" << std::endl;
-#endif
 
-    // Middle:
-    // Middle gaps can be shortened from both ends if length is even
-    // and from only one end if length is not even.
-    // Obvioustly splitting gaps can't be done here.
-    if (gap_l) {
-      h_val = ONE << (suffix_len * 2);
-      uint64_t n_val = prefix();
-      n_val <<= suffix_len * 2 + 2;
-      n_val |= suffix();
-      if (gap_l == 1) {
-        // ACG.TGT -> ACGnTGT
-        gapmer(n_val, new_len).hamming(h_val, callback);
-      } else if (len % 2 == 0) {
-        // ACG..TGT -> ACGn.TGT, ACG.nTGT
-        gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
-        gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
-      } else if (suffix_len > prefix_len) {
-        // AC..TGT -> ACn.TGT
-        gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
-      } else {
-        // ACG..TG -> ACG.nTG
-        gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+    if constexpr (no_larger == false) {
+#ifdef DEBUG
+      std::cout << "defined bases + 1\n  start" << std::endl;
+#endif
+      // For defined bases + 1
+      // Add one nuc to each gap (implicit gap at start and end)
+
+      // Start:
+      // Middle gapped mers can only be added to at the start if
+      // length is even or unven length with gap closer to start.
+
+      // ACGTGC -> nACGTGC
+      // AC.TGC -> nAC.TGC
+      // ACG.TGC -> nACG.TGC
+      if (gap_l == 0 || prefix_len == len / 2) {
+        uint8_t n_gap_s = gap_s + (gap_l ? 1 : 0);
+        gapmer(val, new_len, n_gap_s, gap_l).hamming(h_val, callback);
       }
-    }
 #ifdef DEBUG
-    std::cout << "  end" << std::endl;
+      std::cout << "  middle" << std::endl;
+#endif
+      // Middle:
+      // Middle gaps can be shortened from both ends if length is even
+      // and from only one end if length is not even.
+      // Obvioustly splitting gaps can't be done here.
+      if (gap_l) {
+        h_val = ONE << (suffix_len * 2);
+        uint64_t n_val = prefix();
+        n_val <<= suffix_len * 2 + 2;
+        n_val |= suffix();
+        if (gap_l == 1) {
+          // ACG.TGT -> ACGnTGT
+          gapmer(n_val, new_len).hamming(h_val, callback);
+        } else if (len % 2 == 0) {
+          // ACG..TGT -> ACGn.TGT, ACG.nTGT
+          gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
+          gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+        } else if (suffix_len > prefix_len) {
+          // AC..TGT -> ACn.TGT
+          gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
+        } else {
+          // ACG..TG -> ACG.nTG
+          gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+        }
+      }
+#ifdef DEBUG
+      std::cout << "  end" << std::endl;
 #endif
 
-    // End:
-    // Middle gapped mers can only be added to at the end if
-    // length is even or unven length with gap closer to end.
-    if (gap_l == 0 || suffix_len == len / 2) {
-      // ACGTAT -> ACGTATn
-      // ACG.TAT -> ACG.TATn
-      // ACG.TA -> ACG.TAn
-      gapmer(val << 2, new_len, gap_s, gap_l).hamming(ONE, callback);
+      // End:
+      // Middle gapped mers can only be added to at the end if
+      // length is even or unven length with gap closer to end.
+      if (gap_l == 0 || suffix_len == len / 2) {
+        // ACGTAT -> ACGTATn
+        // ACG.TAT -> ACG.TATn
+        // ACG.TA -> ACG.TAn
+        gapmer(val << 2, new_len, gap_s, gap_l).hamming(ONE, callback);
+      }
     }
 
 #ifdef DEBUG
@@ -324,82 +327,79 @@ class gapmer {
       }
     }
 
+    if constexpr (no_smaller == false) {
 #ifdef DEBUG
-    std::cout << "defined bases - 1\n  start" << std::endl;
+      std::cout << "defined bases - 1\n  start" << std::endl;
 #endif
 
-    // For defined bases - 1
-    // Gap any existing position
-    // Start:
-    if (gap_s == 1) {
-      // A.CGTA -> CGTA
-      callback(gapmer(suffix(), suffix_len));
-    } else if (gap_s == 0) {
-      // ACGTAC -> CGTAC
-      callback(gapmer(suffix(len - 1), len - 1));
-    } else {
-      // ACG..TC -> CG..TC
-      // ACG..TCG -> CG..TCG
-      if (len / 2 == suffix_len) {
-        callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l));
-      }
-    }
-
-#ifdef DEBUG
-    std::cout << "  middle" << std::endl;
-#endif
-
-    // Middle
-    // Extend gap at edges or add new gap
-    if (gap_l == 0) {
-      uint8_t half = len / 2;
-      uint8_t rem = half - 1;
-      if (len % 2 == 0) {
-        // ACGTAC -> ACG.AC, AC.TAC
-        callback(gapmer(prefix(half), suffix(rem), half, rem, half, 1));
-        callback(gapmer(prefix(rem), suffix(half), rem, half, rem, 1));
+      // For defined bases - 1
+      // Gap any existing position
+      // Start:
+      if (gap_s == 0) {
+        // ACGTAC -> CGTAC
+        callback(gapmer(suffix(len - 1), len - 1));
       } else {
-        // ACGTA -> AC.TA
-        callback(gapmer(prefix(half), suffix(half), half, half, half, 1));
-      }
-    } else {
-      if (gap_l < max_gap) {
-        uint8_t half = len / 2;
-        uint8_t s_l = len - half - 1;
-        if (prefix_len == len / 2) {
-          // ACG..TGC -> ACG...GC
-          // AC..TGC -> AC...GC
-          callback(
-              gapmer(prefix(half), suffix(s_l), half, s_l, gap_s, gap_l + 1));
-        }
-        if (suffix_len == len / 2) {
-          // ACG..TGC -> AC...TGC
-          // ACG..TG -> AC...TG
-          callback(gapmer(prefix(s_l), suffix(half), s_l, half, gap_s - 1,
-                          gap_l + 1));
+        // ACG..TC -> CG..TC
+        // ACG..TCG -> CG..TCG
+        if (len / 2 == suffix_len) {
+          callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l));
         }
       }
-    }
 
 #ifdef DEBUG
-    std::cout << "  end" << std::endl;
+      std::cout << "  middle" << std::endl;
 #endif
-    // End
-    if (gap_s == len - 1) {
-      // CATTA.A -> CATTA
-      callback(gapmer(prefix(), prefix_len));
-    } else if (gap_s == 0) {
-      // CATTATT -> CATTAT
-      callback(gapmer(prefix(len - 1), len - 1));
-    } else {
-      // CAT..ATT -> CAT..AT
-      // CA..TAT -> CA..TA
-      if (prefix_len == len / 2) {
-        callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l));
+
+      // Middle
+      // Extend gap at edges or add new gap
+      if (gap_l == 0) {
+        uint8_t half = len / 2;
+        uint8_t rem = half - 1;
+        if (len % 2 == 0) {
+          // ACGTAC -> ACG.AC, AC.TAC
+          callback(gapmer(prefix(half), suffix(rem), half, rem, half, 1));
+          callback(gapmer(prefix(rem), suffix(half), rem, half, rem, 1));
+        } else {
+          // ACGTA -> AC.TA
+          callback(gapmer(prefix(half), suffix(half), half, half, half, 1));
+        }
+      } else {
+        if (gap_l < max_gap) {
+          uint8_t half = len / 2;
+          uint8_t s_l = len - half - 1;
+          if (prefix_len == len / 2) {
+            // ACG..TGC -> ACG...GC
+            // AC..TGC -> AC...GC
+            callback(
+                gapmer(prefix(half), suffix(s_l), half, s_l, gap_s, gap_l + 1));
+          }
+          if (suffix_len == len / 2) {
+            // ACG..TGC -> AC...TGC
+            // ACG..TG -> AC...TG
+            callback(gapmer(prefix(s_l), suffix(half), s_l, half, gap_s - 1,
+                            gap_l + 1));
+          }
+        }
+      }
+
+#ifdef DEBUG
+      std::cout << "  end" << std::endl;
+#endif
+      // End
+      if (gap_s == 0) {
+        // CATTATT -> CATTAT
+        callback(gapmer(prefix(len - 1), len - 1));
+      } else {
+        // CAT..ATT -> CAT..AT
+        // CA..TAT -> CA..TA
+        if (prefix_len == len / 2) {
+          callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l));
+        }
       }
     }
   }
 
+  template <bool no_smaller, bool no_larger>
   void all_gap_neighbours(auto& callback) const {
     const uint64_t val = value();
     const uint8_t len = length();
@@ -416,75 +416,76 @@ class gapmer {
       }
     };
 
-#ifdef DEBUG
-    std::cout << "defined bases + 1\n  start" << std::endl;
-#endif
-
-    // For defined bases + 1
-    // Add one nuc to each gap (implicit gap at start and end)
-
-    // Start:
-    // Middle gapped mers can only be added to at the start if
-    // length is even or unven length with gap closer to start.
     uint8_t new_len = len + 1;
     uint64_t h_val = ONE << (len * 2);
 
-    if (gap_l == 0) {
-      // ACGTT -> nACGTT, n.*ACGTT
-      gapmer(val, new_len).hamming(h_val, callback);
-      for (uint8_t gl = 1; gl <= max_gap; ++gl) {
-        gapmer(val, new_len, 1, gl).hamming(h_val, callback);
-      }
-    } else {
-      // ACGT.G -> nACGT.G
-      gapmer(val, new_len, gap_s + 1, gap_l).hamming(h_val, callback);
-    }
+    if constexpr (no_larger == false) {
 #ifdef DEBUG
-    std::cout << "  middle" << std::endl;
+      std::cout << "defined bases + 1\n  start" << std::endl;
 #endif
+      // For defined bases + 1
+      // Add one nuc to each gap (implicit gap at start and end)
 
-    // Middle:
-    // Middle gaps can be shortened from both ends if length is even
-    // and from only one end if length is not even.
-    // Obvioustly splitting gaps can't be done here.
-    if (gap_l) {
-      h_val = ONE << (suffix_len * 2);
-      uint64_t n_val = prefix();
-      n_val <<= suffix_len * 2 + 2;
-      n_val |= suffix();
-      if (gap_l == 1) {
-        // A.CGTGT -> AnCGTGT
-        gapmer(n_val, new_len).hamming(h_val, callback);
+      // Start:
+      // Middle gapped mers can only be added to at the start if
+      // length is even or unven length with gap closer to start.
+      if (gap_l == 0) {
+        // ACGTT -> nACGTT, n.*ACGTT
+        gapmer(val, new_len).hamming(h_val, callback);
+        for (uint8_t gl = 1; gl <= max_gap; ++gl) {
+          gapmer(val, new_len, 1, gl).hamming(h_val, callback);
+        }
       } else {
-        // A..CGTGT -> An.CGTGT, A.nCGTGT
-        gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
-        gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+        // ACGT.G -> nACGT.G
+        gapmer(val, new_len, gap_s + 1, gap_l).hamming(h_val, callback);
       }
-    }
 #ifdef DEBUG
-    std::cout << "  end" << std::endl;
+      std::cout << "  middle" << std::endl;
 #endif
 
-    // End:
-    // Middle gapped mers can only be added to at the end if
-    // length is even or unven length with gap closer to end.
-    uint64_t n_val = val << 2;
-    if (gap_l == 0) {
-      // ACGTAT -> ACGTATn, ACGTAT.*n
-      gapmer(n_val, new_len).hamming(ONE, callback);
-      for (uint8_t gl = 1; gl <= max_gap; ++gl) {
-        gapmer(n_val, new_len, len, gl).hamming(ONE, callback);
+      // Middle:
+      // Middle gaps can be shortened from both ends if length is even
+      // and from only one end if length is not even.
+      // Obvioustly splitting gaps can't be done here.
+      if (gap_l) {
+        h_val = ONE << (suffix_len * 2);
+        uint64_t n_val = prefix();
+        n_val <<= suffix_len * 2 + 2;
+        n_val |= suffix();
+        if (gap_l == 1) {
+          // A.CGTGT -> AnCGTGT
+          gapmer(n_val, new_len).hamming(h_val, callback);
+        } else {
+          // A..CGTGT -> An.CGTGT, A.nCGTGT
+          gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
+          gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+        }
       }
-    } else {
-      // ACG...TAT -> ACG..TATn
-      // ACG...TA -> ACG...TAn
-      // AC...TAT -> AC...TATn
-      gapmer(n_val, new_len, gap_s, gap_l).hamming(ONE, callback);
-    }
+#ifdef DEBUG
+      std::cout << "  end" << std::endl;
+#endif
+
+      // End:
+      // Middle gapped mers can only be added to at the end if
+      // length is even or unven length with gap closer to end.
+      uint64_t n_val = val << 2;
+      if (gap_l == 0) {
+        // ACGTAT -> ACGTATn, ACGTAT.*n
+        gapmer(n_val, new_len).hamming(ONE, callback);
+        for (uint8_t gl = 1; gl <= max_gap; ++gl) {
+          gapmer(n_val, new_len, len, gl).hamming(ONE, callback);
+        }
+      } else {
+        // ACG...TAT -> ACG..TATn
+        // ACG...TA -> ACG...TAn
+        // AC...TAT -> AC...TATn
+        gapmer(n_val, new_len, gap_s, gap_l).hamming(ONE, callback);
+      }
 
 #ifdef DEBUG
-    std::cout << "defined bases + 0\n  hamming" << std::endl;
+      std::cout << "defined bases + 0\n  hamming" << std::endl;
 #endif
+    }
 
     // For defined bases + 0
     new_len = len;
@@ -511,7 +512,7 @@ class gapmer {
     if (gap_l) {
       if (gap_s == len - 1) {
         // ACGT.G -> nACGT
-        n_val = prefix();
+        uint64_t n_val = prefix();
         gapmer(n_val, new_len).hamming(h_val, callback);
         // ACGT.G -> n.*ACGT
         for (uint8_t gl = 1; gl <= max_gap; ++gl) {
@@ -555,7 +556,7 @@ class gapmer {
       }
     } else {
       // ACGTGT -> nACGTG
-      n_val = prefix(len - 1);
+      uint64_t n_val = prefix(len - 1);
       gapmer(n_val, new_len).hamming(h_val, val_cb);
       // ACGTGT -> n.*CGTGT
       for (uint8_t gl = 1; gl <= max_gap; ++gl) {
@@ -698,7 +699,7 @@ class gapmer {
         h_val <<= 2;
         gapmer(val, len, gap_s - 1, gap_l).hamming(h_val, callback);
         // ACG...TGT -> CGn..TGT, CG..nTGT
-        n_val = prefix() << (suffix_len * 2 + 2);
+        uint64_t n_val = prefix() << (suffix_len * 2 + 2);
         n_val |= suffix();
         n_val &= (ONE << (len * 2)) - ONE;
         gapmer(n_val, len, gap_s, gap_l - 1).hamming(h_val, callback);
@@ -764,7 +765,7 @@ class gapmer {
             .hamming(ONE, callback);
       }
     } else {
-      n_val = suffix(len - 1) << 2;
+      uint64_t n_val = suffix(len - 1) << 2;
       uint64_t suf = n_val;
       uint64_t pref = val & ~uint64_t(0b11);
       // ACGTGC -> CGTGCn
@@ -790,67 +791,69 @@ class gapmer {
       }
     }
 
+    if constexpr (no_smaller == false) {
 #ifdef DEBUG
-    std::cout << "defined bases - 1\n  start" << std::endl;
+      std::cout << "defined bases - 1\n  start" << std::endl;
 #endif
 
-    // For defined bases - 1
-    // Gap any existing position
-    // Start:
-    if (gap_s == 1) {
-      // A.CGTA -> CGTA
-      callback(gapmer(suffix(), suffix_len));
-    } else if (gap_s == 0) {
-      // ACGTAC -> CGTAC
-      callback(gapmer(suffix(len - 1), len - 1));
-    } else {
-      // AC..GTC -> C..GTC
-      callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l));
-    }
-
-#ifdef DEBUG
-    std::cout << "  middle" << std::endl;
-#endif
-
-    // Middle
-    // Extend gap at edges or add new gap
-    if (gap_l == 0) {
-      // ACGTAC -> A.GTAC, AC.TAC, ACG.AC, ACGT.C
-      uint8_t rem = len - 2;
-      for (uint8_t i = 1; i < len - 1; ++i) {
-        callback(gapmer(prefix(i), suffix(rem), i, rem, i, 1));
-        --rem;
+      // For defined bases - 1
+      // Gap any existing position
+      // Start:
+      if (gap_s == 1) {
+        // A.CGTA -> CGTA
+        callback(gapmer(suffix(), suffix_len));
+      } else if (gap_s == 0) {
+        // ACGTAC -> CGTAC
+        callback(gapmer(suffix(len - 1), len - 1));
+      } else {
+        // AC..GTC -> C..GTC
+        callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l));
       }
-    } else {
-      if (gap_l < max_gap) {
-        if (gap_s > 1) {
-          // AA..TGC -> A...TGC
-          callback(gapmer(prefix(prefix_len - 1), suffix(), prefix_len - 1,
-                          suffix_len, gap_s - 1, gap_l + 1));
-        }
-        if (gap_s < len - 1) {
-          // AAT..GC -> AAT...C
-          callback(gapmer(prefix(), suffix(suffix_len - 1), prefix_len,
-                          suffix_len - 1, gap_s, gap_l + 1));
-        }
-      }
-    }
 
 #ifdef DEBUG
-    std::cout << "  end" << std::endl;
+      std::cout << "  middle" << std::endl;
 #endif
-    // End
-    if (gap_s == len - 1) {
-      // CATTA.A -> CATTA
-      callback(gapmer(prefix(), prefix_len));
-    } else if (gap_s == 0) {
-      // CATTATT -> CATTAT
-      callback(gapmer(prefix(len - 1), len - 1));
-    } else {
-      // CAT..ATT -> CAT..AT
-      // CA..TAT -> CA..TA
-      // CAT..AT -> CAT..A
-      callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l));
+
+      // Middle
+      // Extend gap at edges or add new gap
+      if (gap_l == 0) {
+        // ACGTAC -> A.GTAC, AC.TAC, ACG.AC, ACGT.C
+        uint8_t rem = len - 2;
+        for (uint8_t i = 1; i < len - 1; ++i) {
+          callback(gapmer(prefix(i), suffix(rem), i, rem, i, 1));
+          --rem;
+        }
+      } else {
+        if (gap_l < max_gap) {
+          if (gap_s > 1) {
+            // AA..TGC -> A...TGC
+            callback(gapmer(prefix(prefix_len - 1), suffix(), prefix_len - 1,
+                            suffix_len, gap_s - 1, gap_l + 1));
+          }
+          if (gap_s < len - 1) {
+            // AAT..GC -> AAT...C
+            callback(gapmer(prefix(), suffix(suffix_len - 1), prefix_len,
+                            suffix_len - 1, gap_s, gap_l + 1));
+          }
+        }
+      }
+
+#ifdef DEBUG
+      std::cout << "  end" << std::endl;
+#endif
+      // End
+      if (gap_s == len - 1) {
+        // CATTA.A -> CATTA
+        callback(gapmer(prefix(), prefix_len));
+      } else if (gap_s == 0) {
+        // CATTATT -> CATTAT
+        callback(gapmer(prefix(len - 1), len - 1));
+      } else {
+        // CAT..ATT -> CAT..AT
+        // CA..TAT -> CA..TA
+        // CAT..AT -> CAT..A
+        callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l));
+      }
     }
   }
 
@@ -1103,7 +1106,8 @@ class gapmer {
 #endif
     uint64_t v = data_ << 2;
     v |= nuc_to_v[c];
-    return (data_ & ~value_mask) | (v & value_mask);
+    v &= (ONE << (length() * 2)) - 1;
+    return (data_ & ~value_mask) | v;
   }
 
   gapmer next(char c1, char c2) const {
@@ -1115,14 +1119,16 @@ class gapmer {
     uint64_t v = (data_ << 2) & ~gap_mask;
     v |= uint64_t(nuc_to_v[c1]) << suf_len;
     v |= nuc_to_v[c2];
-    return (data_ & ~value_mask) | (v & value_mask);
+    v &= (ONE << (length() * 2)) - 1;
+    return (data_ & ~value_mask) | v;
   }
 
+  template <bool no_smaller = false, bool no_larger = false>
   void huddinge_neighbours(auto& callback) const {
     if constexpr (middle_gap_only) {
-      middle_gap_neighbours(callback);
+      middle_gap_neighbours<no_smaller, no_larger>(callback);
     } else {
-      all_gap_neighbours(callback);
+      all_gap_neighbours<no_smaller, no_larger>(callback);
     }
   }
 
