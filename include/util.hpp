@@ -21,6 +21,19 @@ const static constexpr std::array<uint8_t, 256> nuc_to_v = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
 
+const static constexpr std::array<uint8_t, 256> rc_byte = []() constexpr {
+  std::array<uint8_t, 256> ret;
+  for (uint16_t i = 0; i < 256; ++i) {
+    uint16_t ii = ~i;
+    uint8_t v = (ii >> 6) & 0b11;
+    v |= (ii >> 2) & 0b1100;
+    v |= (ii << 2) & 0b110000;
+    v |= (ii << 6) & 0b11000000;
+    ret[i] = v;
+  }
+  return ret;
+}();
+
 template <class G, typename F, bool middle_gap_only = true, uint8_t max_gap = 6>
 void gap_mer_generation(uint8_t k, F& callback) {
   uint64_t lim;

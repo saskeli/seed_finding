@@ -32,7 +32,7 @@ input_mer  Possibly gapped input mer consisting of \"[ACGT.]*\".
   exit(0);
 }
 
-const constexpr uint16_t max_gap = MAX_GAP;
+const constexpr uint16_t max_gap = 31;
 
 bool single_gapped(const std::string& input_mer) {
   bool gap_foud = false;

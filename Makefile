@@ -1,5 +1,5 @@
 ifndef MAX_GAP
-MAX_GAP = 6
+MAX_GAP = 10
 endif
 
 CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)
@@ -31,7 +31,7 @@ GTEST_HEADERS = $(GTEST_DIR)/googletest/include/gtest/*.h \
 
 GTEST_SRCS_ = $(GTEST_DIR)/googletest/src/*.cc $(GTEST_DIR)/googletest/src/*.h $(GTEST_HEADERS)
 
-TEST_HPP = test/gapmer_tests.hpp
+TEST_HPP = test/gapmer_tests.hpp test/util_tests.hpp test/gapmer_count_tests.hpp
 
 .PHONY: clean all fast debug test cover
 
@@ -84,7 +84,7 @@ test/test.o: $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
 	g++ $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
 
 test/test: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	g++ $(CFLAGS) $(GFLAGS) -O3 test/test.cpp -o test/test -lgtest_main -lgtest
+	g++ $(CFLAGS) $(GFLAGS) $(INCLUDE) -O3 test/test.cpp -o test/test -lgtest_main -lgtest $(LIBS)
 
 test: test/test
 	test/test $(ARG)

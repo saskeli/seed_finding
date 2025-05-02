@@ -35,6 +35,14 @@ TEST(gapmer, StrConstructor4) {
   ASSERT_EQ(sm, s);
 }
 
+TEST(gapmer, StrConstructor5) {
+  std::string s = "AATGATT..........TCTGTGG";
+  gapmer<true, 10> g(s.c_str(), 14, 7, 10);
+  ASSERT_TRUE(g.is_valid()) << g.to_string() << " " << g.bits();
+  auto sm = g.to_string();
+  ASSERT_EQ(sm, s);
+}
+
 TEST(gapmer, NextComp1) {
   std::string s = "CATTATAC";
   gapmer g(s.c_str(), 5);
@@ -218,6 +226,26 @@ TEST(gapmer, Neighbour19) {
   ASSERT_FALSE(h.is_neighbour(g));
 }
 
+TEST(gapmer, RCNeighbour1) {
+  std::string s = "CATTA...TTACC";
+  gapmer g(s.c_str(), 10, 3, 5);
+  gapmer o = g.reverse_complement();
+  auto callback = [&](const decltype(o)& n) {
+    ASSERT_TRUE(g.is_neighbour<true>(n));
+  };
+  o.huddinge_neighbours(callback);
+}
+
+TEST(gapmer, RCNeighbour2) {
+  std::string s = "CAAT.TTAC";
+  std::string t = "AAAA.AAAA";
+  gapmer g(s.c_str(), 8, 1, 4);
+  gapmer h(t.c_str(), 8, 1, 4);
+  ASSERT_FALSE(g.is_neighbour<true>(h))
+      << g.to_string() << " <-> " << h.to_string();
+  ASSERT_FALSE(h.is_neighbour<true>(g));
+}
+
 TEST(gapmer, Huddinge1) {
   std::string s = "ACGTGT";
   typedef gapmer<false, 5> G;
@@ -345,4 +373,66 @@ TEST(gapmer, Huddinge16) {
   bool res = sf::compare_generation<G, false, 5>(g);
   ASSERT_TRUE(res);
 }
+
+TEST(gapmer, IsCanonical1) {
+  std::string s = "AAAA...TTT";
+  // rc = AAA...TTTT so technically smaller but ignore gap
+  gapmer<true, 5> g(s.c_str(), 7, 4, 3);
+  ASSERT_TRUE(g.is_canonical());
+}
+
+TEST(gapmer, IsCanonical2) {
+  std::string s = "ACGCCGT";
+  gapmer<true, 5> g(s.c_str(), 7);
+  ASSERT_TRUE(g.is_canonical());
+}
+
+TEST(gapmer, IsCanonical3) {
+  std::string s = "ACGGCGT";
+  gapmer<true, 5> g(s.c_str(), 7);
+  ASSERT_FALSE(g.is_canonical());
+}
+
+TEST(gapmer, IsCanonical4) {
+  std::string s = "AAATTT";
+  gapmer<true, 5> g(s.c_str(), 6);
+  ASSERT_TRUE(g.is_canonical());
+}
+
+TEST(gapmer, IsCanonical5) {
+  std::string s = "GGGTTT";
+  gapmer<true, 5> g(s.c_str(), 6);
+  ASSERT_FALSE(g.is_canonical());
+}
+
+TEST(gapmer, RevComp1) {
+  std::string s = "AAAATTTT";
+  gapmer<true, 5> g(s.c_str(), 8);
+  g = g.reverse_complement();
+  ASSERT_EQ(g.to_string(), s);
+}
+
+TEST(gapmer, RevComp2) {
+  std::string s = "AAA.TTTT";
+  std::string rc = "AAAA.TTT";
+  gapmer<true, 5> g(s.c_str(), 7, 3, 1);
+  g = g.reverse_complement();
+  ASSERT_EQ(g.to_string(), rc);
+}
+
+TEST(gapmer, RevComp3) {
+  std::string s = "ACGTA";
+  std::string rc = "TACGT";
+  gapmer<true, 5> g(s.c_str(), 5);
+  g = g.reverse_complement();
+  ASSERT_EQ(g.to_string(), rc);
+}
+
+TEST(gapmer, RevComp4) {
+  std::string s = "ACGT";
+  gapmer<true, 5> g(s.c_str(), 4);
+  g = g.reverse_complement();
+  ASSERT_EQ(g.to_string(), s);
+}
+
 }  // namespace sf

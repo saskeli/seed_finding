@@ -27,7 +27,6 @@ class fm_index {
   sdsl::hyb_vector<>::rank_1_type samples_rs_;
   sdsl::hyb_vector<> seq_starts_;
   sdsl::hyb_vector<>::rank_1_type seq_starts_rs_;
-  uint64_t size_;
 
   uint8_t at(uint64_t i) const {
     uint64_t w = bwt_[i / 32];
@@ -91,6 +90,7 @@ class fm_index {
   fm_index(const char* fasta_path) : sample_locations_(), partial_sums_() {
     std::vector<uint64_t> starts;
     seq_io::Reader r(fasta_path);
+    r.enable_reverse_complements();
     std::string seq;
     while (true) {
       uint64_t len = r.get_next_read_to_buffer();
@@ -367,6 +367,10 @@ class fm_index {
       }
     }
     return ret;
+  }
+
+  uint64_t size() const {
+    return C_[4];
   }
 };
 }  // namespace sf
