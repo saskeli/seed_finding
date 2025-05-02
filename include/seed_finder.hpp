@@ -39,21 +39,18 @@ class seed_finder {
   double memory_limit_;
   uint8_t k_lim_;
 
-  template <bool calc_b_r, bool debug = false>
+  template <bool debug = false>
   bool do_extend([[maybe_unused]] G a, [[maybe_unused]] G b, uint64_t a_sig,
                  uint64_t a_bg, uint64_t b_sig, uint64_t b_bg, double a_r,
-                 double& b_r) {
+                 double b_r) {
     if (a_bg == 1 && b_bg == 1) {
       if (a_sig > b_sig * 4) {
         return false;
       }
-      double p_extend = gsl_cdf_binomial_P(b_sig, 0.25, a_sig);
-      if (p_extend < p_ext_) {
-        if constexpr (calc_b_r) {
-          b_r = gsl_sf_beta_inc(b_sig, b_bg, x_);
-        }
+      double p_extend = gsl_cdf_binomial_Q(b_sig, 0.25, a_sig);
+      if (p_extend < p_ext_ && b_r < p_) {
         if constexpr (debug) {
-          std::cout << "        " << a.to_string() << " discarded by "
+          std::cerr << "        " << a.to_string() << " discarded by "
                     << b.to_string() << "\n            (" << a_sig << ", "
                     << a_bg << ") <-> (" << b_sig << ", " << b_bg
                     << ")\n            with p_extend " << p_extend << std::endl;
@@ -61,24 +58,21 @@ class seed_finder {
         return true;
       }
       if constexpr (debug) {
-        std::cout << "        " << a.to_string() << " discards "
+        std::cerr << "        " << a.to_string() << " discards "
                   << b.to_string() << "\n            (" << a_sig << ", " << a_bg
                   << ") <-> (" << b_sig << ", " << b_bg
                   << ")\n            with p_extend " << p_extend << std::endl;
       }
       return false;
     }
-    if constexpr (calc_b_r) {
-      b_r = gsl_sf_beta_inc(b_sig, b_bg, x_);
-    }
     if constexpr (debug) {
       if (b_r < a_r) {
-        std::cout << "        " << a.to_string() << " discarded by "
+        std::cerr << "        " << a.to_string() << " discarded by "
                   << b.to_string() << "\n            (" << a_sig << ", " << a_bg
                   << ") <-> (" << b_sig << ", " << b_bg
                   << ")\n            with p " << b_r << std::endl;
       } else {
-        std::cout << "        " << a.to_string() << " discards "
+        std::cerr << "        " << a.to_string() << " discards "
                   << b.to_string() << "\n            (" << a_sig << ", " << a_bg
                   << ") <-> (" << b_sig << ", " << b_bg
                   << ")\n            with p " << b_r << std::endl;
@@ -111,7 +105,7 @@ class seed_finder {
                    G_C& bg_a, G_C& bg_b) {
 #ifdef DEBUG
     if (offset + v >= G_C::lookup_elems(k)) {
-      std::cout << "accessing " << offset << " + " << v << " = " << offset + v
+      std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
                 << " of " << G_C::lookup_elems(k) << " element table"
                 << std::endl;
       exit(1);
@@ -127,7 +121,7 @@ class seed_finder {
     }
     uint64_t a = sig_a.counts[offset + v] + 1;
     uint64_t b = bg_a.counts[offset + v] + 1;
-    if (a * sig_index_.size() < fold_lim_ * b * bg_index_.size()) {
+    if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
       sig_a.discarded[offset + v] = true;
     }
     double r = gsl_sf_beta_inc(a, b, x_);
@@ -140,7 +134,7 @@ class seed_finder {
       uint64_t o_v = o.value();
       uint64_t o_a = sig_a.counts[o_offset + o_v] + 1;
       uint64_t o_b = bg_a.counts[o_offset + o_v] + 1;
-      if (o_a * sig_index_.size() < fold_lim_ * o_b * bg_index_.size()) {
+      if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
         sig_a.discarded[o_offset + o_v] = true;
         return;
       }
@@ -157,12 +151,12 @@ class seed_finder {
       uint64_t o_v = o.value();
       uint64_t o_a = sig_b.counts[o_offset + o_v] + 1;
       uint64_t o_b = bg_b.counts[o_offset + o_v] + 1;
-      if (o_a * sig_index_.size() < fold_lim_ * o_b * bg_index_.size()) {
+      if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
         sig_b.discarded[o_offset + o_v] = true;
         return;
       }
-      double o_r;
-      if (do_extend<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+      double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
+      if (do_extend(g, o, a, b, o_a, o_b, r, o_r)) {
         sig_a.discarded[offset + v] = true;
       } else {
         sig_b.discarded[o_offset + o_v] = true;
@@ -180,7 +174,7 @@ class seed_finder {
                     M& m) {
 #ifdef DEBUG
     if (offset + v >= G_C::lookup_elems(k)) {
-      std::cout << "k = " << int(k) << " & sig_c.k_ = " << int(sig_c.k_)
+      std::cerr << "k = " << int(k) << " & sig_c.k_ = " << int(sig_c.k_)
                 << " :\n accessing " << offset << " + " << v << " = "
                 << offset + v << " of " << G_C::lookup_elems(k)
                 << " element table" << std::endl;
@@ -197,7 +191,7 @@ class seed_finder {
     }
     uint64_t a = sig_c.counts[offset + v] + 1;
     uint64_t b = bg_c.counts[offset + v] + 1;
-    if (a * sig_index_.size() < fold_lim_ * b * bg_index_.size()) {
+    if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
       sig_c.discarded[offset + v] = true;
     }
     double r = gsl_sf_beta_inc(a, b, x_);
@@ -210,7 +204,7 @@ class seed_finder {
       uint64_t o_v = o.value();
       uint64_t o_a = sig_c.counts[o_offset + v] + 1;
       uint64_t o_b = bg_c.counts[o_offset + v] + 1;
-      if (o_a * sig_index_.size() < fold_lim_ * o_b * bg_index_.size()) {
+      if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
         sig_c.discarded[o_offset + o_v] = true;
         return;
       }
@@ -232,7 +226,7 @@ class seed_finder {
     while (G_C::lookup_bytes(k_lim) < memory_limit_ / 2) {
       ++k_lim;
     }
-    std::cout << "Lookup tables up to " << int(k_lim - 1) << std::endl;
+    std::cerr << "Lookup tables up to " << int(k_lim - 1) << std::endl;
     G_C sig_a(sig_path_.c_str(), 5);
     G_C bg_a(bg_path_.c_str(), 5);
 
@@ -250,7 +244,7 @@ class seed_finder {
           uint64_t offset = sig_a.offset(gap_s, gap_l);
 #ifdef DEBUG
           if (offset >= G_C::lookup_elems(k + 1)) {
-            std::cout << "invalid offset " << offset << " for gap start "
+            std::cerr << "invalid offset " << offset << " for gap start "
                       << int(gap_s) << " and gap length " << int(gap_l)
                       << std::endl;
             exit(1);
@@ -265,7 +259,7 @@ class seed_finder {
 
       std::swap(sig_a, sig_b);
       std::swap(bg_a, bg_b);
-      std::cout << int(k - 1) << " -> " << seeds_.size() << " seeds."
+      std::cerr << int(k - 1) << " -> " << seeds_.size() << " seeds."
                 << std::endl;
     }
     std::swap(sig_a, sig_c);
@@ -275,12 +269,12 @@ class seed_finder {
 
   template <class M>
   void extend(M& a, M& b) {
-    std::cout << "    Extend " << a.size() << " mers." << std::endl;
+    std::cerr << "    Extend " << a.size() << " mers." << std::endl;
     auto hash = [](const G g) { return uint64_t(g); };
     std::unordered_set<G, decltype(hash)> del_set;
     for (auto p : a) {
 #ifdef DEBUG
-      std::cout << "        " << p.first.to_string() << ": "
+      std::cerr << "        " << p.first.to_string() << ": "
                 << p.second.sig_count << ", " << p.second.bg_count << ", "
                 << p.second.p << std::endl;
 #endif
@@ -290,9 +284,8 @@ class seed_finder {
           o = o.reverse_complement();
         }
         if (b.contains(o)) {
-          if (do_extend<false, true>(p.first, o, p.second.sig_count,
-                                     p.second.bg_count, b[o].sig_count,
-                                     b[o].bg_count, p.second.p, b[o].p)) {
+          if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
+                        b[o].sig_count, b[o].bg_count, p.second.p, b[o].p)) {
             keep = false;
           } else {
             b.erase(o);
@@ -300,18 +293,16 @@ class seed_finder {
         } else {
           uint64_t o_a = sig_index_.count(o) + 1;
           uint64_t o_b = bg_index_.count(o) + 1;
-          if (o_a * sig_index_.size() < fold_lim_ * o_b * bg_index_.size()) {
+          if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
             return;
           }
-          double o_r;
+          double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
 #ifdef DEBUG
-          if (do_extend<true, true>(p.first, o, p.second.sig_count,
-                                    p.second.bg_count, o_a, o_b, p.second.p,
-                                    o_r)) {
+          if (do_extend<true>(p.first, o, p.second.sig_count, p.second.bg_count,
+                              o_a, o_b, p.second.p, o_r)) {
 #else
-          if (do_extend<true, false>(p.first, o, p.second.sig_count,
-                                     p.second.bg_count, o_a, o_b, p.second.p,
-                                     o_r)) {
+          if (do_extend<false>(p.first, o, p.second.sig_count,
+                               p.second.bg_count, o_a, o_b, p.second.p, o_r)) {
 #endif
             b[o] = {o, o_r, o_a, o_b};
             keep = false;
@@ -351,7 +342,7 @@ class seed_finder {
     for (auto d : del_set) {
       m.erase(d);
     }
-    std::cout << "    filtered to " << m.size() << " mers" << std::endl;
+    std::cerr << "    filtered to " << m.size() << " mers" << std::endl;
   }
 
  public:
@@ -397,9 +388,9 @@ class seed_finder {
       }
     }
     for (; k <= k_lim_; ++k) {
-      std::cout << int(k) - 1 << " -> " << std::endl;
+      std::cerr << int(k) - 1 << " -> " << std::endl;
       extend(a, b);
-      std::cout << "    " << a.size() << " " << int(k) - 1 << " seeds\n"
+      std::cerr << "    " << a.size() << " " << int(k) - 1 << " seeds\n"
                 << "    " << b.size() << " " << int(k) << " candidates"
                 << std::endl;
       for (auto p : a) {
@@ -408,13 +399,13 @@ class seed_finder {
       a.clear();
       filter(b);
       a.swap(b);
-      std::cout << int(k) - 1 << " -> " << seeds_.size() << " seeds."
+      std::cerr << int(k) - 1 << " -> " << seeds_.size() << " seeds."
                 << std::endl;
     }
     for (auto p : a) {
       seeds_.push_back(p.second);
     }
-    std::cout << int(k_lim_) << " -> " << seeds_.size() << " seeds."
+    std::cerr << int(k_lim_) << " -> " << seeds_.size() << " seeds."
               << std::endl;
   }
 

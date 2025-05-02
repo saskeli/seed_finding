@@ -101,9 +101,8 @@ class fm_index {
       seq.append(r.read_buf, len);
     }
     C_[4] = seq.size();
-#ifdef DEBUG
-    std::cout << C_[4] << " total characters" << std::endl;
-#endif
+    std::cerr << "Creating index from " << fasta_path << " with " << C_[4]
+              << " total characters" << std::endl;
     sdsl::bit_vector samples(C_[4]);
     sdsl::bit_vector bwt_starts(C_[4]);
     sdsl::bit_vector seq_starts(C_[4]);
@@ -182,36 +181,6 @@ class fm_index {
       C_[i] = C_[i - 1];
     }
     C_[0] = 0;
-
-#ifdef DEBUG
-    uint64_t run_count = 0;
-    uint8_t ch = bwt_[0] & 0b11;
-    uint64_t rl = 1;
-    std::unordered_map<uint64_t, uint64_t> rls;
-    for (size_t i = 1; i < C_[4]; ++i) {
-      uint8_t o_ch = (bwt_[i / 32] >> ((i % 32) * 2)) & 0b11;
-      if (ch == o_ch) {
-        ++rl;
-      } else {
-        rls[rl] = rls.contains(rl) ? rls[rl] + 1 : 1;
-        run_count += 1;
-        rl = 1;
-      }
-      ch = o_ch;
-    }
-    rls[rl] = rls.contains(rl) ? rls[rl] + 1 : 1;
-    std::cout << "BWT size = " << C_[4] << "\n"
-              << "BWT runs = " << run_count << "\n"
-              << "mean rl  = " << double(C_[4]) / run_count << "\n"
-              << "C = [" << C_[0] << ", " << C_[1] << ", " << C_[2] << ", "
-              << C_[3] << ", " << C_[4] << "]" << std::endl;
-#ifdef VERBOSE
-    std::cout << "run counts:\n";
-    for (auto it : rls) {
-      std::cout << it.first << ": " << it.second << std::endl;
-    }
-#endif
-#endif
 
     samples_ = sdsl::hyb_vector<>(samples);
     samples_rs_ = sdsl::hyb_vector<>::rank_1_type(&samples_);
@@ -369,8 +338,6 @@ class fm_index {
     return ret;
   }
 
-  uint64_t size() const {
-    return C_[4];
-  }
+  uint64_t size() const { return C_[4]; }
 };
 }  // namespace sf

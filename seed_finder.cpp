@@ -20,7 +20,7 @@ uint64_t available_gigs() {
 
 void help(const char* call, uint64_t gigs, uint64_t max_k, double p,
           double log_fold, double p_ext) {
-  std::cout << R"(
+  std::cerr << R"(
 Attempt seed extraction from read data.
 
 With max gap size = )"
