@@ -49,6 +49,31 @@ sig_fasta    Signal fasta file.
 
 const constexpr uint16_t max_gap = MAX_GAP;
 
+void filter_seeds(auto& seeds, auto callback) {
+  std::cerr << "Filtering.." << std::endl;
+  uint64_t discarded_seeds = 0;
+  auto it = seeds.begin();
+  for (; it != seeds.end(); ++it) {
+    auto iit = it;
+    ++iit;
+    bool is_partial = false;
+    for (; iit != seeds.end(); ++iit) {
+      auto a = (*it).g;
+      auto b = (*iit).g;
+      if (a.aligns_to(b)) {
+        is_partial = true;
+        ++discarded_seeds;
+        break;
+      }
+    }
+    if (not is_partial) {
+      auto seed = *it;
+      callback(seed);
+    }
+  }
+  std::cerr << discarded_seeds << " seeds discarded in filtering" << std::endl;
+}
+
 int main(int argc, char const* argv[]) {
   std::string bg_path = "";
   std::string sig_path = "";
@@ -94,25 +119,22 @@ int main(int argc, char const* argv[]) {
   mem_limit *= 1000;
   mem_limit *= 1000;
   mem_limit *= 1000;
-
+  auto cb = [](auto s) {
+    std::cout << s.g.to_string() << "\t" << s.p << "\t(" << s.sig_count - 1 << ", "
+              << s.bg_count - 1 << ")" << std::endl;
+  };
   if (middle_gap_only) {
     sf::seed_finder<true, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
                                       log_fold, max_k, mem_limit, p_ext);
     sf.find_seeds();
-    for (auto seed : sf.get_seeds()) {
-      std::cout << seed.g.to_string() << "\t" << seed.p << "\t("
-                << seed.sig_count - 1 << ", " << seed.bg_count - 1 << ")"
-                << std::endl;
-    }
+    auto seeds = sf.get_seeds();
+    filter_seeds(seeds, cb);
   } else {
     sf::seed_finder<false, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
                                        log_fold, max_k, mem_limit, p_ext);
     sf.find_seeds();
-    for (auto seed : sf.get_seeds()) {
-      std::cout << seed.g.to_string() << "\t" << seed.p << "\t("
-                << seed.sig_count - 1 << ", " << seed.bg_count - 1 << ")"
-                << std::endl;
-    }
+    auto seeds = sf.get_seeds();
+    filter_seeds(seeds, cb);
   }
 
   return 0;

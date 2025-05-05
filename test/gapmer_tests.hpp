@@ -435,4 +435,41 @@ TEST(gapmer, RevComp4) {
   ASSERT_EQ(g.to_string(), s);
 }
 
+TEST(gapmer, Align1) {
+  std::string s = "AAAAA";
+  gapmer<true, 5> g(s.c_str(), 5);
+  bool res = g.aligns_to(g);
+  ASSERT_TRUE(res);
+  gapmer<true, 5> o = g.reverse_complement();
+  res = g.aligns_to(o);
+  ASSERT_TRUE(res);
+}
+
+TEST(gapmer, Align2) {
+  std::string s = "AAAAA";
+  std::string os = "GGGGAAAAAT";
+  gapmer<true, 5> g(s.c_str(), 5);
+  gapmer<true, 5> o(os.c_str(), 10);
+  bool res = g.aligns_to(o);
+  ASSERT_TRUE(res);
+}
+
+TEST(gapmer, Align3) {
+  std::string s = "AAAAA";
+  std::string os = "GGGG...AAAAA";
+  gapmer<true, 5> g(s.c_str(), 5);
+  gapmer<true, 5> o(os.c_str(), 9, 4, 3);
+  bool res = g.aligns_to(o);
+  ASSERT_TRUE(res);
+}
+
+TEST(gapmer, Align4) {
+  std::string s = "AAA...AA";
+  std::string os = "GAAA...AATTT";
+  gapmer<true, 5> g(s.c_str(), 5, 3, 3);
+  gapmer<true, 5> o(os.c_str(), 9, 4, 3);
+  bool res = g.aligns_to(o);
+  ASSERT_TRUE(res);
+}
+
 }  // namespace sf

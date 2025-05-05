@@ -90,7 +90,7 @@ test: test/test
 	test/test $(ARG)
 
 test/cover: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	g++ -g --coverage -O1 $(CFLAGS) $(GFLAGS) test/test.cpp -o test/cover -lgtest_main -lgtest -lgcov
+	g++ -g --coverage -O1 $(CFLAGS) $(GFLAGS) $(INCLUDE) test/test.cpp -o test/cover -lgtest_main -lgtest -lgcov $(LIBS)
 
 cover: test/cover
 	rm -f *.gcov test/*.gcda coverage.info

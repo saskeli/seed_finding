@@ -895,7 +895,7 @@ class gapmer {
     uint64_t a_len = a.length();
     uint64_t b_len = b.length();
     if constexpr (debug) {
-      std::cout << "Comparing " << a.to_string() << " to " << b.to_string()
+      std::cerr << "Comparing " << a.to_string() << " to " << b.to_string()
                 << "\n"
                 << "   len a: " << a_len << ", len b: " << b_len << std::endl;
     }
@@ -907,7 +907,7 @@ class gapmer {
     uint16_t b_gl = b.gap_length();
     uint16_t b_gs = b.gap_start();
     if constexpr (debug) {
-      std::cout << "   gs a: " << a_gs << ", gl a: " << a_gl << "\n"
+      std::cerr << "   gs a: " << a_gs << ", gl a: " << a_gl << "\n"
                 << "   gs b: " << b_gs << ", gl b: " << b_gl << std::endl;
     }
     // a_len - 1 bases of b must align with bases of a.
@@ -919,12 +919,12 @@ class gapmer {
       auto ac = a.get_c(ii);
       auto bc = b.get_c(ii);
       if constexpr (debug) {
-        std::cout << i << ", " << ii << ": " << ac << ", " << bc << std::endl;
+        std::cerr << i << ", " << ii << ": " << ac << ", " << bc << std::endl;
       }
       matches += ac == bc;
     }
     if constexpr (debug) {
-      std::cout << matches << " matches\n"
+      std::cerr << matches << " matches\n"
                 << a.to_string() << "\n"
                 << b.to_string() << std::endl;
     }
@@ -938,17 +938,17 @@ class gapmer {
       auto ac = a.get_c(ii + a_offset);
       auto bc = b.get_c(ii);
       if constexpr (debug) {
-        std::cout << i << ", " << ii << ": " << ac << ", " << bc << std::endl;
+        std::cerr << i << ", " << ii << ": " << ac << ", " << bc << std::endl;
       }
       matches += ac == bc;
     }
     if constexpr (debug) {
-      std::cout << matches << " matches vs. " << a_len << "\n"
+      std::cerr << matches << " matches vs. " << a_len << "\n"
                 << a.to_string() << "\n";
       for (uint64_t i = 0; i < a_offset; ++i) {
-        std::cout << " ";
+        std::cerr << " ";
       }
-      std::cout << b.to_string() << std::endl;
+      std::cerr << b.to_string() << std::endl;
     }
     if (matches >= a_len - 1) {
       return true;
@@ -963,17 +963,17 @@ class gapmer {
           auto ac = a.get_c(ii + a_offset);
           auto bc = b.get_c(ii);
           if constexpr (debug) {
-            std::cout << i << ", " << ii << ": " << ac << ", " << bc
+            std::cerr << i << ", " << ii << ": " << ac << ", " << bc
                       << std::endl;
           }
           matches += ac == bc;
         }
         if constexpr (debug) {
-          std::cout << matches << " matches\n" << a.to_string() << "\n";
+          std::cerr << matches << " matches\n" << a.to_string() << "\n";
           for (uint64_t i = 0; i < a_offset; ++i) {
-            std::cout << " ";
+            std::cerr << " ";
           }
-          std::cout << b.to_string() << std::endl;
+          std::cerr << b.to_string() << std::endl;
         }
         if (matches >= a_len - 1) {
           return true;
@@ -988,17 +988,17 @@ class gapmer {
           auto ac = a.get_c(ii);
           auto bc = b.get_c(ii + b_offset);
           if constexpr (debug) {
-            std::cout << i << ", " << ii << ": " << ac << ", " << bc
+            std::cerr << i << ", " << ii << ": " << ac << ", " << bc
                       << std::endl;
           }
           matches += ac == bc;
         }
         if constexpr (debug) {
-          std::cout << matches << " matches\n";
+          std::cerr << matches << " matches\n";
           for (uint64_t i = 0; i < b_offset; ++i) {
-            std::cout << " ";
+            std::cerr << " ";
           }
-          std::cout << a.to_string() << "\n" << b.to_string() << std::endl;
+          std::cerr << a.to_string() << "\n" << b.to_string() << std::endl;
         }
         if (matches >= a_len - 1) {
           return true;
@@ -1010,7 +1010,138 @@ class gapmer {
       return is_neighbour<false, debug>(other.reverse_complement());
     }
     if constexpr (debug) {
-      std::cout << "Default false" << std::endl;
+      std::cerr << "Default false" << std::endl;
+    }
+    return false;
+  }
+
+  template <bool compare_rc = true, bool debug = false>
+  bool aligns_to(gapmer other) {
+    if constexpr (debug) {
+      std::cerr << "Aligns_to comparison " << to_string() << " to\n"
+                << other.to_string() << std::endl;
+    }
+    uint16_t len = length();
+    uint16_t o_len = other.length();
+    if (len == o_len) {
+      if (other.data_ == data_) {
+        return true;
+      }
+      if constexpr (compare_rc) {
+        return aligns_to<false, debug>(other.reverse_complement());
+      }
+      return false;
+    }
+
+    if (len > o_len) {
+      return false;
+    }
+    uint16_t gl = gap_length();
+    uint16_t gs = gap_start();
+    uint16_t o_gl = other.gap_length();
+    uint16_t o_gs = other.gap_start();
+    // Must be able to match gaps
+    if (gl > 0 && o_gl == 0) {
+      return false;
+    }
+    if (o_gl > 0 && gl == 0) {
+      // this must fit either before or after the gap
+      if (o_gs >= len) {
+        for (uint16_t offset = 0; offset <= o_gs - len; ++offset) {
+          bool matches = true;
+          if constexpr (debug) {
+            for (uint16_t space = 0; space < offset; ++space) {
+              std::cerr << " ";
+            }
+            std::cerr << to_string();
+          }
+          for (uint16_t i = 0; i < len; ++i) {
+            if (nuc(i) != other.nuc(i + offset)) {
+              matches = false;
+              break;
+            }
+          }
+          if constexpr (debug) {
+            std::cerr << "\t" << matches << std::endl;
+          }
+          if (matches) {
+            return true;
+          }
+        }
+      }
+      if (o_len - o_gs >= len) {
+        for (uint16_t offset = o_gs; offset <= o_len - len; ++offset) {
+          bool matches = true;
+          if constexpr (debug) {
+            for (uint16_t space = 0; space < offset + o_gl; ++space) {
+              std::cerr << " ";
+            }
+            std::cerr << to_string();
+          }
+          for (uint16_t i = 0; i < len; ++i) {
+            if (nuc(i) != other.nuc(i + offset)) {
+              matches = false;
+              break;
+            }
+          }
+          if constexpr (debug) {
+            std::cerr << "\t" << matches << std::endl;
+          }
+          if (matches) {
+            return true;
+          }
+        }
+      }
+      if constexpr (compare_rc) {
+        return reverse_complement().template aligns_to<false, debug>(other);
+      }
+      return false;
+    }
+    if (o_gs < gs || o_len - o_gs < len - gs) {
+      if constexpr (compare_rc) {
+        return reverse_complement().template aligns_to<false, debug>(other);
+      }
+      return false;
+    }
+    // if gl > 0, gaps must align.
+    if (gl > 0) {
+      uint16_t offset = o_gs - gl;
+      for (uint16_t i = 0; i < len; ++i) {
+        if (nuc(i) != other.nuc(i + offset)) {
+          if constexpr (compare_rc) {
+            return reverse_complement().template aligns_to<false, debug>(other);
+          }
+          return false;
+        }
+      }
+    }
+    // else no gaps so brute force align is easy.
+    // len bases of this must align with bases of other.
+    // The first base of this matches one of the first o_len - len bases of
+    // other.
+    for (uint16_t offset = 0; offset <= o_len - len; ++offset) {
+      bool matches = true;
+      if constexpr (debug) {
+        for (uint16_t space = 0; space < offset; ++space) {
+          std::cerr << " ";
+        }
+        std::cerr << to_string();
+      }
+      for (uint16_t i = 0; i < len; ++i) {
+        if (nuc(i) != other.nuc(i + offset)) {
+          matches = false;
+          break;
+        }
+      }
+      if constexpr (debug) {
+        std::cerr << "\t" << matches << std::endl;
+      }
+      if (matches) {
+        return true;
+      }
+    }
+    if constexpr (compare_rc) {
+      return reverse_complement().template aligns_to<false, debug>(other);
     }
     return false;
   }
