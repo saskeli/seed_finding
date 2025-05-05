@@ -56,17 +56,27 @@ class gapmer_count {
         k_(k) {
     seq_io::Reader r(fasta_path);
     r.enable_reverse_complements();
+#pragma omp parallel
     while (true) {
-      uint64_t len = r.get_next_read_to_buffer();
+      uint64_t len;
+      std::string s;
+#pragma omp critical
+      {
+        len = r.get_next_read_to_buffer();
+        if (len > 0) {
+          s = std::string(r.read_buf, len);
+        }
+      }
       if (len == 0) {
         break;
       }
-      gapmer<middle_gap_only, max_gap> g(r.read_buf, k_);
+      gapmer<middle_gap_only, max_gap> g(s.c_str(), k_);
       uint64_t cv = g.value();
       counts[cv] = counts[cv] + 1;
       for (uint32_t next = k_; next < len; ++next) {
-        g = g.next(r.read_buf[next]);
+        g = g.next(s[next]);
         cv = g.value();
+#pragma omp atomic
         counts[cv] = counts[cv] + 1;
       }
       uint8_t gap_s = middle_gap_only ? k_ / 2 : 1;
@@ -77,13 +87,14 @@ class gapmer_count {
             break;
           }
           uint64_t off = offset(gap_s, gap_l);
-          g = {r.read_buf, k, gap_s, gap_l};
+          g = {s.c_str(), k, gap_s, gap_l};
           cv = off + g.value();
           counts[cv] = counts[cv] + 1;
           for (uint32_t mid = gap_s, next = k_ + gap_l; next < len;
                ++next, ++mid) {
-            g = g.next(r.read_buf[mid], r.read_buf[next]);
+            g = g.next(s[mid], s[next]);
             cv = off + g.value();
+#pragma omp atomic
             counts[cv] = counts[cv] + 1;
           }
         }

@@ -116,16 +116,19 @@ class seed_finder {
     }
     G g(v, k, gap_s, gap_l);
     if (not g.is_canonical()) {
+      #pragma omp critical
       sig_a.discarded[offset + v] = true;
       return;
     }
     uint64_t a = sig_a.counts[offset + v] + 1;
     uint64_t b = bg_a.counts[offset + v] + 1;
     if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
+      #pragma omp critical
       sig_a.discarded[offset + v] = true;
     }
     double r = gsl_sf_beta_inc(a, b, x_);
     if (r > p_) {
+      #pragma omp critical
       sig_a.discarded[offset + v] = true;
       return;
     }
@@ -135,13 +138,16 @@ class seed_finder {
       uint64_t o_a = sig_a.counts[o_offset + o_v] + 1;
       uint64_t o_b = bg_a.counts[o_offset + o_v] + 1;
       if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
+        #pragma omp critical
         sig_a.discarded[o_offset + o_v] = true;
         return;
       }
       double o_r;
       if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+        #pragma omp critical
         sig_a.discarded[offset + v] = true;
       } else {
+        #pragma omp critical
         sig_a.discarded[o_offset + o_v] = true;
       }
     };
@@ -152,18 +158,22 @@ class seed_finder {
       uint64_t o_a = sig_b.counts[o_offset + o_v] + 1;
       uint64_t o_b = bg_b.counts[o_offset + o_v] + 1;
       if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
+        #pragma omp critical
         sig_b.discarded[o_offset + o_v] = true;
         return;
       }
       double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
       if (do_extend(g, o, a, b, o_a, o_b, r, o_r)) {
+        #pragma omp critical
         sig_a.discarded[offset + v] = true;
       } else {
+        #pragma omp critical
         sig_b.discarded[o_offset + o_v] = true;
       }
     };
     g.template huddinge_neighbours<true, true, false>(callback_b);
     if (sig_a.discarded[offset + v] == false) {
+      #pragma omp critical
       seeds_.push_back({g, r, a, b});
     }
   }
@@ -192,10 +202,12 @@ class seed_finder {
     uint64_t a = sig_c.counts[offset + v] + 1;
     uint64_t b = bg_c.counts[offset + v] + 1;
     if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
+      #pragma omp critical
       sig_c.discarded[offset + v] = true;
     }
     double r = gsl_sf_beta_inc(a, b, x_);
     if (r > p_) {
+      #pragma omp critical
       sig_c.discarded[offset + v] = true;
       return;
     }
@@ -205,18 +217,22 @@ class seed_finder {
       uint64_t o_a = sig_c.counts[o_offset + v] + 1;
       uint64_t o_b = bg_c.counts[o_offset + v] + 1;
       if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
+        #pragma omp critical
         sig_c.discarded[o_offset + o_v] = true;
         return;
       }
       double o_r;
       if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+        #pragma omp critical
         sig_c.discarded[offset + v] = true;
       } else {
+        #pragma omp critical
         sig_c.discarded[o_offset + o_v] = true;
       }
     };
     g.template huddinge_neighbours<true, false, true>(callback);
     if (sig_c.discarded[offset + v] == false) {
+      #pragma omp critical
       m[g] = {g, r, a, b};
     }
   }
@@ -234,6 +250,7 @@ class seed_finder {
       G_C sig_b(sig_path_.c_str(), k);
       G_C bg_b(bg_path_.c_str(), k);
       uint64_t v_lim = G_C::ONE << ((k - 1) * 2);
+      #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
         check_count(k - 1, v, 0, 0, 0, sig_a, sig_b, bg_a, bg_b);
       }
@@ -250,6 +267,7 @@ class seed_finder {
             exit(1);
           }
 #endif
+          #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
             check_count(k - 1, v, gap_s, gap_l, offset, sig_a, sig_b, bg_a,
                         bg_b);
@@ -288,7 +306,7 @@ class seed_finder {
                         b[o].sig_count, b[o].bg_count, p.second.p, b[o].p)) {
             keep = false;
           } else {
-            b.erase(o);
+            b[o] = {p.first, 1.0, 1, 1};
           }
         } else {
           uint64_t o_a = sig_index_.count(o) + 1;
@@ -297,13 +315,8 @@ class seed_finder {
             return;
           }
           double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
-#ifdef DEBUG
-          if (do_extend<true>(p.first, o, p.second.sig_count, p.second.bg_count,
-                              o_a, o_b, p.second.p, o_r)) {
-#else
           if (do_extend<false>(p.first, o, p.second.sig_count,
                                p.second.bg_count, o_a, o_b, p.second.p, o_r)) {
-#endif
             b[o] = {o, o_r, o_a, o_b};
             keep = false;
           }
@@ -326,6 +339,10 @@ class seed_finder {
     auto e = m.end();
     for (auto it = m.begin(); it != e; ++it) {
       bool keep = true;
+      if (it->second.p > p_) {
+        del_set.insert(it->first);
+        continue;
+      }
       auto iit = it;
       ++iit;
       for (; iit != e; ++iit) {
@@ -372,6 +389,7 @@ class seed_finder {
       G_C bg_c;
       k = counted_seeds_and_candidates(sig_c, bg_c);
       uint64_t v_lim = G_C::ONE << (k * 2 - 2);
+      #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
         filter_count(k - 1, v, 0, 0, 0, sig_c, bg_c, a);
       }
@@ -381,6 +399,7 @@ class seed_finder {
       for (; gap_s <= gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
           uint64_t offset = sig_c.offset(gap_s, gap_l);
+          #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
             filter_count(local_k, v, gap_s, gap_l, offset, sig_c, bg_c, a);
           }

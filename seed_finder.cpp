@@ -1,5 +1,6 @@
 #include "include/seed_finder.hpp"
 
+#include <omp.h>
 #include <unistd.h>
 
 #include <iostream>
@@ -19,7 +20,7 @@ uint64_t available_gigs() {
 }
 
 void help(const char* call, uint64_t gigs, uint64_t max_k, double p,
-          double log_fold, double p_ext) {
+          double log_fold, double p_ext, uint64_t threads) {
   std::cerr << R"(
 Attempt seed extraction from read data.
 
@@ -41,6 +42,7 @@ sig_fasta    Signal fasta file.
 -h           Print this and terminate. Overrides all other options.
 -mk <val>    Maximum mer length. ()"
             << max_k << R"().
+-t <val>     Total number of threads to use. ()" << threads << R"(
 -mem <val>   Memory limit for lookup tables (ish). ()"
             << gigs << " GB).\n\n"
             << std::endl;
@@ -81,6 +83,7 @@ int main(int argc, char const* argv[]) {
   double p = 0.01;
   double p_ext = 0.01;
   double log_fold = 0.5;
+  uint64_t threads = omp_get_max_threads();
   uint8_t max_k = 20;
   double mem_limit = available_gigs();
   bool print_help = false;
@@ -102,19 +105,25 @@ int main(int argc, char const* argv[]) {
       max_k = std::stoi(argv[++i]);
     } else if (arg == "-mem") {
       mem_limit = std::stod(argv[++i]);
+    } else if (arg == "-t") {
+      threads = std::stoull(argv[++i]);
+    } else if (arg.starts_with("-")) {
+      std::cerr << "Invalid parameter \"" << arg << "\"." << std::endl;
+      print_help = true;
     } else {
       sig_path = arg;
     }
   }
   if (print_help) {
-    help(argv[0], mem_limit, max_k, p, log_fold, p_ext);
+    help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
     exit(0);
   }
   if (bg_path.size() == 0 || sig_path.size() == 0) {
     std::cerr << "Input fasta files are required." << std::endl;
-    help(argv[0], mem_limit, max_k, p, log_fold, p_ext);
+    help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
     exit(1);
   }
+  omp_set_num_threads(threads);
 
   mem_limit *= 1000;
   mem_limit *= 1000;
