@@ -1,12 +1,12 @@
 #pragma once
 
-#include <immintrin.h>
-
 #include <array>
+#include <bit> // Since we currently use C++23, <bit> is available.
 #include <bitset>
 #include <cstdint>
 #include <string>
 
+#include "bits.hpp"
 #include "util.hpp"
 
 #ifdef DEBUG
@@ -802,8 +802,8 @@ class gapmer {
     uint64_t iv;
     const uint64_t* d_ptr = reinterpret_cast<const uint64_t*>(s);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
-      iv = __bswap_64(d_ptr[i]);
-      iv = _pext_u64(iv, pext_mask);
+      iv = std::byteswap(d_ptr[i]);
+      iv = bits::pext(iv, pext_mask);
       iv ^= (iv >> 1) & xor_mask;
       data_ |= iv;
       if (k <= (1 + i) * 8) {
@@ -844,8 +844,8 @@ class gapmer {
     uint64_t iv;
     const uint64_t* d_ptr = reinterpret_cast<const uint64_t*>(s);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
-      iv = __bswap_64(d_ptr[i]);
-      iv = _pext_u64(iv, pext_mask);
+      iv = std::byteswap(d_ptr[i]);
+      iv = bits::pext(iv, pext_mask);
       iv ^= (iv >> 1) & xor_mask;
       data_ |= iv;
       if (gap_start <= (1 + i) * 8) {
@@ -860,8 +860,8 @@ class gapmer {
     d_ptr = reinterpret_cast<const uint64_t*>(s + gap_start + gap_length);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
       data_ <<= 16;
-      iv = __bswap_64(d_ptr[i]);
-      iv = _pext_u64(iv, pext_mask);
+      iv = std::byteswap(d_ptr[i]);
+      iv = bits::pext(iv, pext_mask);
       iv ^= (iv >> 1) & xor_mask;
       data_ |= iv;
       if (k_suf <= (1 + i) * 8) {
