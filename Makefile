@@ -1,3 +1,5 @@
+-include local.mk
+
 ifndef MAX_GAP
 MAX_GAP = 10
 endif
@@ -46,19 +48,19 @@ fast: huddinge
 debug: huddinge_deb
 
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
-	g++ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
 seed_finder: seed_finder.cpp $(HEADERS) $(SDSL_A)
-	g++ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
 
 comp: comp.cpp include/util.hpp
-	g++ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
 
 huddinge_deb: huddinge.cpp $(HEADERS)
-	g++ $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
+	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
 seed_finder_deb: seed_finder.cpp $(HEADERS) $(SDSL_A)
-	g++ $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
+	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
 
 clean:
 	rm -f huddinge huddinge_deb seed_finder seed_finder_deb
@@ -81,16 +83,16 @@ $(SDSL_A): | $(SDSL_DIR)
 	(cd deps/sdsl-lite && cmake CMakelists.txt && make)
 
 test/test.o: $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	g++ $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
+	$(CXX) $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
 
 test/test: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	g++ $(CFLAGS) $(GFLAGS) $(INCLUDE) -O3 test/test.cpp -o test/test -lgtest_main -lgtest $(LIBS)
+	$(CXX) $(CFLAGS) $(GFLAGS) $(INCLUDE) -O3 test/test.cpp -o test/test -lgtest_main -lgtest $(LIBS)
 
 test: test/test
 	test/test $(ARG)
 
 test/cover: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	g++ -g --coverage -O1 $(CFLAGS) $(GFLAGS) $(INCLUDE) test/test.cpp -o test/cover -lgtest_main -lgtest -lgcov $(LIBS)
+	$(CXX) -g --coverage -O1 $(CFLAGS) $(GFLAGS) $(INCLUDE) test/test.cpp -o test/cover -lgtest_main -lgtest -lgcov $(LIBS)
 
 cover: test/cover
 	rm -f *.gcov test/*.gcda coverage.info
@@ -98,4 +100,3 @@ cover: test/cover
 	lcov -c --ignore-errors inconsistent,unused --directory test --output-file coverage.info --gcov-tool gcov
 	lcov --remove coverage.info "/usr*" --output-file coverage.info
 	genhtml coverage.info -o target
-
