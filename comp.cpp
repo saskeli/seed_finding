@@ -44,7 +44,7 @@ uint64_t base_char_to_idx(const char c) { return ((c >> 1) & 3); }
 packmer mer_to_key(const char *s, uint64_t gaps, uint64_t gap_start,
                    uint64_t len) {
   packmer key = 0;
-  for (uint j = 0; j < len; j++) {
+  for (uint64_t j = 0; j < len; j++) {
     const char s_char = s[len - j - 1];
     const uint64_t c = base_char_to_idx(s_char);
     key |= c << (2 * j);
@@ -57,16 +57,16 @@ packmer mer_to_key(const char *s, uint64_t gaps, uint64_t gap_start,
 }
 
 packmer mer_to_key(const std::string &kmer) {
-  int gaps = 0;
-  int gap_start = -1;  // Initialize to an invalid value
-  int len = 0;
+  uint64_t gaps = 0;
+  uint64_t gap_start = UINT64_MAX;  // Initialize to an invalid value
+  uint64_t len = 0;
   std::string bases;
 
-  for (uint i = 0; i < kmer.length(); i++) {
+  for (uint64_t i = 0; i < kmer.length(); i++) {
     if (kmer[i] == '.') {
       gaps++;
 
-      if (gap_start == -1) {
+      if (UINT64_MAX == gap_start) {
         gap_start = i;
       }
     } else {
@@ -74,7 +74,7 @@ packmer mer_to_key(const std::string &kmer) {
       len++;
     }
   }
-  if (gap_start == -1) {
+  if (UINT64_MAX == gap_start) {
     gap_start = 0;
   }
   return mer_to_key(bases.c_str(), gaps, gap_start, len);
