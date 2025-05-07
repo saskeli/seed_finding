@@ -14,15 +14,13 @@ ifdef VERBOSE
 DEBUG_FLAGS += -DVERBOSE
 endif
 
-INCLUDE = -isystem deps/sdsl-lite/include -isystem deps/seqio/include
+INCLUDE += -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
-LIBS = -L deps/sdsl-lite/lib -lsdsl -lz -lgsl -lgslcblas -lm
+LIBS += -lz -lgsl -lgslcblas -lm
 
 HEADERS = include/gapmer.hpp include/fm_index.hpp include/gapmer_count.hpp include/seed_finder.hpp
 
 SDSL_DIR = deps/sdsl-lite/lib
-
-SDSL_A = $(SDSL_DIR)/libsdsl.a
 
 GTEST_DIR = deps/googletest
 
@@ -50,7 +48,7 @@ debug: huddinge_deb
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
-seed_finder: seed_finder.cpp $(HEADERS) $(SDSL_A)
+seed_finder: seed_finder.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
 
 comp: comp.cpp include/util.hpp
@@ -59,7 +57,7 @@ comp: comp.cpp include/util.hpp
 huddinge_deb: huddinge.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
-seed_finder_deb: seed_finder.cpp $(HEADERS) $(SDSL_A)
+seed_finder_deb: seed_finder.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
 
 clean:
@@ -78,9 +76,6 @@ $(GTEST_DIR)/googletest:
 
 $(GETST_DIR)/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
 	(cd $(GTEST_DIR) && cmake CMakelists.txt && make)
-
-$(SDSL_A): | $(SDSL_DIR)
-	(cd deps/sdsl-lite && cmake CMakelists.txt && make)
 
 test/test.o: $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
 	$(CXX) $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
