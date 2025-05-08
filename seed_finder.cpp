@@ -42,7 +42,9 @@ sig_fasta    Signal fasta file.
 -h           Print this and terminate. Overrides all other options.
 -mk <val>    Maximum mer length. ()"
             << max_k << R"().
--t <val>     Total number of threads to use. ()" << threads << R"(
+-t <val>     Total number of threads to use. ()"
+            << threads << R"(
+-s           Disable smoothing of counted mers.
 -mem <val>   Memory limit for lookup tables (ish). ()"
             << gigs << " GB).\n\n"
             << std::endl;
@@ -87,6 +89,7 @@ int main(int argc, char const* argv[]) {
   uint8_t max_k = 20;
   double mem_limit = available_gigs();
   bool print_help = false;
+  bool enable_smoothing = true;
   for (int i = 1; i < argc; ++i) {
     std::string arg(argv[i]);
     if (arg == "-h") {
@@ -107,6 +110,8 @@ int main(int argc, char const* argv[]) {
       mem_limit = std::stod(argv[++i]);
     } else if (arg == "-t") {
       threads = std::stoull(argv[++i]);
+    } else if (arg == "-s") {
+      enable_smoothing = false;
     } else if (arg.starts_with("-")) {
       std::cerr << "Invalid parameter \"" << arg << "\"." << std::endl;
       print_help = true;
@@ -129,21 +134,39 @@ int main(int argc, char const* argv[]) {
   mem_limit *= 1000;
   mem_limit *= 1000;
   auto cb = [](auto s) {
-    std::cout << s.g.to_string() << "\t" << s.p << "\t(" << s.sig_count - 1 << ", "
-              << s.bg_count - 1 << ")" << std::endl;
+    std::cout << s.g.to_string() << "\t" << s.p << "\t(" << s.sig_count - 1
+              << ", " << s.bg_count - 1 << ")" << std::endl;
   };
-  if (middle_gap_only) {
-    sf::seed_finder<true, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
-                                      log_fold, max_k, mem_limit, p_ext);
-    sf.find_seeds();
-    auto seeds = sf.get_seeds();
-    filter_seeds(seeds, cb);
+  if (enable_smoothing) {
+    if (middle_gap_only) {
+      sf::seed_finder<true, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
+                                        log_fold, max_k, mem_limit, p_ext);
+      sf.find_seeds();
+      auto seeds = sf.get_seeds();
+      filter_seeds(seeds, cb);
+    } else {
+      sf::seed_finder<false, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
+                                         log_fold, max_k, mem_limit, p_ext);
+      sf.find_seeds();
+      auto seeds = sf.get_seeds();
+      filter_seeds(seeds, cb);
+    }
   } else {
-    sf::seed_finder<false, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
-                                       log_fold, max_k, mem_limit, p_ext);
-    sf.find_seeds();
-    auto seeds = sf.get_seeds();
-    filter_seeds(seeds, cb);
+    if (middle_gap_only) {
+      sf::seed_finder<true, max_gap, false> sf(sig_path.c_str(),
+                                               bg_path.c_str(), p, log_fold,
+                                               max_k, mem_limit, p_ext);
+      sf.find_seeds();
+      auto seeds = sf.get_seeds();
+      filter_seeds(seeds, cb);
+    } else {
+      sf::seed_finder<false, max_gap, false> sf(sig_path.c_str(),
+                                                bg_path.c_str(), p, log_fold,
+                                                max_k, mem_limit, p_ext);
+      sf.find_seeds();
+      auto seeds = sf.get_seeds();
+      filter_seeds(seeds, cb);
+    }
   }
 
   return 0;

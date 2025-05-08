@@ -15,7 +15,7 @@
 
 namespace sf {
 
-template <bool middle_gap_only, uint8_t max_gap>
+template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true>
 class seed_finder {
  private:
   typedef gapmer<middle_gap_only, max_gap> G;
@@ -245,10 +245,18 @@ class seed_finder {
     std::cerr << "Lookup tables up to " << int(k_lim - 1) << std::endl;
     G_C sig_a(sig_path_.c_str(), 5);
     G_C bg_a(bg_path_.c_str(), 5);
+    if constexpr (enable_smootihing) {
+      sig_a.smooth();
+      bg_a.smooth();
+    }
 
     for (uint8_t k = 6; k < k_lim; ++k) {
       G_C sig_b(sig_path_.c_str(), k);
       G_C bg_b(bg_path_.c_str(), k);
+      if constexpr (enable_smootihing) {
+        sig_b.smooth();
+        bg_b.smooth();
+      }
       uint64_t v_lim = G_C::ONE << ((k - 1) * 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {

@@ -34,6 +34,7 @@ class gapmer_count {
   static constexpr uint64_t lookup_bytes(uint8_t k) {
     uint64_t ret = lookup_elems(k);
     ret += (ret + 63) / 64;
+    ret += ONE << (k * 2);
     return ret * sizeof(uint64_t);
   }
 
@@ -120,6 +121,51 @@ class gapmer_count {
   }
 
   gapmer_count& operator=(const gapmer_count&) = delete;
+
+ private:
+  void smooth(uint64_t* arr, uint64_t* scratch, uint64_t v_lim) {
+#pragma omp parallel for
+    for (uint64_t v = 0; v < v_lim; ++v) {
+      scratch[v] = arr[v];
+      std::array<uint64_t, 10> addables{};
+      uint16_t smallest = 0;
+      for (uint64_t x_v = 1; x_v < 4; ++x_v) {
+        for (uint64_t shl = 0; shl < 2 * k_; shl += 2) {
+          uint64_t o_v = v ^ (x_v << shl);
+          uint64_t o_c = arr[o_v];
+          if (addables[smallest] < o_c) {
+            addables[smallest] = o_c;
+            smallest = 0;
+            for (uint16_t i = 1; i < 10; ++i) {
+              smallest = addables[i] < addables[smallest] ? i : smallest;
+            }
+          }
+        }
+      }
+      for (uint16_t i = 0; i < 10; ++i) {
+        scratch[v] += addables[i];
+      }
+    }
+  }
+
+ public:
+  void smooth() {
+    uint64_t v_lim = ONE << (k_ * 2);
+    uint64_t* scratch = (uint64_t*)calloc(v_lim, sizeof(uint64_t));
+    smooth(counts, scratch, v_lim);
+    std::memcpy(counts, scratch, v_lim * sizeof(uint64_t));
+    uint8_t gap_s = middle_gap_only ? k_ / 2 : 1;
+    uint8_t gap_lim = middle_gap_only ? (k_ + 3) / 2 : k_;
+    for (; gap_s < gap_lim; ++gap_s) {
+      for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
+        uint64_t* l_count = counts + offset(gap_s, gap_l);
+        std::memset(scratch, 0, v_lim * sizeof(uint64_t));
+        smooth(l_count, scratch, v_lim);
+        std::memcpy(l_count, scratch, v_lim * sizeof(uint64_t));
+      }
+    }
+    free(scratch);
+  }
 
   template <class gapmer>
   uint64_t count(gapmer g) const {
