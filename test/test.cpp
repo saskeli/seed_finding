@@ -10,6 +10,7 @@
 
 // gapmer tests
 #include "gapmer_tests.hpp"
+#include "gapmer_arbitrary.hpp"
 
 // kmer counter tests
 #include "gapmer_count_tests.hpp"
