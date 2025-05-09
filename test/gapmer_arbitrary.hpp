@@ -21,41 +21,41 @@ namespace {
 		uint8_t suffix_length{};
 		uint8_t gap_length{};
 
-		std::string to_string() const;
+		void write_to_buffer(std::vector <uint64_t> &buffer) const;
+
 		uint8_t gap_start() const { return suffix_length ? length - suffix_length : 0; }
 	};
 
 
-	std::string gapmer_data::to_string() const
+	void gapmer_data::write_to_buffer(std::vector <uint64_t> &buffer) const
 	{
-		std::string retval(length + gap_length, 0);
 		if (!length)
-			return retval;
+			return;
 
+		buffer.resize((length + gap_length - 1) / 8 + 1, 0);
+		auto *dst(reinterpret_cast <char *>(buffer.data()));
 		auto sequence_{std::rotr(sequence, 2 * (length - 1))};
 		uint8_t i{};
-		
+
 		while (i < gap_start())
 		{
-			retval[i] = sf::v_to_nuc[sequence_ & 0x3];
-			sequence_ = std::rotl(sequence_, 2);
-			++i;
-		}
-		
-		for (uint8_t j{}; j < gap_length; ++j)
-		{
-			retval[i] = '.';
-			++i;
-		}
-		
-		while (i < length + gap_length)
-		{
-			retval[i] = sf::v_to_nuc[sequence_ & 0x3];
+			dst[i] = sf::v_to_nuc[sequence_ & 0x3];
 			sequence_ = std::rotl(sequence_, 2);
 			++i;
 		}
 
-		return retval;
+		for (uint8_t j{}; j < gap_length; ++j)
+		{
+			dst[i] = '.';
+			++i;
+		}
+
+		while (i < length + gap_length)
+		{
+			dst[i] = sf::v_to_nuc[sequence_ & 0x3];
+			sequence_ = std::rotl(sequence_, 2);
+			++i;
+		}
 	}
 }
 
@@ -97,7 +97,8 @@ namespace sf {
 
 	RC_GTEST_PROP(gapmer_arbitrary, constructorsWorkAsExpected, (gapmer_data const &gd)) {
 
-		auto const &seq(gd.to_string());
+		std::vector <uint64_t> seq;
+		gd.write_to_buffer(seq);
 
 		gapmer const gg1(gd.sequence, gd.length, gd.gap_start(), gd.gap_length);
 
@@ -110,7 +111,7 @@ namespace sf {
 		// FIXME: Currently this constructor only works for non-empty sequences.
 		if (gd.length)
 		{
-			gapmer const gg2(seq.c_str(), gd.length, gd.gap_start(), gd.gap_length);
+			gapmer const gg2(seq.data(), gd.length, gd.gap_start(), gd.gap_length);
 			RC_ASSERT(gg1 == gg2);
 		}
 
@@ -118,11 +119,11 @@ namespace sf {
 		{
 			gapmer const gg3(gd.sequence, gd.length);
 			RC_ASSERT(gg1 == gg3);
-			
+
 			// FIXME: Currently this constructor only works for non-empty sequences.
 			if (gd.length)
 			{
-				gapmer const gg4(seq.c_str(), gd.length);
+				gapmer const gg4(seq.data(), gd.length);
 				RC_ASSERT(gg1 == gg4);
 			}
 		}
