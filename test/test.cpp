@@ -8,6 +8,9 @@
 // util tests
 #include "util_tests.hpp"
 
+// bit operation tests
+#include "bit_tests_arbitrary.hpp"
+
 // gapmer tests
 #include "gapmer_tests.hpp"
 #include "gapmer_arbitrary.hpp"
