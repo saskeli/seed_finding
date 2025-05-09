@@ -5,8 +5,14 @@
 
 #pragma once
 
-#include <bit>
 #include <concepts>
+
+#if defined(__cpp_lib_byteswap)
+#	include <bit>
+#endif
+#if defined(__linux__)
+#	include <byteswap.h>
+#endif
 
 #if defined(__i386__) || defined(__x86_64__)
 #	include <immintrin.h>
@@ -23,6 +29,14 @@ namespace sf::bits::detail {
 	constexpr static inline bool const pext_intrinsic_available{false};
 	inline uint64_t pext_intrinsic(uint64_t, uint64_t) { return 0; } // FIXME: I don’t remember how to use if constexpr in such a way that the discarded statement is not checked. The compiler currently checks both branches in sf::bits::pext().
 #endif
+
+
+#if defined(__linux__)
+	inline uint16_t byteswap(uint16_t source) { return bswap_16(source); }
+	inline uint32_t byteswap(uint32_t source) { return bswap_32(source); }
+	inline uint64_t byteswap(uint64_t source) { return bswap_64(source); }
+#endif
+
 
 	template <std::unsigned_integral t_unsigned>
 	constexpr inline t_unsigned pext(t_unsigned src, t_unsigned mask)
@@ -50,6 +64,31 @@ namespace sf::bits::detail {
 
 
 namespace sf::bits {
+
+	template <std::unsigned_integral t_unsigned>
+	constexpr inline t_unsigned byteswap(t_unsigned source)
+	{
+		if consteval
+		{
+#if defined(__cpp_lib_byteswap)
+			return std::byteswap(source);
+#else
+#	error "std::byteswap not available."
+#endif
+		}
+		else
+		{
+#if defined(__cpp_lib_byteswap)
+				return std::byteswap(source);
+#elif defined(__linux__)
+				static_assert(2 <= sizeof(t_unsigned) && sizeof(t_unsigned) <= 8);
+				return detail::byteswap(source);
+#else
+#	error "std::byteswap or equivalent not available."
+#endif
+		}
+	}
+
 
 	template <std::unsigned_integral t_unsigned>
 	constexpr inline t_unsigned pext(t_unsigned source, t_unsigned mask)
