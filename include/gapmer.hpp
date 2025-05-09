@@ -811,7 +811,7 @@ class gapmer {
     uint64_t iv;
     const uint64_t* d_ptr = reinterpret_cast<const uint64_t*>(s);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
-      iv = std::byteswap(d_ptr[i]);
+      iv = bits::byteswap(d_ptr[i]);
       iv = bits::pext(iv, pext_mask);
       iv ^= (iv >> 1) & xor_mask;
       data_ |= iv;
@@ -855,7 +855,7 @@ class gapmer {
     uint64_t iv;
     const uint64_t* d_ptr = reinterpret_cast<const uint64_t*>(s);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
-      iv = std::byteswap(d_ptr[i]);
+      iv = bits::byteswap(d_ptr[i]);
       iv = bits::pext(iv, pext_mask);
       iv ^= (iv >> 1) & xor_mask;
       data_ |= iv;
@@ -871,7 +871,7 @@ class gapmer {
     d_ptr = reinterpret_cast<const uint64_t*>(s + gap_start + gap_length);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
       data_ <<= 16;
-      iv = std::byteswap(d_ptr[i]);
+      iv = bits::byteswap(d_ptr[i]);
       iv = bits::pext(iv, pext_mask);
       iv ^= (iv >> 1) & xor_mask;
       data_ |= iv;
