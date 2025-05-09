@@ -50,7 +50,7 @@ debug: huddinge_deb
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
-seed_finder: seed_finder.cpp $(HEADERS)
+seed_finder: seed_finder.cpp $(HEADERS) | $(SDSL_DIR)
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
 
 comp: comp.cpp include/util.hpp
@@ -59,7 +59,7 @@ comp: comp.cpp include/util.hpp
 huddinge_deb: huddinge.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
-seed_finder_deb: seed_finder.cpp $(HEADERS)
+seed_finder_deb: seed_finder.cpp $(HEADERS) | $(SDSL_DIR)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
 
 clean:
