@@ -1,16 +1,19 @@
 #include <algorithm>
 #include <array>
-#include <generator>
+#include <cstdint>
+#include <SeqIO/SeqIO.hh>
+#include <sdsl/bit_vectors.hpp>
+#include <sdsl/hyb_vector.hpp>
+#include <string>
+#include <utility>
 #include <vector>
 
 #ifdef DEBUG
 #include <unordered_map>
 #endif
 
-#include "SeqIO/SeqIO.hh"
 #include "gapmer.hpp"
-#include "sdsl/bit_vectors.hpp"
-#include "sdsl/hyb_vector.hpp"
+#include "util.hpp"
 
 namespace sf {
 
