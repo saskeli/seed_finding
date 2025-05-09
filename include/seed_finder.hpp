@@ -101,8 +101,7 @@ class seed_finder {
   }
 
   void check_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                   uint8_t gap_l, uint64_t offset, G_C& sig_a, G_C& sig_b,
-                   G_C& bg_a, G_C& bg_b) {
+                   uint8_t gap_l, uint64_t offset, G_C& sig_bg_a, G_C& sig_bg_b) {
 #ifdef DEBUG
     if (offset + v >= G_C::lookup_elems(k)) {
       std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
@@ -111,68 +110,68 @@ class seed_finder {
       exit(1);
     }
 #endif
-    if (sig_a.discarded[offset + v]) {
+    if (sig_bg_a.discarded[offset + v]) {
       return;
     }
     G g(v, k, gap_s, gap_l);
     if (not g.is_canonical()) {
 #pragma omp critical(a_bv)
-      sig_a.discarded[offset + v] = true;
+      sig_bg_a.discarded[offset + v] = true;
       return;
     }
-    uint64_t a = sig_a.counts[offset + v] + 1;
-    uint64_t b = bg_a.counts[offset + v] + 1;
+    uint64_t a = sig_bg_a.sig_counts[offset + v] + 1;
+    uint64_t b = sig_bg_a.bg_counts[offset + v] + 1;
     if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
 #pragma omp critical(a_bv)
-      sig_a.discarded[offset + v] = true;
+      sig_bg_a.discarded[offset + v] = true;
     }
     double r = gsl_sf_beta_inc(a, b, x_);
     if (r > p_) {
 #pragma omp critical(a_bv)
-      sig_a.discarded[offset + v] = true;
+      sig_bg_a.discarded[offset + v] = true;
       return;
     }
     auto callback_a = [&](G o) {
-      uint64_t o_offset = sig_a.offset(o.gap_start(), o.gap_length());
+      uint64_t o_offset = sig_bg_a.offset(o.gap_start(), o.gap_length());
       uint64_t o_v = o.value();
-      uint64_t o_a = sig_a.counts[o_offset + o_v] + 1;
-      uint64_t o_b = bg_a.counts[o_offset + o_v] + 1;
+      uint64_t o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
+      uint64_t o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1;
       if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
 #pragma omp critical(a_bv)
-        sig_a.discarded[o_offset + o_v] = true;
+        sig_bg_a.discarded[o_offset + o_v] = true;
         return;
       }
       double o_r;
       if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
 #pragma omp critical(a_bv)
-        sig_a.discarded[offset + v] = true;
+        sig_bg_a.discarded[offset + v] = true;
       } else {
 #pragma omp critical(a_bv)
-        sig_a.discarded[o_offset + o_v] = true;
+        sig_bg_a.discarded[o_offset + o_v] = true;
       }
     };
     g.template huddinge_neighbours<true, false, true>(callback_a);
     auto callback_b = [&](G o) {
-      uint64_t o_offset = sig_b.offset(o.gap_start(), o.gap_length());
+      uint64_t o_offset = sig_bg_b.offset(o.gap_start(), o.gap_length());
       uint64_t o_v = o.value();
-      uint64_t o_a = sig_b.counts[o_offset + o_v] + 1;
-      uint64_t o_b = bg_b.counts[o_offset + o_v] + 1;
+      uint64_t o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
+      uint64_t o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
       if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
-#pragma omp critical(b_bv)
-        sig_b.discarded[o_offset + o_v] = true;
+#pragma omp critical(o_bv)
+        sig_bg_b.discarded[o_offset + o_v] = true;
         return;
       }
       double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
       if (do_extend(g, o, a, b, o_a, o_b, r, o_r)) {
 #pragma omp critical(a_bv)
-        sig_a.discarded[offset + v] = true;
+        sig_bg_a.discarded[offset + v] = true;
       } else {
-#pragma omp critical(a_bv)
-        sig_b.discarded[o_offset + o_v] = true;
+#pragma omp critical(o_bv)
+        sig_bg_b.discarded[o_offset + o_v] = true;
       }
     };
     g.template huddinge_neighbours<true, true, false>(callback_b);
-    if (sig_a.discarded[offset + v] == false) {
+    if (sig_bg_a.discarded[offset + v] == false) {
 #pragma omp critical
       seeds_.push_back({g, r, a, b});
     }
@@ -180,93 +179,89 @@ class seed_finder {
 
   template <class M>
   void filter_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                    uint8_t gap_l, uint64_t offset, G_C& sig_c, G_C& bg_c,
+                    uint8_t gap_l, uint64_t offset, G_C& sig_bg_c,
                     M& m) {
 #ifdef DEBUG
     if (offset + v >= G_C::lookup_elems(k)) {
-      std::cerr << "k = " << int(k) << " & sig_c.k_ = " << int(sig_c.k_)
+      std::cerr << "k = " << int(k) << " & sig_bg_c.k_ = " << int(sig_bg_c.k_)
                 << " :\n accessing " << offset << " + " << v << " = "
                 << offset + v << " of " << G_C::lookup_elems(k)
                 << " element table" << std::endl;
       exit(1);
     }
 #endif
-    if (sig_c.discarded[offset + v]) {
+    if (sig_bg_c.discarded[offset + v]) {
       return;
     }
     G g(v, k, gap_s, gap_l);
     if (not g.is_canonical()) {
-      sig_c.discarded[offset + v] = true;
+      sig_bg_c.discarded[offset + v] = true;
       return;
     }
-    uint64_t a = sig_c.counts[offset + v] + 1;
-    uint64_t b = bg_c.counts[offset + v] + 1;
+    uint64_t a = sig_bg_c.sig_counts[offset + v] + 1;
+    uint64_t b = sig_bg_c.bg_counts[offset + v] + 1;
     if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
-#pragma omp critical
-      sig_c.discarded[offset + v] = true;
+#pragma omp critical(d_bv)
+      sig_bg_c.discarded[offset + v] = true;
     }
     double r = gsl_sf_beta_inc(a, b, x_);
     if (r > p_) {
-#pragma omp critical
-      sig_c.discarded[offset + v] = true;
+#pragma omp critical(d_bv)
+      sig_bg_c.discarded[offset + v] = true;
       return;
     }
     auto callback = [&](G o) {
-      uint64_t o_offset = sig_c.offset(o.gap_start(), o.gap_length());
+      uint64_t o_offset = sig_bg_c.offset(o.gap_start(), o.gap_length());
       uint64_t o_v = o.value();
-      uint64_t o_a = sig_c.counts[o_offset + v] + 1;
-      uint64_t o_b = bg_c.counts[o_offset + v] + 1;
+      uint64_t o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
+      uint64_t o_b = sig_bg_c.bg_counts[o_offset + v] + 1;
       if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
-#pragma omp critical
-        sig_c.discarded[o_offset + o_v] = true;
+#pragma omp critical(d_bv)
+        sig_bg_c.discarded[o_offset + o_v] = true;
         return;
       }
       double o_r;
       if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
-#pragma omp critical
-        sig_c.discarded[offset + v] = true;
+#pragma omp critical(d_bv)
+        sig_bg_c.discarded[offset + v] = true;
       } else {
-#pragma omp critical
-        sig_c.discarded[o_offset + o_v] = true;
+#pragma omp critical(d_bv)
+        sig_bg_c.discarded[o_offset + o_v] = true;
       }
     };
     g.template huddinge_neighbours<true, false, true>(callback);
-    if (sig_c.discarded[offset + v] == false) {
+    if (sig_bg_c.discarded[offset + v] == false) {
 #pragma omp critical
       m[g] = {g, r, a, b};
     }
   }
 
-  uint8_t counted_seeds_and_candidates(G_C& sig_c, G_C& bg_c) {
+  uint8_t counted_seeds_and_candidates(G_C& sig_bg_c) {
     uint8_t k_lim = 5;
-    while (G_C::lookup_bytes(k_lim) < memory_limit_ / 2) {
+    while (G_C::lookup_bytes(k_lim) < memory_limit_) {
       ++k_lim;
     }
     std::cerr << "Lookup tables up to " << int(k_lim - 1) << std::endl;
-    G_C sig_a(sig_path_.c_str(), 5);
-    G_C bg_a(bg_path_.c_str(), 5);
+    G_C sig_bg_a(sig_path_.c_str(), bg_path_.c_str(), 5);
     if constexpr (enable_smootihing) {
-      sig_a.smooth();
-      bg_a.smooth();
+      sig_bg_a.smooth();
     }
 
     for (uint8_t k = 6; k < k_lim; ++k) {
-      G_C sig_b(sig_path_.c_str(), k);
-      G_C bg_b(bg_path_.c_str(), k);
+      G_C sig_bg_b(sig_path_.c_str(), bg_path_.c_str(), k);
       if constexpr (enable_smootihing) {
-        sig_b.smooth();
-        bg_b.smooth();
+        sig_bg_b.smooth();
       }
       uint64_t v_lim = G_C::ONE << ((k - 1) * 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
-        check_count(k - 1, v, 0, 0, 0, sig_a, sig_b, bg_a, bg_b);
+        check_count(k - 1, v, 0, 0, 0, sig_bg_a, sig_bg_b);
       }
       uint8_t gap_s = middle_gap_only ? (k - 1) / 2 : 1;
       uint8_t gap_lim = middle_gap_only ? k - gap_s - 1 : k - 2;
       for (; gap_s <= gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          uint64_t offset = sig_a.offset(gap_s, gap_l);
+          uint64_t offset = sig_bg_a.offset(gap_s, gap_l);
 #ifdef DEBUG
           if (offset >= G_C::lookup_elems(k + 1)) {
             std::cerr << "invalid offset " << offset << " for gap start "
@@ -277,19 +272,16 @@ class seed_finder {
 #endif
 #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
-            check_count(k - 1, v, gap_s, gap_l, offset, sig_a, sig_b, bg_a,
-                        bg_b);
+            check_count(k - 1, v, gap_s, gap_l, offset, sig_bg_a, sig_bg_b);
           }
         }
       }
 
-      std::swap(sig_a, sig_b);
-      std::swap(bg_a, bg_b);
+      std::swap(sig_bg_a, sig_bg_b);
       std::cerr << int(k - 1) << " -> " << seeds_.size() << " seeds."
                 << std::endl;
     }
-    std::swap(sig_a, sig_c);
-    std::swap(bg_a, bg_c);
+    std::swap(sig_bg_a, sig_bg_c);
     return k_lim;
   }
 
@@ -393,23 +385,22 @@ class seed_finder {
     std::unordered_map<G, Res, decltype(hash)> b;
     uint8_t k;
     {
-      G_C sig_c;
-      G_C bg_c;
-      k = counted_seeds_and_candidates(sig_c, bg_c);
+      G_C sig_bg_c;
+      k = counted_seeds_and_candidates(sig_bg_c);
       uint64_t v_lim = G_C::ONE << (k * 2 - 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
-        filter_count(k - 1, v, 0, 0, 0, sig_c, bg_c, a);
+        filter_count(k - 1, v, 0, 0, 0, sig_bg_c, a);
       }
       uint8_t local_k = k - 1;
       uint8_t gap_s = middle_gap_only ? local_k / 2 : 1;
       uint8_t gap_lim = middle_gap_only ? local_k - gap_s : local_k - 1;
       for (; gap_s <= gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          uint64_t offset = sig_c.offset(gap_s, gap_l);
+          uint64_t offset = sig_bg_c.offset(gap_s, gap_l);
 #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
-            filter_count(local_k, v, gap_s, gap_l, offset, sig_c, bg_c, a);
+            filter_count(local_k, v, gap_s, gap_l, offset, sig_bg_c, a);
           }
         }
       }
