@@ -36,6 +36,13 @@ class gapmer {
   const static constexpr uint64_t pext_mask = 0x0606060606060606;
   const static constexpr uint64_t meta_mask = 0b11111;
 
+  // data_ formatted as follows. We denote M = max_k. The length does not include the gap length.
+  // The value is stored in reverse order, i.e. (2M, 0].
+  //
+  //  0                    2M           2M + 5       2M + 10      2M + 15  63
+  // +--------------------+------------+------------+------------+-----------+
+  // | value              | length     | gap_start  | gap_length | padding   |
+  // +--------------------+------------+------------+------------+-----------+
   uint64_t data_;
 
   gapmer(uint64_t data) : data_(data) {}
@@ -64,6 +71,7 @@ class gapmer {
     return value() & v;
   }
 
+  /// Construct from the given prefix, suffix and lengths.
   gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len,
          uint8_t gap_s, uint8_t gap_l) {
     data_ = prefix << (2 * s_len);
@@ -802,6 +810,7 @@ class gapmer {
   }
 
  public:
+  /// Construct an empty value.
   gapmer() : data_(0) {}
 
   gapmer(const uint64_t* d_ptr, uint8_t k) : data_(0) {
@@ -825,6 +834,7 @@ class gapmer {
     data_ |= uint64_t(k) << (max_k * 2);
   }
 
+  /// Construct from the given data and lengths.
   gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length)
       : data_(v) {
     data_ |= uint64_t(k) << (max_k * 2);
@@ -832,6 +842,7 @@ class gapmer {
     data_ |= uint64_t(gap_length) << (max_k * 2 + 10);
   }
 
+  /// Construct from the given data and k.
   gapmer(uint64_t v, uint8_t k) : data_(v) {
     data_ |= uint64_t(k) << (max_k * 2);
   }
@@ -1164,6 +1175,7 @@ class gapmer {
 
   uint16_t gap_length() const { return data_ >> (max_k * 2 + 10); }
 
+  /// Return the i-th 2-bit encoded nucleotide.
   uint8_t nuc(uint8_t i) const {
     uint64_t v = data_ >> (length() - i - 1) * 2;
     return v & 0b11;
