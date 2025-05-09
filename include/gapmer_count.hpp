@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <string>
 #include <utility>
+#include <algorithm>
 
 #include "SeqIO/SeqIO.hh"
 #include "gapmer.hpp"
@@ -59,22 +60,28 @@ class gapmer_count {
 #pragma omp parallel
     while (true) {
       uint64_t len;
-      std::string s;
+      std::vector<uint64_t> buf;
 #pragma omp critical
       {
         len = r.get_next_read_to_buffer();
         if (len > 0) {
-          s = std::string(r.read_buf, len);
+          uint64_t words = (len + 7) / 8;
+          if (buf.size() < words) {
+            buf.resize(words);
+          }
+          std::copy(r.read_buf, r.read_buf + len, reinterpret_cast<char*>(buf.data()));
         }
       }
+      char* s = reinterpret_cast<char*>(buf.data());
       if (len == 0) {
         break;
       }
-      gapmer<middle_gap_only, max_gap> g(s.c_str(), k);
+      gapmer<middle_gap_only, max_gap> g(s, k);
       uint64_t cv = g.value();
 #pragma omp atomic
       counts[cv] = counts[cv] + 1;
       for (uint32_t next = k; next < len; ++next) {
+        
         g = g.next(s[next]);
         cv = g.value();
 #pragma omp atomic
@@ -88,7 +95,7 @@ class gapmer_count {
             break;
           }
           uint64_t off = offset(k, gap_s, gap_l);
-          g = {s.c_str(), k, gap_s, gap_l};
+          g = {s, k, gap_s, gap_l};
           cv = off + g.value();
 #pragma omp atomic
           counts[cv] = counts[cv] + 1;
