@@ -76,7 +76,7 @@ class gapmer_count {
       if (len == 0) {
         break;
       }
-      gapmer<middle_gap_only, max_gap> g(s, k);
+      gapmer<middle_gap_only, max_gap> g(buf, k);
       uint64_t cv = g.value();
 #pragma omp atomic
       counts[cv] = counts[cv] + 1;
@@ -95,7 +95,7 @@ class gapmer_count {
             break;
           }
           uint64_t off = offset(k, gap_s, gap_l);
-          g = {s, k, gap_s, gap_l};
+          g = {buf, k, gap_s, gap_l};
           cv = off + g.value();
 #pragma omp atomic
           counts[cv] = counts[cv] + 1;
