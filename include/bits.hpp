@@ -41,21 +41,28 @@ namespace sf::bits::detail {
 	template <std::unsigned_integral t_unsigned>
 	constexpr inline t_unsigned pext(t_unsigned src, t_unsigned mask)
 	{
-		// A linear in the number of bits set in the mask implementation of PEXT.
+		// A linear in the number of runs of set bits in the mask implementation of PEXT.
 		// FIXME: Needs to be tested.
 
 		t_unsigned retval{};
 		t_unsigned dst_idx{};
+		t_unsigned clear_mask{};
+
+		clear_mask = ~clear_mask;
 
 		while (mask)
 		{
 			t_unsigned const trailing_zeros(std::countr_zero(mask)); // Find the next set bit in the mask.
-			src >>= trailing_zeros; // Shift the source and the mask to this position.
+			src >>= trailing_zeros;                                  // Shift the source and the mask to this position.
 			mask >>= trailing_zeros;
-			retval |= (src & t_unsigned(1)) << dst_idx; // Extract.
-			src >>= t_unsigned(1); // For src, needs to be done after reading the masked bit.
-			mask >>= t_unsigned(1); // This avoids UB (w.r.t. mask >>= trailing_zeros + 1) when only the most significant bit of the mask is set.
-			++dst_idx;
+			retval |= src << dst_idx;                              // Extract.
+
+			t_unsigned const trailing_ones(std::countr_one(mask)); // Find the next unset bit in the mask.
+			src >>= trailing_ones;                                 // Skip to the end of the current run.
+			mask >>= trailing_ones;
+			dst_idx += trailing_ones;                              // Set up the next target position.
+			clear_mask <<= trailing_ones;                          // Clear the bits outside the current run.
+			retval &= ~clear_mask;
 		}
 
 		return retval;
