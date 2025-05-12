@@ -28,21 +28,31 @@ namespace sf {
 	public:
 		t_type const *data() const { return data_.data(); }
 		std::size_t size() const { return size_; }
-		char operator[](std::size_t idx) const { return 0xff & (data_[idx / sizeof(t_type)] >> (idx % sizeof(t_type) * CHAR_BIT)); }
+		void clear();
+		void assign(std::string_view sv);
 		void append(std::string_view sv);
 		std::string_view to_string_view() const { return {reinterpret_cast <char const *>(data_.data()), size_}; }
+
+		char operator[](std::size_t idx) const { return 0xff & (data_[idx / sizeof(t_type)] >> (idx % sizeof(t_type) * CHAR_BIT)); }
 		/* implicit */ operator std::string_view() const { return to_string_view(); }
-		string_buffer &operator=(std::string_view sv);
+		string_buffer &operator=(std::string_view sv) { assign(sv); return *this; }
+		string_buffer &operator+=(std::string_view sv) { append(sv); return *this; }
 	};
 
 
 	template <typename t_type>
-	auto string_buffer <t_type>::operator=(std::string_view sv) -> string_buffer &
+	void string_buffer <t_type>::clear()
 	{
 		data_.clear();
 		size_ = 0;
+	}
+
+
+	template <typename t_type>
+	void string_buffer <t_type>::assign(std::string_view sv)
+	{
+		clear();
 		append(sv);
-		return *this;
 	}
 
 
