@@ -26,7 +26,18 @@ namespace sf {
 		void append(std::string_view sv);
 		std::string_view to_string_view() const { return {data.data(), size}; }
 		/* implicit */ operator std::string_view() const { return to_string_view(); }
+		string_buffer &operator=(std::string_view sv);
 	};
+
+
+	template <typename t_type>
+	auto string_buffer <t_type>::operator=(std::string_view sv) -> string_buffer &
+	{
+		data.clear();
+		size = 0;
+		append(sv);
+		return *this;
+	}
 
 
 	template <typename t_type>
