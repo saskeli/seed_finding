@@ -8,6 +8,7 @@
 
 #include "include/gapmer.hpp"
 #include "include/util.hpp"
+#include "include/string_buffer.hpp"
 
 void help(const char* call) {
   std::cout << R"(
@@ -99,7 +100,7 @@ bool atmost_k_gapped(const std::string& input_mer, uint16_t k) {
   return ret;
 }
 
-void string_gen(const std::string& input_mer, auto callback) {
+void string_gen(std::string_view input_mer, auto callback) {
   // For defined bases + 1
   // Add one nuc to each gap (implicit gap at start and end)
 
@@ -122,7 +123,7 @@ void string_gen(const std::string& input_mer, auto callback) {
   for (size_t i = 0; i < input_mer.size(); ++i) {
     if (input_mer[i] == '.') {
       for (auto n : sf::v_to_nuc) {
-        std::string ne = input_mer.substr(0, i);
+        std::string ne(input_mer.substr(0, i));
         ne.push_back(n);
         ne.append(input_mer.substr(i + 1));
         callback(ne);
@@ -132,7 +133,7 @@ void string_gen(const std::string& input_mer, auto callback) {
 
   // End:
   for (auto n : sf::v_to_nuc) {
-    std::string ne = input_mer;
+    std::string ne(input_mer);
     ne.push_back(n);
     callback(ne);
     for (uint16_t gl = 1; gl <= max_gap; ++gl) {
@@ -150,7 +151,7 @@ void string_gen(const std::string& input_mer, auto callback) {
   for (auto n : sf::v_to_nuc) {
     for (size_t i = 0; i < input_mer.size(); ++i) {
       if (input_mer[i] != '.' and input_mer[i] != n) {
-        std::string ne = input_mer.substr(0, i);
+        std::string ne(input_mer.substr(0, i));
         ne.push_back(n);
         ne.append(input_mer.substr(i + 1));
         callback(ne);
@@ -194,7 +195,7 @@ void string_gen(const std::string& input_mer, auto callback) {
     for (size_t j = 0; j < input_mer.size(); ++j) {
       if (input_mer[j] == '.') {
         for (auto n : sf::v_to_nuc) {
-          std::string ne = input_mer.substr(0, j);
+          std::string ne(input_mer.substr(0, j));
           ne.push_back(n);
           ne.append(input_mer.substr(j + 1));
 
@@ -213,7 +214,7 @@ void string_gen(const std::string& input_mer, auto callback) {
   for (auto n : sf::v_to_nuc) {
     for (size_t i = 0; i < input_mer.size(); ++i) {
       if (input_mer[i] != '.') {
-        std::string ne = input_mer.substr(0, i);
+        std::string ne(input_mer.substr(0, i));
         if (i > 0) {
           ne.push_back('.');
         }
@@ -238,7 +239,7 @@ void string_gen(const std::string& input_mer, auto callback) {
   // gap any existing nuc
   for (size_t i = 0; i < input_mer.size(); ++i) {
     if (input_mer[i] != '.') {
-      std::string ne = input_mer.substr(0, i);
+      std::string ne(input_mer.substr(0, i));
       if (i != 0 and i < input_mer.size() - 1) {
         ne.push_back('.');
       }
@@ -285,7 +286,7 @@ bool compare_single(G g) {
 }
 
 template <class G, bool middle_gap_only>
-bool comp_str(G g, std::string& input_mer) {
+bool comp_str(G g, std::string_view input_mer) {
   std::unordered_set<std::string> a;
   if constexpr (middle_gap_only) {
     auto callback = [&](std::string& o) {
@@ -350,7 +351,7 @@ int main(int argc, char const* argv[]) {
     help(argv[0]);
   }
 
-  std::string input_mer = "";
+  sf::string_buffer<uint64_t> input_mer;
   bool compare = false;
   bool center_gap = true;
   bool use_string_gen = false;
@@ -412,12 +413,12 @@ int main(int argc, char const* argv[]) {
         bool res;
         if (center_gap) {
           res = comp_str<sf::gapmer<true, max_gap>, true>(
-              sf::gapmer<true, max_gap>(input_mer.c_str(), defined_bases,
+              sf::gapmer<true, max_gap>(input_mer.data(), defined_bases,
                                         gap_start, gap_bases),
               input_mer);
         } else {
           res = comp_str<sf::gapmer<false, max_gap>, false>(
-              sf::gapmer<false, max_gap>(input_mer.c_str(), defined_bases,
+              sf::gapmer<false, max_gap>(input_mer.data(), defined_bases,
                                          gap_start, gap_bases),
               input_mer);
         }
@@ -443,24 +444,24 @@ int main(int argc, char const* argv[]) {
     if (defined_bases < 5 || defined_bases > 6) {
       if (center_gap) {
         res = comp_str<sf::gapmer<true, max_gap>, true>(
-            sf::gapmer<true, max_gap>(input_mer.c_str(), defined_bases,
+            sf::gapmer<true, max_gap>(input_mer.data(), defined_bases,
                                       gap_start, gap_bases),
             input_mer);
       } else {
         res = comp_str<sf::gapmer<false, max_gap>, false>(
-            sf::gapmer<false, max_gap>(input_mer.c_str(), defined_bases,
+            sf::gapmer<false, max_gap>(input_mer.data(), defined_bases,
                                        gap_start, gap_bases),
             input_mer);
       }
 
     } else if (center_gap) {
       res = compare_single<sf::gapmer<true, max_gap>, true>(
-          sf::gapmer<true, max_gap>(input_mer.c_str(), defined_bases, gap_start,
+          sf::gapmer<true, max_gap>(input_mer.data(), defined_bases, gap_start,
                                     gap_bases));
 
     } else {
       res = compare_single<sf::gapmer<false, max_gap>, false>(
-          sf::gapmer<false, max_gap>(input_mer.c_str(), defined_bases,
+          sf::gapmer<false, max_gap>(input_mer.data(), defined_bases,
                                      gap_start, gap_bases));
     }
     if (res) {
@@ -472,7 +473,7 @@ int main(int argc, char const* argv[]) {
   std::cout << "Huddinge 1 neighbours of " << input_mer << std::endl;
   if (center_gap) {
     typedef sf::gapmer<true, max_gap> T;
-    T m(input_mer.c_str(), defined_bases, gap_start, gap_bases);
+    T m(input_mer.data(), defined_bases, gap_start, gap_bases);
     if (not m.is_valid()) {
       std::cerr << "Validation error " << m.to_string() << " <-> " << m.bits()
                 << std::endl;
@@ -488,7 +489,7 @@ int main(int argc, char const* argv[]) {
     m.huddinge_neighbours(callback);
   } else {
     typedef sf::gapmer<false, max_gap> T;
-    T m(input_mer.c_str(), defined_bases, gap_start, gap_bases);
+    T m(input_mer.data(), defined_bases, gap_start, gap_bases);
     if (not m.is_valid()) {
       std::cerr << "Validation error " << m.to_string() << " <-> " << m.bits()
                 << std::endl;
