@@ -25,7 +25,7 @@ namespace sf {
 
 		void append(std::string_view sv);
 		std::string_view to_string_view() const { return {data.data(), size}; }
-		explicit operator std::string_view() const { return to_string_view(); }
+		/* implicit */ operator std::string_view() const { return to_string_view(); }
 	};
 
 
@@ -41,7 +41,7 @@ namespace sf {
 
 		char *dst(data.data());
 		dst += size;
-		std::copy(sv.data(), added_length, reinterpret_cast <char *>(dst));
+		std::copy_n(sv.data(), added_length, reinterpret_cast <char *>(dst));
 
 		size += added_length;
 	}
