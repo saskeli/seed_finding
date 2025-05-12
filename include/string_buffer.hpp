@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <ostream>
 #include <string_view>
 #include <vector>
 
@@ -18,13 +19,16 @@
 namespace sf {
 
 	template <typename t_type>
-	struct string_buffer
+	class string_buffer
 	{
-		std::vector <t_type>	data;
-		std::size_t				size{};
+		std::vector <t_type>	data_;
+		std::size_t				size_{};
 
+	public:
+		std::vector <t_type> const &data() const { return data_; }
+		std::size_t size() const { return size_; }
 		void append(std::string_view sv);
-		std::string_view to_string_view() const { return {data.data(), size}; }
+		std::string_view to_string_view() const { return {data_.data(), size_}; }
 		/* implicit */ operator std::string_view() const { return to_string_view(); }
 		string_buffer &operator=(std::string_view sv);
 	};
@@ -33,8 +37,8 @@ namespace sf {
 	template <typename t_type>
 	auto string_buffer <t_type>::operator=(std::string_view sv) -> string_buffer &
 	{
-		data.clear();
-		size = 0;
+		data_.clear();
+		size_ = 0;
 		append(sv);
 		return *this;
 	}
@@ -47,13 +51,13 @@ namespace sf {
 		if (!added_length)
 			return;
 
-		auto const new_buffer_size((size + added_length - 1) / sizeof(t_type) + 1);
-		data.resize(new_buffer_size, 0);
+		auto const new_buffer_size((size_ + added_length - 1) / sizeof(t_type) + 1);
+		data_.resize(new_buffer_size, 0);
 
-		char *dst(data.data());
-		dst += size;
+		char *dst(data_.data());
+		dst += size_;
 		std::copy_n(sv.data(), added_length, reinterpret_cast <char *>(dst));
 
-		size += added_length;
+		size_ += added_length;
 	}
 }
