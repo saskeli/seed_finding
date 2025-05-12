@@ -1,6 +1,12 @@
 #include <algorithm>
 #include <array>
-#include <generator>
+#include <cstdint>
+#include <SeqIO/SeqIO.hh>
+#include <sdsl/bit_vectors.hpp>
+#include <sdsl/hyb_vector.hpp>
+#include <string>
+#include <string_view>
+#include <utility>
 #include <vector>
 #include <cstdint>
 
@@ -8,10 +14,7 @@
 #include <unordered_map>
 #endif
 
-#include <SeqIO/SeqIO.hh>
 #include "gapmer.hpp"
-#include <sdsl/bit_vectors.hpp>
-#include <sdsl/hyb_vector.hpp>
 
 namespace sf {
 
@@ -92,16 +95,16 @@ class fm_index {
     std::vector<uint64_t> starts;
     seq_io::Reader r(fasta_path);
     r.enable_reverse_complements();
-    std::string seq;
+    string_buffer <uint64_t> seq;
     while (true) {
       uint64_t len = r.get_next_read_to_buffer();
       if (len == 0) {
         break;
       }
-      starts.push_back(seq.size());
-      seq.append(r.read_buf, len);
+      starts.push_back(seq.size);
+      seq.append(std::string_view{r.read_buf, len});
     }
-    C_[4] = seq.size();
+    C_[4] = seq.size;
     std::cerr << "Creating index from " << fasta_path << " with " << C_[4]
               << " total characters" << std::endl;
     sdsl::bit_vector samples(C_[4]);
