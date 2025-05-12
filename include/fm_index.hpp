@@ -2,15 +2,16 @@
 #include <array>
 #include <generator>
 #include <vector>
+#include <cstdint>
 
 #ifdef DEBUG
 #include <unordered_map>
 #endif
 
-#include "SeqIO/SeqIO.hh"
+#include <SeqIO/SeqIO.hh>
 #include "gapmer.hpp"
-#include "sdsl/bit_vectors.hpp"
-#include "sdsl/hyb_vector.hpp"
+#include <sdsl/bit_vectors.hpp>
+#include <sdsl/hyb_vector.hpp>
 
 namespace sf {
 
@@ -338,6 +339,7 @@ class fm_index {
     return ret;
   }
 
+  /// Return the length of the original text.
   uint64_t size() const { return C_[4]; }
 };
 }  // namespace sf

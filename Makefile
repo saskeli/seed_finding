@@ -43,6 +43,8 @@ TEST_HPP = test/gapmer_tests.hpp test/util_tests.hpp test/gapmer_count_tests.hpp
 
 all: fast debug
 
+all_: huddinge seed_finder comp huddinge_deb seed_finder_deb
+
 fast: huddinge
 
 debug: huddinge_deb
@@ -63,7 +65,7 @@ seed_finder_deb: seed_finder.cpp $(HEADERS) | $(SDSL_DIR)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
 
 clean:
-	rm -f huddinge huddinge_deb seed_finder seed_finder_deb
+	rm -f huddinge huddinge_deb seed_finder seed_finder_deb comp
 	rm -f test/test test/cover test/test.o test/cover.o
 	rm -f *.gcov test/*.gcda test/*.gcno index.info
 	rm -rf target/
