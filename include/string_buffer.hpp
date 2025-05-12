@@ -27,6 +27,7 @@ namespace sf {
 
 	public:
 		t_type const *data() const { return data_.data(); }
+		bool empty() const { return 0 == size_; }
 		std::size_t size() const { return size_; }
 		void clear();
 		void assign(std::string_view sv);
