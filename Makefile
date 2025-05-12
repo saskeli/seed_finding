@@ -7,6 +7,7 @@ endif
 CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)
 
 PERF_FLAGS = -Ofast -DNDEBUG -fopenmp
+TEST_PERF_FLAGS = -O0 -g -DDEBUG
 
 DEBUG_FLAGS = -g -DDEBUG
 
@@ -23,8 +24,9 @@ HEADERS = include/gapmer.hpp include/fm_index.hpp include/gapmer_count.hpp inclu
 SDSL_DIR = deps/sdsl-lite/lib
 
 GTEST_DIR = deps/googletest
+RAPIDCHECK_DIR = deps/rapidcheck
 
-GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -pthread -L $(GTEST_DIR)/lib
+GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -isystem $(RAPIDCHECK_DIR)/include -isystem $(RAPIDCHECK_DIR)/extras/gtest/include -pthread -L $(GTEST_DIR)/build/lib -L $(RAPIDCHECK_DIR)/build
 
 GTEST_HEADERS = $(GTEST_DIR)/googletest/include/gtest/*.h \
                 $(GTEST_DIR)/googletest/include/gtest/internal/*.h
@@ -72,20 +74,26 @@ $(SDSL_DIR):
 $(GTEST_DIR)/googletest:
 	git submodule update --init
 
-$(GETST_DIR)/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
-	(cd $(GTEST_DIR) && cmake CMakelists.txt && make)
+$(RAPIDCHECK_DIR):
+	git submodule update --init
+
+$(GTEST_DIR)/build/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
+	(mkdir -p $(GTEST_DIR)/build && cd $(GTEST_DIR)/build && cmake -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF .. && $(MAKE))
+
+$(RAPIDCHECK_DIR)/build/librapidcheck.a: | $(RAPIDCHECK_DIR)
+	(mkdir -p $(RAPIDCHECK_DIR)/build && cd $(RAPIDCHECK_DIR)/build && cmake -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF -DRC_ENABLE_GTEST=ON .. && $(MAKE))
 
 test/test.o: $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
 	$(CXX) $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
 
-test/test: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	$(CXX) $(CFLAGS) $(GFLAGS) $(INCLUDE) -O3 test/test.cpp -o test/test -lgtest_main -lgtest $(LIBS)
+test/test: $(GTEST_DIR)/build/lib/libgtest_main.a $(RAPIDCHECK_DIR)/build/librapidcheck.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
+	$(CXX) $(CFLAGS) $(GFLAGS) $(INCLUDE) $(TEST_PERF_FLAGS) test/test.cpp -o test/test -lgtest_main -lgtest -lrapidcheck $(LIBS)
 
 test: test/test
 	test/test $(ARG)
 
-test/cover: $(GTEST_DIR)/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	$(CXX) -g --coverage -O1 $(CFLAGS) $(GFLAGS) $(INCLUDE) test/test.cpp -o test/cover -lgtest_main -lgtest -lgcov $(LIBS)
+test/cover: $(GTEST_DIR)/build/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
+	$(CXX) -g --coverage -O1 $(CFLAGS) $(GFLAGS) $(INCLUDE) test/test.cpp -o test/cover -lgtest_main -lgtest -lrapidcheck -lgcov $(LIBS)
 
 cover: test/cover
 	rm -f *.gcov test/*.gcda coverage.info

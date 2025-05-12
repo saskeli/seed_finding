@@ -16,11 +16,21 @@
 #endif
 
 namespace sf {
-template <bool middle_gap_only = false, uint16_t max_gap = 5>
+template <bool middle_gap_only = false, uint16_t t_max_gap = 5>
 class gapmer {
+
+  // Public constructor synopsis:
+  // gapmer();
+  // gapmer(const char* s, uint8_t k);
+  // gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length);
+  // gapmer(uint64_t v, uint8_t k);
+  // gapmer(const char* s, uint8_t k, uint8_t gap_start, uint8_t gap_length);
+
+ public:
+  const static constexpr uint64_t max_k = 24;
+  const static constexpr uint16_t max_gap = t_max_gap;
  private:
   const static constexpr uint64_t ONE = 1;
-  const static constexpr uint64_t max_k = 24;
   const static constexpr uint64_t value_mask = (ONE << (max_k * 2)) - 1;
   const static constexpr uint64_t xor_mask = 0b0101010101010101;
   const static constexpr uint64_t pext_mask = 0x0606060606060606;
@@ -794,13 +804,12 @@ class gapmer {
  public:
   gapmer() : data_(0) {}
 
-  gapmer(const char* s, uint8_t k) : data_(0) {
+  gapmer(const uint64_t* d_ptr, uint8_t k) : data_(0) {
 #ifdef DEBUG
     assert(k > 0);
     assert(k <= 24);
 #endif
     uint64_t iv;
-    const uint64_t* d_ptr = reinterpret_cast<const uint64_t*>(s);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
       iv = bits::byteswap(d_ptr[i]);
       iv = bits::pext(iv, pext_mask);
@@ -827,10 +836,10 @@ class gapmer {
     data_ |= uint64_t(k) << (max_k * 2);
   }
 
-  gapmer(const char* s, uint8_t k, uint8_t gap_start, uint8_t gap_length)
+  gapmer(const uint64_t* d_ptr, uint8_t k, uint8_t gap_start, uint8_t gap_length)
       : data_(0) {
     if (gap_start == 0) {
-      *this = gapmer(s, k);
+      *this = gapmer(d_ptr, k);
       return;
     }
 #ifdef DEBUG
@@ -842,7 +851,7 @@ class gapmer {
 #endif
 
     uint64_t iv;
-    const uint64_t* d_ptr = reinterpret_cast<const uint64_t*>(s);
+    const char* s = reinterpret_cast<const char*>(d_ptr);
     for (uint16_t i = 0; i < max_k / 8; ++i) {
       iv = bits::byteswap(d_ptr[i]);
       iv = bits::pext(iv, pext_mask);
