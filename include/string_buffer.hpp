@@ -10,6 +10,7 @@
 #pragma once
 
 #include <algorithm>
+#include <climits>
 #include <cstddef>
 #include <ostream>
 #include <string_view>
@@ -25,10 +26,11 @@ namespace sf {
 		std::size_t				size_{};
 
 	public:
-		std::vector <t_type> const &data() const { return data_; }
+		t_type const *data() const { return data_.data(); }
 		std::size_t size() const { return size_; }
+		char operator[](std::size_t idx) const { return 0xff & (data_[idx / sizeof(t_type)] >> (idx % sizeof(t_type) * CHAR_BIT)); }
 		void append(std::string_view sv);
-		std::string_view to_string_view() const { return {data_.data(), size_}; }
+		std::string_view to_string_view() const { return {reinterpret_cast <char const *>(data_.data()), size_}; }
 		/* implicit */ operator std::string_view() const { return to_string_view(); }
 		string_buffer &operator=(std::string_view sv);
 	};
@@ -54,10 +56,18 @@ namespace sf {
 		auto const new_buffer_size((size_ + added_length - 1) / sizeof(t_type) + 1);
 		data_.resize(new_buffer_size, 0);
 
-		char *dst(data_.data());
+		auto *dst(reinterpret_cast <char *>(data_.data()));
 		dst += size_;
 		std::copy_n(sv.data(), added_length, reinterpret_cast <char *>(dst));
 
 		size_ += added_length;
+	}
+
+
+	template <typename t_type>
+	std::ostream &operator<<(std::ostream &os, string_buffer <t_type> const &sb)
+	{
+		os << sb.to_string_view();
+		return os;
 	}
 }
