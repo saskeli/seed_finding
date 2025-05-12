@@ -69,7 +69,7 @@ namespace sf {
 
 		auto *dst(reinterpret_cast <char *>(data_.data()));
 		dst += size_;
-		std::copy_n(sv.data(), added_length, reinterpret_cast <char *>(dst));
+		std::copy_n(sv.data(), added_length, dst);
 
 		size_ += added_length;
 	}
