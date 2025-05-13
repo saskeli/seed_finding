@@ -1139,7 +1139,7 @@ class gapmer {
     // if gl > 0, gaps must align.
     // FIXME: should we check for gl == o_gl? Or is this implied?
     if (gl > 0) {
-      uint16_t offset = o_gs - gl;
+      uint16_t offset = o_gs - gs;
       for (uint16_t i = 0; i < len; ++i) {
         if (nuc(i) != other.nuc(i + offset)) {
           if constexpr (compare_rc) {
