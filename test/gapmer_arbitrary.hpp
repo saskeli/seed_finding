@@ -6,8 +6,10 @@
 #pragma once
 
 #include <bit>
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <rapidcheck/gtest.h>
+#include <vector>
 #include "../include/gapmer.hpp"
 #include "../include/util.hpp"
 
