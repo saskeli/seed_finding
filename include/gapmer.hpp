@@ -21,10 +21,10 @@ class gapmer {
 
   // Public constructor synopsis:
   // gapmer();
-  // gapmer(const char* s, uint8_t k);
+  // gapmer(const uint64_t * s, uint8_t k);
   // gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length);
   // gapmer(uint64_t v, uint8_t k);
-  // gapmer(const char* s, uint8_t k, uint8_t gap_start, uint8_t gap_length);
+  // gapmer(const uint64_t *s, uint8_t k, uint8_t gap_start, uint8_t gap_length);
 
  public:
   const static constexpr uint64_t max_k = 24;
