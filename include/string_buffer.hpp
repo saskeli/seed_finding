@@ -3,11 +3,7 @@
  * This code is licensed under MIT license (see LICENSE for details).
  */
 
- // The purpose of this struct to make it easy to align strings to a buffer that is aligned to some number of bytes.
- // An option would have been to use a custom allocator for std::string but unfortunately the rules concerning
- // accessing values of some type that is not char or std::byte are somewhat unclear to me.
-
-#pragma once
+ #pragma once
 
 #include <algorithm>
 #include <climits>
@@ -19,6 +15,9 @@
 
 namespace sf {
 
+	// The purpose of this class template is to make it easy to align strings to a buffer that is aligned to some number of bytes.
+	// An option would have been to use a custom allocator for std::string but unfortunately the rules concerning
+	// accessing values of some type that is not char or std::byte are somewhat unclear to me.
 	template <typename t_type>
 	class string_buffer
 	{
@@ -64,9 +63,11 @@ namespace sf {
 		if (!added_length)
 			return;
 
+		// Determine and set the new buffer size.
 		auto const new_buffer_size((size_ + added_length - 1) / sizeof(t_type) + 1);
 		data_.resize(new_buffer_size, 0);
 
+		// Copy the bytes.
 		auto *dst(reinterpret_cast <char *>(data_.data()));
 		dst += size_;
 		std::copy_n(sv.data(), added_length, dst);
