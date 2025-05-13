@@ -1048,7 +1048,7 @@ class gapmer {
   ///     2.2 gap lengths match and this’s prefix is a suffix of other’s prefix and this’s suffix is a prefix of other’s suffix or
   ///     2.3 both gap lengths are zero and this is a substring of other.
   template <bool compare_rc = true, bool debug = false>
-  bool aligns_to(gapmer other) {
+  bool aligns_to(gapmer other) const {
     if constexpr (debug) {
       std::cerr << "Aligns_to comparison " << to_string() << " to\n"
                 << other.to_string() << std::endl;
