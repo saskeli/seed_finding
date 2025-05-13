@@ -5,9 +5,12 @@
 
 #pragma once
 
-#include <bit>
+#include <cstddef>
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <rapidcheck/gtest.h>
+#include <string>
+#include <string_view>
 #include "../include/string_buffer.hpp"
 
 
