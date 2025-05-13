@@ -23,10 +23,22 @@ namespace {
 		uint8_t suffix_length{};
 		uint8_t gap_length{};
 
+		sf::gapmer <> to_gapmer() const { return sf::gapmer <>(sequence, length, gap_start(), gap_length); }
+		operator sf::gapmer <>() const { return to_gapmer(); }
 		void write_to_buffer(std::vector <uint64_t> &buffer) const;
-
 		uint8_t gap_start() const { return suffix_length ? length - suffix_length : 0; }
 	};
+
+
+	struct gapmer_pair
+	{
+		gapmer_data source{};
+		gapmer_data target{};
+	};
+
+
+	struct aligning_gapmer_pair : public gapmer_pair {};
+	struct non_aligning_gapmer_pair : public gapmer_pair {};
 
 
 	void gapmer_data::write_to_buffer(std::vector <uint64_t> &buffer) const
@@ -58,6 +70,20 @@ namespace {
 			sequence_ = std::rotl(sequence_, 2);
 			++i;
 		}
+	}
+
+
+	std::ostream &operator<<(std::ostream &os, gapmer_data const gd)
+	{
+		os << gd.to_gapmer().to_string() << " (" << +gd.length << ", " << +gd.gap_start() << ", " << +gd.gap_length << ')';
+		return os;
+	}
+
+
+	std::ostream &operator<<(std::ostream &os, gapmer_pair const &pp)
+	{
+		os << "source: " << pp.source << " target: " << pp.target;
+		return os;
 	}
 }
 
@@ -92,12 +118,57 @@ namespace rc {
 			});
 		}
 	};
+
+
+	template <>
+	struct Arbitrary <aligning_gapmer_pair>
+	{
+		static Gen <aligning_gapmer_pair> arbitrary()
+		{
+			return gen::mapcat(gen::arbitrary <gapmer_data>(), [](auto const gd){
+				return gen::mapcat(gen::inRange(uint8_t{}, gd.length), [gd](auto const pos){ // Determine the source offset in target.
+					return gen::map(gen::inRange(1, gd.length - pos + 1), [gd, pos](uint8_t const length){ // Determine the source length.
+
+						// Copy the sequence to get an aligning pair.
+						auto const source_end(pos + length);
+						auto sequence(gd.sequence);
+						sequence >>= 2 * (gd.length - source_end);
+
+						// Zero the non-sequence characters.
+						{
+							uint64_t mask{};
+							mask = ~mask;
+							mask >>= 32 - length;
+							sequence &= mask;
+						}
+
+						// Determine the suffix length and the gap length of the source.
+						auto const target_gap_start(gd.gap_start());
+						uint8_t const suffix_length(pos < target_gap_start && target_gap_start < source_end ? source_end - target_gap_start : 0);
+						uint8_t const gap_length(suffix_length ? gd.gap_length : 0);
+						
+						return aligning_gapmer_pair{
+							gapmer_data{sequence, length, suffix_length, gap_length},
+							gd
+						};
+					});
+				});
+			});
+		}
+	};
 }
 
 
 namespace sf {
 
-	RC_GTEST_PROP(gapmer_arbitrary, constructorsWorkAsExpected, (gapmer_data const &gd)) {
+	template <bool middle_gap_only, uint16_t t_max_gap>
+	void showValue(gapmer <middle_gap_only, t_max_gap> const gg, std::ostream &os)
+	{
+		os << gg.to_string();
+	}
+
+
+	RC_GTEST_PROP(gapmer_arbitrary, constructorsWorkAsExpected, (gapmer_data const gd)) {
 
 		std::vector <uint64_t> seq;
 		gd.write_to_buffer(seq);
@@ -130,4 +201,21 @@ namespace sf {
 			}
 		}
 	}
+
+
+	RC_GTEST_PROP(gapmer_arbitrary, alignEmptyGapmer, (gapmer_data const gd)) {
+		gapmer <> const source{};
+		gapmer <> const target(gd);
+		RC_ASSERT((source.aligns_to <false>(target))); // FIXME: also reverse complement (if needed).
+	}
+
+
+	RC_GTEST_PROP(gapmer_arbitrary, alignNonemptyGapmer, (aligning_gapmer_pair const &pair)) {
+		gapmer <> const source{pair.source};
+		gapmer <> const target{pair.target};
+		RC_ASSERT((source.aligns_to <false>(target))); // FIXME: also reverse complement (if needed).
+	}
+
+
+	// FIXME: Also non-aligned. (Flip some bit of the value or adjust the gap length or position to make the operation fail.)
 }
