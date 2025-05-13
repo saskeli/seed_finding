@@ -897,12 +897,13 @@ class gapmer {
     data_ |= uint64_t(gap_length) << (max_k * 2 + 10);
   }
 
-  /// Return the packed data.
+  /// Get the packed data.
   operator uint64_t() const { return data_; }
 
   /// Compare packed bytes.
   bool operator==(const gapmer& rhs) const { return data_ == rhs.data_; }
 
+  /// Compare packed bytes.
   bool operator!=(const gapmer& rhs) const { return data_ != rhs.data_; }
 
   template <bool compare_rc = false, bool debug = false>
@@ -1039,6 +1040,13 @@ class gapmer {
     return false;
   }
 
+  /// Check if this aligns to another gapmer.
+  /// Returns true iff.
+  ///  1. data and lengths match exactly or
+  ///  2. other’s length is strictly greater and
+  ///     2.1 other’s gap length is non-zero, this’s gap length is zero and this is a substring of other’s prefix or suffix or
+  ///     2.2 gap lengths match and this’s prefix is a suffix of other’s prefix and this’s suffix is a prefix of other’s suffix or
+  ///     2.3 both gap lengths are zero and this is a substring of other.
   template <bool compare_rc = true, bool debug = false>
   bool aligns_to(gapmer other) {
     if constexpr (debug) {
@@ -1121,6 +1129,7 @@ class gapmer {
       }
       return false;
     }
+    // Check if prefix (resp. suffix) can be a substring of other’s prefix (suffix).
     if (o_gs < gs || o_len - o_gs < len - gs) {
       if constexpr (compare_rc) {
         return reverse_complement().template aligns_to<false, debug>(other);
@@ -1128,6 +1137,7 @@ class gapmer {
       return false;
     }
     // if gl > 0, gaps must align.
+    // FIXME: should we check for gl == o_gl? Or is this implied?
     if (gl > 0) {
       uint16_t offset = o_gs - gl;
       for (uint16_t i = 0; i < len; ++i) {
@@ -1170,24 +1180,25 @@ class gapmer {
     return false;
   }
 
-  /// Return the count of the defined bases.
+  /// Get the count of the defined bases.
   uint16_t length() const { return (data_ >> (max_k * 2)) & meta_mask; }
 
-  /// Return the starting position of the gap.
+  /// Get the starting position of the gap.
   uint16_t gap_start() const {
     uint64_t ret = data_ >> (max_k * 2 + 5);
     return ret & meta_mask;
   }
 
-  /// Return the gap length.
+  /// Get the gap length.
   uint16_t gap_length() const { return data_ >> (max_k * 2 + 10); }
 
-  /// Return the i-th 2-bit encoded nucleotide.
+  /// Get the i-th 2-bit encoded nucleotide (gap not taken into account).
   uint8_t nuc(uint8_t i) const {
     uint64_t v = data_ >> (length() - i - 1) * 2;
     return v & 0b11;
   }
 
+  /// Get the unpacked character or gap at the i-th position.
   uint8_t get_c(uint64_t i) const {
     uint8_t gs = gap_start();
     uint8_t gl = gap_length();
@@ -1198,6 +1209,7 @@ class gapmer {
     return i >= length() ? '.' : v_to_nuc[nuc(i)];
   }
 
+  /// Get the encoded value.
   uint64_t value() const { return data_ & value_mask; }
 
   gapmer next(char c) const {
@@ -1233,7 +1245,7 @@ class gapmer {
     }
   }
 
-  /// Return the sequence as std::string.
+  /// Returns the sequence as std::string.
   std::string to_string() const {
     std::string ret;
     uint16_t i;
@@ -1253,6 +1265,8 @@ class gapmer {
     return ret;
   }
 
+  /// Returns true iff. this is lexicographically equal or smaller than its reverse complement.
+  // FIXME: is the statement above true?
   bool is_canonical() const {
     uint8_t a = 0;
     uint8_t b = length() - 1;
@@ -1268,7 +1282,7 @@ class gapmer {
     return true;
   }
 
-  /// Return the reverse complement.
+  /// Get this’s reverse complement.
   gapmer reverse_complement() const {
     uint64_t v = value();
     uint64_t n_v = 0;
