@@ -42,7 +42,6 @@ namespace sf::bits::detail {
 	constexpr inline t_unsigned pext(t_unsigned src, t_unsigned mask)
 	{
 		// A linear in the number of runs of set bits in the mask implementation of PEXT.
-		// FIXME: Needs to be tested.
 
 		t_unsigned retval{};
 		t_unsigned dst_idx{};
