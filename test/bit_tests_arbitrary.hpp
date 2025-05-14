@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <exception> // Needed by RapidCheck.
+#include <exception> // IWYU pragma: keep // Needed by RapidCheck.
 
 #include <cstdint>
 #include <gtest/gtest.h>
