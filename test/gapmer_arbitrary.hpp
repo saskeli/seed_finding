@@ -207,6 +207,7 @@ namespace rc {
 					uint64_t mask{1};
 					mask <<= pos;
 					gd_.sequence ^= mask;
+					RC_ASSERT(gd.sequence != gd_.sequence);
 					return {gd, gd_};
 				});
 			});
