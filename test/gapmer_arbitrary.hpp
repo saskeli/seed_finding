@@ -217,14 +217,23 @@ namespace rc {
 	};
 
 
-	// FIXME: Implement these when the gapmer length has been parametrised.
-#if 0
 	template <>
 	struct Arbitrary <non_aligning_gapmer_pair_gap_length_mismatch>
 	{
 		static Gen <non_aligning_gapmer_pair_gap_length_mismatch> arbitrary()
 		{
+			return gen::map(gen::arbitrary <gapmer_data_ <2, 1>>(), []<typename t_gapmer_data>(t_gapmer_data const gd) -> non_aligning_gapmer_pair_gap_length_mismatch {
+				typedef typename t_gapmer_data::gapmer_type gapmer_type;
+				static_assert(1 <= gapmer_type::max_gap);
 
+				auto gd_(gd);
+				if (gd_.gap_length < gapmer_type::max_gap)
+					++gd_.gap_length;
+				else
+					--gd_.gap_length;
+
+				return {gd, gd_};
+			});
 		}
 	};
 
@@ -234,10 +243,16 @@ namespace rc {
 	{
 		static Gen <non_aligning_gapmer_pair_gap_position_mismatch> arbitrary()
 		{
-
+			return gen::map(gen::arbitrary <gapmer_data_ <3, 1>>(), []<typename t_gapmer_data>(t_gapmer_data const gd) -> non_aligning_gapmer_pair_gap_position_mismatch {
+				auto gd_(gd);
+				if (1 == gd_.suffix_length)
+					--gd_.suffix_length;
+				else
+					++gd_.suffix_length;
+				return {gd, gd_};
+			});
 		}
 	};
-#endif
 }
 
 
@@ -301,8 +316,9 @@ namespace sf {
 	}
 
 
-	// Needed by the template test below.
+	// Needed by the template tests below.
 	template <typename> struct gapmer_arbitrary_aligns_to_fixture : public testing::Test {};
+	template <typename> struct gapmer_arbitrary_aligns_to_reversible_fixture : public testing::Test {};
 
 	typedef ::testing::Types <
 		non_aligning_gapmer_pair_value_mismatch,
@@ -310,10 +326,24 @@ namespace sf {
 	> gapmer_arbitrary_aligns_to_test_types;
 	TYPED_TEST_SUITE(gapmer_arbitrary_aligns_to_fixture, gapmer_arbitrary_aligns_to_test_types);
 
+	typedef ::testing::Types <
+		non_aligning_gapmer_pair_gap_length_mismatch,
+		non_aligning_gapmer_pair_gap_position_mismatch
+	> gapmer_arbitrary_aligns_to_reversible_test_types;
+	TYPED_TEST_SUITE(gapmer_arbitrary_aligns_to_reversible_fixture, gapmer_arbitrary_aligns_to_reversible_test_types);
+
 	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_fixture, alignNonMatchingGapmer, (TypeParam const &pair)) {
 		typedef typename TypeParam::gapmer_type gapmer_type;
 		gapmer_type const source{pair.source};
 		gapmer_type const target{pair.target};
 		RC_ASSERT((!source.template aligns_to <false>(target)));
+	}
+
+	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_reversible_fixture, alignNonMatchingGapmerReversible, (TypeParam const &pair)) {
+		typedef typename TypeParam::gapmer_type gapmer_type;
+		gapmer_type const gg1{pair.source};
+		gapmer_type const gg2{pair.target};
+		RC_ASSERT((!gg1.template aligns_to <false>(gg2)));
+		RC_ASSERT((!gg2.template aligns_to <false>(gg1)));
 	}
 }
