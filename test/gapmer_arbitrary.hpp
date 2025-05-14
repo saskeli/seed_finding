@@ -68,12 +68,16 @@ namespace {
 		auto sequence_{std::rotr(sequence, 2 * (length - 1))};
 		uint8_t i{};
 
-		while (i < gap_start())
-		{
-			dst[i] = sf::v_to_nuc[sequence_ & 0x3];
-			sequence_ = std::rotl(sequence_, 2);
-			++i;
-		}
+		auto const output_to_limit([&](uint8_t const limit){
+			while (i < limit)
+			{
+				dst[i] = sf::v_to_nuc[sequence_ & 0x3];
+				sequence_ = std::rotl(sequence_, 2);
+				++i;
+			}
+		});
+
+		output_to_limit(gap_start());
 
 		for (uint8_t j{}; j < gap_length; ++j)
 		{
@@ -81,12 +85,7 @@ namespace {
 			++i;
 		}
 
-		while (i < length + gap_length)
-		{
-			dst[i] = sf::v_to_nuc[sequence_ & 0x3];
-			sequence_ = std::rotl(sequence_, 2);
-			++i;
-		}
+		output_to_limit(length + gap_length);
 	}
 
 
