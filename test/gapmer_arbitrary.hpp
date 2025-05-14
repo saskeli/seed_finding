@@ -146,7 +146,7 @@ namespace rc {
 						auto const target_gap_start(gd.gap_start());
 						uint8_t const suffix_length(pos < target_gap_start && target_gap_start < source_end ? source_end - target_gap_start : 0);
 						uint8_t const gap_length(suffix_length ? gd.gap_length : 0);
-						
+
 						return aligning_gapmer_pair{
 							gapmer_data{sequence, length, suffix_length, gap_length},
 							gd
@@ -217,5 +217,5 @@ namespace sf {
 	}
 
 
-	// FIXME: Also non-aligned. (Flip some bit of the value or adjust the gap length or position to make the operation fail.)
+	// FIXME: Also non-aligned. (Flip some bit of the value or adjust the length, the gap length or position to make the operation fail.)
 }
