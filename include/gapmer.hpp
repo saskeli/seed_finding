@@ -1,8 +1,8 @@
 #pragma once
 
 #include <array>
-#include <bit> // Since we currently use C++23, <bit> is available.
 #include <bitset>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
