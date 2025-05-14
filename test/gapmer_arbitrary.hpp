@@ -8,6 +8,7 @@
 #include <bit>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <ostream>
 #include <rapidcheck/gtest.h>
 #include <vector>
 #include "../include/gapmer.hpp"
@@ -18,13 +19,15 @@ namespace {
 
 	struct gapmer_data
 	{
+		typedef sf::gapmer <> gapmer_type;
+
 		uint64_t sequence{}; // Half-nibbles in reverse order like in gapmer.
 		uint8_t length{};
 		uint8_t suffix_length{};
 		uint8_t gap_length{};
 
-		sf::gapmer <> to_gapmer() const { return sf::gapmer <>(sequence, length, gap_start(), gap_length); }
-		operator sf::gapmer <>() const { return to_gapmer(); }
+		gapmer_type to_gapmer() const { return sf::gapmer <>(sequence, length, gap_start(), gap_length); }
+		operator gapmer_type() const { return to_gapmer(); }
 		void write_to_buffer(std::vector <uint64_t> &buffer) const;
 		uint8_t gap_start() const { return suffix_length ? length - suffix_length : 0; }
 	};
@@ -38,7 +41,14 @@ namespace {
 
 
 	struct aligning_gapmer_pair : public gapmer_pair {};
+
+	// Tried with a template with an enum parameter, which resulted in less-than-useful log messages;
+	// hence we have the following class hierarchy.
 	struct non_aligning_gapmer_pair : public gapmer_pair {};
+	struct non_aligning_gapmer_pair_value_mismatch : public non_aligning_gapmer_pair {};
+	struct non_aligning_gapmer_pair_source_length_greater : public non_aligning_gapmer_pair {};
+	struct non_aligning_gapmer_pair_gap_length_mismatch : public non_aligning_gapmer_pair {};
+	struct non_aligning_gapmer_pair_gap_position_mismatch : public non_aligning_gapmer_pair {};
 
 
 	void gapmer_data::write_to_buffer(std::vector <uint64_t> &buffer) const
@@ -90,6 +100,7 @@ namespace {
 
 namespace rc {
 
+	// FIXME: gapmer_data currently has a minimum length of one. For some tests, we should allow empty gapmers.
 	template <>
 	struct Arbitrary <gapmer_data>
 	{
@@ -156,6 +167,68 @@ namespace rc {
 			});
 		}
 	};
+
+
+	template <>
+	struct Arbitrary <non_aligning_gapmer_pair_value_mismatch>
+	{
+		static Gen <non_aligning_gapmer_pair_value_mismatch> arbitrary()
+		{
+			return gen::mapcat(gen::arbitrary <gapmer_data>(), [](auto const gd){
+				return gen::map(gen::inRange(0, 2 * gd.length), [gd](auto const pos) -> non_aligning_gapmer_pair_value_mismatch {
+					// Make a new value by flipping some bit in the value.
+					// (Currently all bit patterns are valid in the range specified by length.)
+					auto gd_(gd);
+					uint64_t mask{1};
+					mask <<= pos;
+					gd_.sequence ^= mask;
+					return {gd, gd_};
+				});
+			});
+		}
+	};
+
+
+	template <>
+	struct Arbitrary <non_aligning_gapmer_pair_source_length_greater>
+	{
+		static Gen <non_aligning_gapmer_pair_source_length_greater> arbitrary()
+		{
+			return gen::map(gen::arbitrary <gapmer_data>(), [](auto gd) -> non_aligning_gapmer_pair_source_length_greater {
+				// Make the source longer than the target.
+				auto gd_(gd);
+				if (gd.length < gapmer_data::gapmer_type::max_k)
+					++gd.length;
+				else
+					--gd_.length;
+
+				return {gd, gd_};
+			});
+		}
+	};
+
+
+	// FIXME: Implement these when the gapmer length has been parametrised.
+#if 0
+	template <>
+	struct Arbitrary <non_aligning_gapmer_pair_gap_length_mismatch>
+	{
+		static Gen <non_aligning_gapmer_pair_gap_length_mismatch> arbitrary()
+		{
+
+		}
+	};
+
+
+	template <>
+	struct Arbitrary <non_aligning_gapmer_pair_gap_position_mismatch>
+	{
+		static Gen <non_aligning_gapmer_pair_gap_position_mismatch> arbitrary()
+		{
+
+		}
+	};
+#endif
 }
 
 
@@ -217,5 +290,18 @@ namespace sf {
 	}
 
 
-	// FIXME: Also non-aligned. (Flip some bit of the value or adjust the length, the gap length or position to make the operation fail.)
+	// Needed by the template test below.
+	template <typename> struct gapmer_arbitrary_aligns_to_fixture : public testing::Test {};
+
+	typedef ::testing::Types <
+		non_aligning_gapmer_pair_value_mismatch,
+		non_aligning_gapmer_pair_source_length_greater
+	> gapmer_arbitrary_aligns_to_test_types;
+	TYPED_TEST_SUITE(gapmer_arbitrary_aligns_to_fixture, gapmer_arbitrary_aligns_to_test_types);
+
+	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_fixture, alignNonMatchingGapmer, (TypeParam const &pair)) {
+		gapmer <> const source{pair.source};
+		gapmer <> const target{pair.target};
+		RC_ASSERT((!source.aligns_to <false>(target)));
+	}
 }
