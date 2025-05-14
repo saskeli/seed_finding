@@ -28,8 +28,8 @@ RAPIDCHECK_DIR = deps/rapidcheck
 
 GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -isystem $(RAPIDCHECK_DIR)/include -isystem $(RAPIDCHECK_DIR)/extras/gtest/include -pthread -L $(GTEST_DIR)/build/lib -L $(RAPIDCHECK_DIR)/build
 
-GTEST_HEADERS = $(GTEST_DIR)/googletest/include/gtest/*.h \
-                $(GTEST_DIR)/googletest/include/gtest/internal/*.h
+GTEST_HEADERS = $(GTEST_DIR)/googletest/include/gtest \
+                $(GTEST_DIR)/googletest/include/gtest/internal
 
 GTEST_SRCS_ = $(GTEST_DIR)/googletest/src/*.cc $(GTEST_DIR)/googletest/src/*.h $(GTEST_HEADERS)
 
