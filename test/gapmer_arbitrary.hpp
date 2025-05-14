@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 #include <ostream>
 #include <rapidcheck/gtest.h>
+#include <stdexcept>
 #include <vector>
 #include "../include/gapmer.hpp"
 #include "../include/util.hpp"
@@ -103,6 +104,21 @@ namespace {
 	{
 		os << "source: " << pp.source << " target: " << pp.target;
 		return os;
+	}
+
+
+	char complement_nt(char const cc)
+	{
+		switch (cc)
+		{
+			case 'A': return 'T';
+			case 'C': return 'G';
+			case 'G': return 'C';
+			case 'T': return 'A';
+			case '.': return '.';
+			default:
+				throw std::runtime_error("Unexpected character");
+		}
 	}
 }
 
@@ -297,6 +313,20 @@ namespace sf {
 				RC_ASSERT(gg1 == gg4);
 			}
 		}
+	}
+
+
+	RC_GTEST_PROP(gapmer_arbitrary, reverseComplementGapmer, (gapmer_data_ <> const gd)) {
+		typedef gapmer_data::gapmer_type gapmer_type;
+		gapmer_type const source{gd};
+		auto const target(source.reverse_complement());
+		auto const source_(source.to_string());
+		auto const target_(target.to_string());
+
+		auto const length(source_.size());
+		RC_ASSERT(length == target_.size());
+		for (std::size_t i{}; i < length; ++i)
+			RC_ASSERT(source_[i] == complement_nt(target_[length - i - 1]));
 	}
 
 
