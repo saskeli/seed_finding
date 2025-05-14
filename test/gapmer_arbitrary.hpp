@@ -35,8 +35,11 @@ namespace {
 
 
 	// Parametrised for rc::Arbitrary.
-	template <uint8_t t_min_length = 0>
-	struct gapmer_data_ : public gapmer_data {};
+	template <uint8_t t_min_length = 0, uint8_t t_min_suffix_length = 0>
+	struct gapmer_data_ : public gapmer_data
+	{
+		static_assert(0 == t_min_suffix_length || t_min_suffix_length < t_min_length);
+	};
 
 
 	struct gapmer_pair
@@ -106,23 +109,23 @@ namespace {
 
 namespace rc {
 
-	template <uint8_t t_min_length>
-	struct Arbitrary <gapmer_data_ <t_min_length>>
+	template <uint8_t t_min_length, uint8_t t_min_suffix_length>
+	struct Arbitrary <gapmer_data_ <t_min_length, t_min_suffix_length>>
 	{
-		static Gen <gapmer_data_ <t_min_length>> arbitrary()
+		static Gen <gapmer_data_ <t_min_length, t_min_suffix_length>> arbitrary()
 		{
 			// We first determine the k-mer length. If it is at least two, we allow a non-zero suffix length.
 			// If we got a non-empty suffix, we determine a non-zero gap length.
 
-			typedef typename gapmer_data_ <t_min_length>::gapmer_type gapmer_type;
+			typedef typename gapmer_data_ <t_min_length, t_min_suffix_length>::gapmer_type gapmer_type;
 
 			return gen::mapcat(gen::inRange <uint8_t>(t_min_length, gapmer_type::max_k + 1), [](auto const length){
-				auto suffix_length_gen(length ? gen::inRange <uint8_t>(0, length) : gen::just(uint8_t(0)));
+				auto suffix_length_gen(length ? gen::inRange <uint8_t>(t_min_suffix_length, length) : gen::just(uint8_t(0)));
 				return gen::mapcat(suffix_length_gen, [length](auto const suffix_length){ // Suffix length depends on total length.
 					auto gap_length_gen(suffix_length ? gen::inRange <uint8_t>(1, gapmer_type::max_gap + 1) : gen::just(uint8_t(0)));
 					return gen::mapcat(gap_length_gen, [length, suffix_length](auto const gap_length){ // Gap length depends on suffix length.
 						auto const value_limit(uint64_t(1) << (2 * length));
-						return gen::construct <gapmer_data_ <t_min_length>>(
+						return gen::construct <gapmer_data_ <t_min_length, t_min_suffix_length>>(
 							gen::inRange(uint64_t(0), value_limit),
 							gen::just(length),
 							gen::just(suffix_length),
@@ -140,7 +143,7 @@ namespace rc {
 	{
 		static Gen <aligning_gapmer_pair> arbitrary()
 		{
-			return gen::mapcat(gen::arbitrary <gapmer_data_ <0>>(), [](auto const gd){
+			return gen::mapcat(gen::arbitrary <gapmer_data_ <>>(), [](auto const gd){
 				return gen::mapcat(gd.length ? gen::inRange(uint8_t{}, gd.length) : gen::just(uint8_t{}), [gd](auto const pos){ // Determine the source offset in target.
 					return gen::map(gen::inRange(0, gd.length - pos + 1), [gd, pos](uint8_t const length){ // Determine the source length.
 						if (!length)
@@ -200,7 +203,7 @@ namespace rc {
 	{
 		static Gen <non_aligning_gapmer_pair_source_length_greater> arbitrary()
 		{
-			return gen::map(gen::arbitrary <gapmer_data_ <0>>(), [](auto gd) -> non_aligning_gapmer_pair_source_length_greater {
+			return gen::map(gen::arbitrary <gapmer_data_ <>>(), [](auto gd) -> non_aligning_gapmer_pair_source_length_greater {
 				// Make the source longer than the target.
 				auto gd_(gd);
 				if (gd.length < gapmer_data::gapmer_type::max_k)
