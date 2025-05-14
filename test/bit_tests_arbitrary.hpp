@@ -7,6 +7,7 @@
 
 #include <exception> // Needed by RapidCheck.
 
+#include <cstdint>
 #include <gtest/gtest.h>
 #include <rapidcheck/gtest.h>
 #include "../include/bits.hpp"
