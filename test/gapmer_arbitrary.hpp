@@ -19,6 +19,7 @@ namespace {
 
 	struct gapmer_data
 	{
+		// FIXME: Test different instantiations.
 		typedef sf::gapmer <> gapmer_type;
 
 		uint64_t sequence{}; // Half-nibbles in reverse order like in gapmer.
@@ -26,15 +27,21 @@ namespace {
 		uint8_t suffix_length{};
 		uint8_t gap_length{};
 
-		gapmer_type to_gapmer() const { return sf::gapmer <>(sequence, length, gap_start(), gap_length); }
+		gapmer_type to_gapmer() const { return gapmer_type(sequence, length, gap_start(), gap_length); }
 		operator gapmer_type() const { return to_gapmer(); }
 		void write_to_buffer(std::vector <uint64_t> &buffer) const;
 		uint8_t gap_start() const { return suffix_length ? length - suffix_length : 0; }
 	};
 
 
+	// Parametrised for rc::Arbitrary.
+	template <uint8_t t_min_length = 0>
+	struct gapmer_data_ : public gapmer_data {};
+
+
 	struct gapmer_pair
 	{
+		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_data source{};
 		gapmer_data target{};
 	};
@@ -100,25 +107,23 @@ namespace {
 
 namespace rc {
 
-	// FIXME: gapmer_data currently has a minimum length of one. For some tests, we should allow empty gapmers.
-	template <>
-	struct Arbitrary <gapmer_data>
+	template <uint8_t t_min_length>
+	struct Arbitrary <gapmer_data_ <t_min_length>>
 	{
-		static Gen <gapmer_data> arbitrary()
+		static Gen <gapmer_data_ <t_min_length>> arbitrary()
 		{
 			// We first determine the k-mer length. If it is at least two, we allow a non-zero suffix length.
 			// If we got a non-empty suffix, we determine a non-zero gap length.
 
-			// FIXME: Test different instantiations.
-			typedef sf::gapmer <> gapmer_type;
+			typedef typename gapmer_data_ <t_min_length>::gapmer_type gapmer_type;
 
-			return gen::mapcat(gen::inRange <uint8_t>(1, gapmer_type::max_k + 1), [](auto const length){
+			return gen::mapcat(gen::inRange <uint8_t>(t_min_length, gapmer_type::max_k + 1), [](auto const length){
 				auto suffix_length_gen(length ? gen::inRange <uint8_t>(0, length) : gen::just(uint8_t(0)));
 				return gen::mapcat(suffix_length_gen, [length](auto const suffix_length){ // Suffix length depends on total length.
 					auto gap_length_gen(suffix_length ? gen::inRange <uint8_t>(1, gapmer_type::max_gap + 1) : gen::just(uint8_t(0)));
 					return gen::mapcat(gap_length_gen, [length, suffix_length](auto const gap_length){ // Gap length depends on suffix length.
 						auto const value_limit(uint64_t(1) << (2 * length));
-						return gen::construct <gapmer_data>(
+						return gen::construct <gapmer_data_ <t_min_length>>(
 							gen::inRange(uint64_t(0), value_limit),
 							gen::just(length),
 							gen::just(suffix_length),
@@ -136,9 +141,11 @@ namespace rc {
 	{
 		static Gen <aligning_gapmer_pair> arbitrary()
 		{
-			return gen::mapcat(gen::arbitrary <gapmer_data>(), [](auto const gd){
-				return gen::mapcat(gen::inRange(uint8_t{}, gd.length), [gd](auto const pos){ // Determine the source offset in target.
-					return gen::map(gen::inRange(1, gd.length - pos + 1), [gd, pos](uint8_t const length){ // Determine the source length.
+			return gen::mapcat(gen::arbitrary <gapmer_data_ <0>>(), [](auto const gd){
+				return gen::mapcat(gd.length ? gen::inRange(uint8_t{}, gd.length) : gen::just(uint8_t{}), [gd](auto const pos){ // Determine the source offset in target.
+					return gen::map(gen::inRange(0, gd.length - pos + 1), [gd, pos](uint8_t const length){ // Determine the source length.
+						if (!length)
+							return aligning_gapmer_pair{gapmer_data{}, gd};
 
 						// Copy the sequence to get an aligning pair.
 						auto const source_end(pos + length);
@@ -174,7 +181,7 @@ namespace rc {
 	{
 		static Gen <non_aligning_gapmer_pair_value_mismatch> arbitrary()
 		{
-			return gen::mapcat(gen::arbitrary <gapmer_data>(), [](auto const gd){
+			return gen::mapcat(gen::arbitrary <gapmer_data_ <1>>(), [](auto const gd){
 				return gen::map(gen::inRange(0, 2 * gd.length), [gd](auto const pos) -> non_aligning_gapmer_pair_value_mismatch {
 					// Make a new value by flipping some bit in the value.
 					// (Currently all bit patterns are valid in the range specified by length.)
@@ -194,7 +201,7 @@ namespace rc {
 	{
 		static Gen <non_aligning_gapmer_pair_source_length_greater> arbitrary()
 		{
-			return gen::map(gen::arbitrary <gapmer_data>(), [](auto gd) -> non_aligning_gapmer_pair_source_length_greater {
+			return gen::map(gen::arbitrary <gapmer_data_ <0>>(), [](auto gd) -> non_aligning_gapmer_pair_source_length_greater {
 				// Make the source longer than the target.
 				auto gd_(gd);
 				if (gd.length < gapmer_data::gapmer_type::max_k)
@@ -241,7 +248,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, constructorsWorkAsExpected, (gapmer_data const gd)) {
+	RC_GTEST_PROP(gapmer_arbitrary, constructorsWorkAsExpected, (gapmer_data_ <> const gd)) {
 
 		std::vector <uint64_t> seq;
 		gd.write_to_buffer(seq);
@@ -276,16 +283,18 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, alignEmptyGapmer, (gapmer_data const gd)) {
-		gapmer <> const source{};
-		gapmer <> const target(gd);
+	RC_GTEST_PROP(gapmer_arbitrary, alignEmptyGapmer, (gapmer_data_ <> const gd)) {
+		typedef gapmer_data::gapmer_type gapmer_type;
+		gapmer_type const source{};
+		gapmer_type const target(gd);
 		RC_ASSERT((source.aligns_to <false>(target))); // FIXME: also reverse complement (if needed).
 	}
 
 
 	RC_GTEST_PROP(gapmer_arbitrary, alignNonemptyGapmer, (aligning_gapmer_pair const &pair)) {
-		gapmer <> const source{pair.source};
-		gapmer <> const target{pair.target};
+		typedef aligning_gapmer_pair::gapmer_type gapmer_type;
+		gapmer_type const source{pair.source};
+		gapmer_type const target{pair.target};
 		RC_ASSERT((source.aligns_to <false>(target))); // FIXME: also reverse complement (if needed).
 	}
 
@@ -300,8 +309,9 @@ namespace sf {
 	TYPED_TEST_SUITE(gapmer_arbitrary_aligns_to_fixture, gapmer_arbitrary_aligns_to_test_types);
 
 	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_fixture, alignNonMatchingGapmer, (TypeParam const &pair)) {
-		gapmer <> const source{pair.source};
-		gapmer <> const target{pair.target};
-		RC_ASSERT((!source.aligns_to <false>(target)));
+		typedef typename TypeParam::gapmer_type gapmer_type;
+		gapmer_type const source{pair.source};
+		gapmer_type const target{pair.target};
+		RC_ASSERT((!source.template aligns_to <false>(target)));
 	}
 }
