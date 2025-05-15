@@ -18,6 +18,14 @@
 
 namespace {
 
+	struct nucleotide
+	{
+		char value{};
+
+		/* implicit */ operator char() const { return value; }
+	};
+
+
 	struct gapmer_data
 	{
 		// FIXME: Test different instantiations.
@@ -32,14 +40,19 @@ namespace {
 		operator gapmer_type() const { return to_gapmer(); }
 		void write_to_buffer(std::vector <uint64_t> &buffer) const;
 		uint8_t gap_start() const { return suffix_length ? length - suffix_length : 0; }
+		uint8_t suffix_start() const { return suffix_length ? gap_start() + gap_length : 0; }
 	};
 
 
+	constexpr static inline uint8_t const MAX_SUFFIX_LENGTH_DEFAULT{UINT8_MAX - 1};
+
+
 	// Parametrised for rc::Arbitrary.
-	template <uint8_t t_min_length = 0, uint8_t t_min_suffix_length = 0>
+	template <uint8_t t_min_length = 0, uint8_t t_min_suffix_length = 0, uint8_t t_max_suffix_length = MAX_SUFFIX_LENGTH_DEFAULT>
 	struct gapmer_data_ : public gapmer_data
 	{
 		static_assert(0 == t_min_suffix_length || t_min_suffix_length < t_min_length);
+		static_assert(MAX_SUFFIX_LENGTH_DEFAULT == t_max_suffix_length || ((0 == t_max_suffix_length || t_max_suffix_length < t_min_length) && t_min_suffix_length <= t_max_suffix_length));
 	};
 
 
@@ -125,24 +138,37 @@ namespace {
 
 namespace rc {
 
-	template <uint8_t t_min_length, uint8_t t_min_suffix_length>
-	struct Arbitrary <gapmer_data_ <t_min_length, t_min_suffix_length>>
+	template <>
+	struct Arbitrary <nucleotide>
 	{
-		static Gen <gapmer_data_ <t_min_length, t_min_suffix_length>> arbitrary()
+		static Gen <nucleotide> arbitrary()
+		{
+			constexpr static std::array const values{'A', 'C', 'G', 'T'};
+			return gen::map(gen::elementOf(values), [](auto const cc) -> nucleotide {
+				return {cc};
+			});
+		}
+	};
+
+
+	template <uint8_t t_min_length, uint8_t t_min_suffix_length, uint8_t t_max_suffix_length>
+	struct Arbitrary <gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>>
+	{
+		static Gen <gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>> arbitrary()
 		{
 			// We first determine the k-mer length. If it is at least two, we allow a non-zero suffix length.
 			// If we got a non-empty suffix, we determine a non-zero gap length.
 
-			typedef typename gapmer_data_ <t_min_length, t_min_suffix_length>::gapmer_type gapmer_type;
+			typedef typename gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>::gapmer_type gapmer_type;
 
 			return gen::mapcat(gen::inRange <uint8_t>(t_min_length, gapmer_type::max_k + 1), [](auto const length){
-				auto suffix_length_gen(length ? gen::inRange <uint8_t>(t_min_suffix_length, length) : gen::just(uint8_t(0)));
-				return gen::mapcat(suffix_length_gen, [length](auto const suffix_length){ // Suffix length depends on total length.
-					auto gap_length_gen(suffix_length ? gen::inRange <uint8_t>(1, gapmer_type::max_gap + 1) : gen::just(uint8_t(0)));
+				auto suffix_length_gen(length ? gen::inRange(+t_min_suffix_length, std::min(+length, 1 + t_max_suffix_length)) : gen::just(0));
+				return gen::mapcat(suffix_length_gen, [length](uint8_t const suffix_length){ // Suffix length depends on total length.
+					auto gap_length_gen(suffix_length ? gen::inRange <uint8_t>(1, gapmer_type::max_gap + 1) : gen::just(uint8_t{}));
 					return gen::mapcat(gap_length_gen, [length, suffix_length](auto const gap_length){ // Gap length depends on suffix length.
 						auto const value_limit(uint64_t(1) << (2 * length));
-						return gen::construct <gapmer_data_ <t_min_length, t_min_suffix_length>>(
-							gen::inRange(uint64_t(0), value_limit),
+						return gen::construct <gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>>(
+							gen::inRange(uint64_t{}, value_limit),
 							gen::just(length),
 							gen::just(suffix_length),
 							gen::just(gap_length)
@@ -328,6 +354,32 @@ namespace sf {
 		RC_ASSERT(length == target_.size());
 		for (std::size_t i{}; i < length; ++i)
 			RC_ASSERT(source_[i] == complement_nt(target_[length - i - 1]));
+	}
+
+
+	RC_GTEST_PROP(gapmer_arbitrary, nextGapmer, (gapmer_data_ <0, 0, 0> const gd, nucleotide const nt)) {
+		typedef gapmer_data::gapmer_type gapmer_type;
+		gapmer_type const source{gd};
+		auto const target{source.next(nt)};
+		auto source_{source.to_string()};
+		auto const target_{target.to_string()};
+		source_.push_back(nt);
+		source_.erase(0, 1);
+		RC_ASSERT(source_ == target_);
+	}
+
+
+	RC_GTEST_PROP(gapmer_arbitrary, nextGappedGapmer, (gapmer_data_ <2, 1> const gd, nucleotide const nt1, nucleotide const nt2)) {
+		typedef gapmer_data::gapmer_type gapmer_type;
+		gapmer_type const source{gd};
+		auto const target{source.next(nt1, nt2)};
+		auto source_{source.to_string()};
+		auto const target_{target.to_string()};
+		source_.insert(gd.gap_start(), 1, nt1);
+		source_.push_back(nt2);
+		source_.erase(0, 1);
+		source_.erase(gd.suffix_start(), 1);
+		RC_ASSERT(source_ == target_);
 	}
 
 
