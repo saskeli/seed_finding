@@ -1212,6 +1212,8 @@ class gapmer {
   /// Get the encoded value.
   uint64_t value() const { return data_ & value_mask; }
 
+  /// For a non-gapped gapmer, returns a copy of it with c appended and the leftmost character removed.
+  /// If this is empty, returns an empty gapmer.
   gapmer next(char c) const {
 #ifdef DEBUG
     assert(gap_length() == 0);
@@ -1222,6 +1224,7 @@ class gapmer {
     return (data_ & ~value_mask) | v;
   }
 
+  /// For a gapped gapmer, returns a copy of it with c1 and c2 appended respectively to the prefix and to the suffix, with the leftmost characters removed.
   gapmer next(char c1, char c2) const {
 #ifdef DEBUG
     assert(gap_length() > 0);
