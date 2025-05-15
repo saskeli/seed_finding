@@ -1326,7 +1326,7 @@ class gapmer {
                 << std::endl;
       return false;
     }
-    if (g_s >= len) {
+    if (len && g_s >= len) { // g_s == 0 && g_l > 0 checked earlier.
       std::cerr << "Gapmer validation error gap start >= " << int(len) << ": "
                 << int(g_s) << std::endl;
       return false;
@@ -1341,7 +1341,7 @@ class gapmer {
     if (not valid) {
       std::cerr << "Gapmer validation error:\n"
                 << to_string() << ", " << bits() << "\n"
-                << o.to_string() << ", " << o.bits() << "\nShould be equal";
+                << o.to_string() << ", " << o.bits() << "\nShould be equal" << std::endl;
     }
     return valid;
   }

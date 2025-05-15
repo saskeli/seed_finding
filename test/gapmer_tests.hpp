@@ -15,6 +15,12 @@ std::vector<uint64_t> vec_from_string(const std::string& s) {
   return vec;
 }
 
+TEST(gapmer, DefaultConstructor) {
+  gapmer gg;
+  ASSERT_TRUE(gg.is_valid());
+  ASSERT_EQ("", gg.to_string());
+}
+
 TEST(gapmer, StrConstructor1) {
   std::string s = "TTTTTTTT";
   auto vec = vec_from_string(s);
