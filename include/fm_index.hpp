@@ -15,6 +15,7 @@
 #endif
 
 #include "gapmer.hpp"
+#include "string_buffer.hpp"
 
 namespace sf {
 
@@ -101,10 +102,10 @@ class fm_index {
       if (len == 0) {
         break;
       }
-      starts.push_back(seq.size);
+      starts.push_back(seq.size());
       seq.append(std::string_view{r.read_buf, len});
     }
-    C_[4] = seq.size;
+    C_[4] = seq.size();
     std::cerr << "Creating index from " << fasta_path << " with " << C_[4]
               << " total characters" << std::endl;
     sdsl::bit_vector samples(C_[4]);
@@ -118,7 +119,7 @@ class fm_index {
 
     bwt_ = (uint64_t*)calloc((2 * C_[4] + 63) / 64, sizeof(uint64_t));
     uint64_t bwt_position = 0;
-    seq.append(seq.c_str(), 16);
+    seq.append(seq.to_string_view().substr(0, 16));
     std::array<uint64_t, 4> partial{};
     std::array<std::vector<uint64_t>, 256> buckets{};
     for (uint64_t c_i = 0; c_i < 4; ++c_i) {
@@ -130,12 +131,17 @@ class fm_index {
       for (uint64_t i = 0; i < 256; ++i) {
         buckets[i].clear();
       }
-      for (uint64_t i = 0; i < C_[4]; ++i) {
-        if (seq[i] == nuc) {
-          ++C_[c_i];
-          sf::gapmer km(seq.c_str() + i, 5);
-          uint64_t v = km.value() % 256;
-          buckets[v].push_back(i);
+
+      {
+        string_buffer<uint64_t> buffer;
+        for (uint64_t i = 0; i < C_[4]; ++i) {
+          if (seq[i] == nuc) {
+            ++C_[c_i];
+            buffer = seq.to_string_view().substr(i, 5);
+            sf::gapmer km(buffer.data(), 5);
+            uint64_t v = km.value() % 256;
+            buckets[v].push_back(i);
+          }
         }
       }
 #pragma omp parallel for

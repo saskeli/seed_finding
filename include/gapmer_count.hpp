@@ -2,16 +2,19 @@
 
 #include <stdlib.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <sdsl/bit_vectors.hpp>
+#include <SeqIO/SeqIO.hh>
 #include <string>
+#include <string_view>
 #include <utility>
-#include <algorithm>
 
-#include "SeqIO/SeqIO.hh"
 #include "gapmer.hpp"
-#include "sdsl/bit_vectors.hpp"
+#include "string_buffer.hpp"
 
 namespace sf {
 
@@ -59,30 +62,23 @@ class gapmer_count {
     r.enable_reverse_complements();
 #pragma omp parallel
     while (true) {
-      uint64_t len;
-      std::vector<uint64_t> buf;
+      uint64_t len{};
+      string_buffer<uint64_t> buffer;
 #pragma omp critical
       {
         len = r.get_next_read_to_buffer();
-        if (len > 0) {
-          uint64_t words = (len + 7) / 8;
-          if (buf.size() < words) {
-            buf.resize(words);
-          }
-          std::copy(r.read_buf, r.read_buf + len, reinterpret_cast<char*>(buf.data()));
-        }
+        buffer = std::string_view{r.read_buf, len};
       }
-      char* s = reinterpret_cast<char*>(buf.data());
       if (len == 0) {
         break;
       }
-      gapmer<middle_gap_only, max_gap> g(buf, k);
+      std::string_view const ss{buffer};
+      gapmer<middle_gap_only, max_gap> g(buffer.data(), k);
       uint64_t cv = g.value();
 #pragma omp atomic
       counts[cv] = counts[cv] + 1;
       for (uint32_t next = k; next < len; ++next) {
-        
-        g = g.next(s[next]);
+        g = g.next(ss[next]);
         cv = g.value();
 #pragma omp atomic
         counts[cv] = counts[cv] + 1;
@@ -95,13 +91,13 @@ class gapmer_count {
             break;
           }
           uint64_t off = offset(k, gap_s, gap_l);
-          g = {buf, k, gap_s, gap_l};
+          g = {buffer.data(), k, gap_s, gap_l};
           cv = off + g.value();
 #pragma omp atomic
           counts[cv] = counts[cv] + 1;
           for (uint32_t mid = gap_s, next = k + gap_l; next < len;
                ++next, ++mid) {
-            g = g.next(s[mid], s[next]);
+            g = g.next(ss[mid], ss[next]);
             cv = off + g.value();
 #pragma omp atomic
             counts[cv] = counts[cv] + 1;
