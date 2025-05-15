@@ -17,6 +17,51 @@
 #include "gapmer.hpp"
 #include "string_buffer.hpp"
 
+
+namespace sf::detail {
+  struct fm_index_sequence_input
+  {
+    string_buffer<uint64_t> sequence;
+    std::vector<uint64_t> starts;
+  };
+
+
+  // FIXME: Need not be inlined.
+  inline fm_index_sequence_input make_sequence_input_from_fasta(const char *path)
+  {
+    fm_index_sequence_input retval;
+    seq_io::Reader rr(path);
+    rr.enable_reverse_complements();
+    while (true) {
+      uint64_t len = rr.get_next_read_to_buffer();
+      if (len == 0)
+        break;
+      retval.starts.push_back(retval.sequence.size());
+      retval.sequence.append(std::string_view{rr.read_buf, len});
+    }
+
+    retval.sequence.append(retval.sequence.to_string_view().substr(0, 16));
+    return retval;
+  }
+
+
+  // FIXME: Need not be inlined.
+  inline fm_index_sequence_input make_sequence_input_from_sequences(const std::vector<std::string> &sequences)
+  {
+    // NOTE: No reverse complements.
+    fm_index_sequence_input retval;
+    for (const auto &seq : sequences)
+    {
+      retval.starts.push_back(retval.sequence.size());
+      retval.sequence.append(seq);
+    }
+
+    retval.sequence.append(retval.sequence.to_string_view().substr(0, 16));
+    return retval;
+  }
+}
+
+
 namespace sf {
 
 template <uint16_t SA_gap_size = 64, uint16_t block_size = 2048>
@@ -92,22 +137,10 @@ class fm_index {
  public:
   ~fm_index() { free(bwt_); }
 
-  fm_index(const char* fasta_path) : sample_locations_(), partial_sums_() {
-    std::vector<uint64_t> starts;
-    seq_io::Reader r(fasta_path);
-    r.enable_reverse_complements();
-    string_buffer <uint64_t> seq;
-    while (true) {
-      uint64_t len = r.get_next_read_to_buffer();
-      if (len == 0) {
-        break;
-      }
-      starts.push_back(seq.size());
-      seq.append(std::string_view{r.read_buf, len});
-    }
+private:
+  fm_index(const string_buffer<uint64_t> seq, std::vector<uint64_t> starts): sample_locations_(), partial_sums_() {
     C_[4] = seq.size();
-    std::cerr << "Creating index from " << fasta_path << " with " << C_[4]
-              << " total characters" << std::endl;
+    std::cerr << "Creating index with " << C_[4] << " total characters" << std::endl;
     sdsl::bit_vector samples(C_[4]);
     sdsl::bit_vector bwt_starts(C_[4]);
     sdsl::bit_vector seq_starts(C_[4]);
@@ -119,7 +152,6 @@ class fm_index {
 
     bwt_ = (uint64_t*)calloc((2 * C_[4] + 63) / 64, sizeof(uint64_t));
     uint64_t bwt_position = 0;
-    seq.append(seq.to_string_view().substr(0, 16));
     std::array<uint64_t, 4> partial{};
     std::array<std::vector<uint64_t>, 256> buckets{};
     for (uint64_t c_i = 0; c_i < 4; ++c_i) {
@@ -194,6 +226,22 @@ class fm_index {
 
     samples_ = sdsl::hyb_vector<>(samples);
     samples_rs_ = sdsl::hyb_vector<>::rank_1_type(&samples_);
+  }
+
+  fm_index(const detail::fm_index_sequence_input &input):
+    fm_index(input.sequence, input.starts)
+  {
+  }
+
+public:
+  fm_index(const char* fasta_path):
+    fm_index(detail::make_sequence_input_from_fasta(fasta_path))
+  {
+  }
+
+  fm_index(const std::vector<std::string> &sequences):
+    fm_index(detail::make_sequence_input_from_sequences(sequences))
+  {
   }
 
   template <class gapmer>
