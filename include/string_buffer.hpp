@@ -59,12 +59,9 @@ namespace sf {
 	template <typename t_type>
 	void string_buffer <t_type>::append(std::string_view sv)
 	{
-		auto const added_length(sv.size());
-		if (!added_length)
-			return;
-
 		// Determine and set the new buffer size.
-		auto const new_buffer_size((size_ + added_length - 1) / sizeof(t_type) + 1);
+		auto const added_length(sv.size());
+		auto const new_buffer_size((size_ + added_length + 7) / sizeof(t_type));
 		data_.resize(new_buffer_size, 0);
 
 		// Copy the bytes.
