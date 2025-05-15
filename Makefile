@@ -28,11 +28,6 @@ RAPIDCHECK_DIR = deps/rapidcheck
 
 GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -isystem $(RAPIDCHECK_DIR)/include -isystem $(RAPIDCHECK_DIR)/extras/gtest/include -pthread -L $(GTEST_DIR)/build/lib -L $(RAPIDCHECK_DIR)/build
 
-GTEST_HEADERS = $(GTEST_DIR)/googletest/include/gtest \
-                $(GTEST_DIR)/googletest/include/gtest/internal
-
-GTEST_SRCS_ = $(GTEST_DIR)/googletest/src/*.cc $(GTEST_DIR)/googletest/src/*.h $(GTEST_HEADERS)
-
 TEST_HPP = test/gapmer_tests.hpp test/util_tests.hpp test/gapmer_count_tests.hpp
 
 .PHONY: clean all fast debug test cover
@@ -88,13 +83,13 @@ $(RAPIDCHECK_DIR)/build/librapidcheck.a: | $(RAPIDCHECK_DIR)
 test/test.o: $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
 	$(CXX) $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
 
-test/test: $(GTEST_DIR)/build/lib/libgtest_main.a $(RAPIDCHECK_DIR)/build/librapidcheck.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
+test/test: $(GTEST_DIR)/build/lib/libgtest_main.a $(RAPIDCHECK_DIR)/build/librapidcheck.a $(TEST_HPP) $(HEADERS) test/test.cpp
 	$(CXX) $(CFLAGS) $(GFLAGS) $(INCLUDE) $(TEST_PERF_FLAGS) test/test.cpp -o test/test -lgtest_main -lgtest -lrapidcheck $(LIBS)
 
 test: test/test
 	test/test $(ARG)
 
-test/cover: $(GTEST_DIR)/build/lib/libgtest_main.a $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
+test/cover: $(GTEST_DIR)/build/lib/libgtest_main.a $(TEST_HPP) $(HEADERS) test/test.cpp
 	$(CXX) -g --coverage -O1 $(CFLAGS) $(GFLAGS) $(INCLUDE) test/test.cpp -o test/cover -lgtest_main -lgtest -lrapidcheck -lgcov $(LIBS)
 
 cover: test/cover
