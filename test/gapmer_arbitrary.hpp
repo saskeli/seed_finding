@@ -36,7 +36,7 @@ namespace {
 		uint8_t suffix_length{};
 		uint8_t gap_length{};
 
-		gapmer_type to_gapmer() const { return gapmer_type(sequence, length, gap_start(), gap_length); }
+		gapmer_type to_gapmer() const;
 		operator gapmer_type() const { return to_gapmer(); }
 		void write_to_buffer(std::vector <uint64_t> &buffer) const;
 		uint8_t gap_start() const { return suffix_length ? length - suffix_length : 0; }
@@ -73,6 +73,18 @@ namespace {
 	struct non_aligning_gapmer_pair_source_length_greater : public non_aligning_gapmer_pair {};
 	struct non_aligning_gapmer_pair_gap_length_mismatch : public non_aligning_gapmer_pair {};
 	struct non_aligning_gapmer_pair_gap_position_mismatch : public non_aligning_gapmer_pair {};
+
+
+	auto gapmer_data::to_gapmer() const -> gapmer_type
+	{
+		auto const retval(gapmer_type(sequence, length, gap_start(), gap_length));
+		if (!retval.is_valid())
+		{
+			std::cerr << "sequence: " << sequence << " length: " << +length << " suffix_length: " << +suffix_length << " gap_length: " << +gap_length << '\n';
+			RC_FAIL("Invalid gapmer");
+		}
+		return retval;
+	}
 
 
 	void gapmer_data::write_to_buffer(std::vector <uint64_t> &buffer) const
@@ -159,7 +171,8 @@ namespace rc {
 			// We first determine the k-mer length. If it is at least two, we allow a non-zero suffix length.
 			// If we got a non-empty suffix, we determine a non-zero gap length.
 
-			typedef typename gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>::gapmer_type gapmer_type;
+			typedef gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length> return_type;
+			typedef typename return_type::gapmer_type gapmer_type;
 
 			return gen::mapcat(gen::inRange <uint8_t>(t_min_length, gapmer_type::max_k + 1), [](auto const length){
 				auto suffix_length_gen(length ? gen::inRange(+t_min_suffix_length, std::min(+length, 1 + t_max_suffix_length)) : gen::just(0));
@@ -167,12 +180,10 @@ namespace rc {
 					auto gap_length_gen(suffix_length ? gen::inRange <uint8_t>(1, gapmer_type::max_gap + 1) : gen::just(uint8_t{}));
 					return gen::mapcat(gap_length_gen, [length, suffix_length](auto const gap_length){ // Gap length depends on suffix length.
 						auto const value_limit(uint64_t(1) << (2 * length));
-						return gen::construct <gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>>(
-							gen::inRange(uint64_t{}, value_limit),
-							gen::just(length),
-							gen::just(suffix_length),
-							gen::just(gap_length)
-						);
+						return gen::map(gen::inRange(uint64_t{}, value_limit), [length, suffix_length, gap_length](auto const sequence){
+							return_type const retval{sequence, length, suffix_length, gap_length};
+							return retval;
+						});
 					});
 				});
 			});
@@ -200,7 +211,7 @@ namespace rc {
 						{
 							uint64_t mask{};
 							mask = ~mask;
-							mask >>= 32 - length;
+							mask >>= 2 * (32 - length);
 							sequence &= mask;
 						}
 
@@ -289,9 +300,9 @@ namespace rc {
 			return gen::map(gen::arbitrary <gapmer_data_ <3, 1>>(), []<typename t_gapmer_data>(t_gapmer_data const gd) -> non_aligning_gapmer_pair_gap_position_mismatch {
 				auto gd_(gd);
 				if (1 == gd_.suffix_length)
-					--gd_.suffix_length;
-				else
 					++gd_.suffix_length;
+				else
+					--gd_.suffix_length;
 				return {gd, gd_};
 			});
 		}
