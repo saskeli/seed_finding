@@ -321,7 +321,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, constructorsWorkAsExpected, (gapmer_data_ <> const gd)) {
+	RC_GTEST_PROP(gapmer_arbitrary, Constructors, (gapmer_data_ <> const gd)) {
 
 		std::vector <uint64_t> seq;
 		gd.write_to_buffer(seq);
@@ -356,7 +356,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, reverseComplementGapmer, (gapmer_data_ <> const gd)) {
+	RC_GTEST_PROP(gapmer_arbitrary, ReverseComplementGapmer, (gapmer_data_ <> const gd)) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{gd};
 		auto const target(source.reverse_complement());
@@ -370,7 +370,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, nextGapmer, (gapmer_data_ <0, 0, 0> const gd, nucleotide const nt)) {
+	RC_GTEST_PROP(gapmer_arbitrary, NextGapmer, (gapmer_data_ <0, 0, 0> const gd, nucleotide const nt)) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{gd};
 		auto const target{source.next(nt)};
@@ -382,7 +382,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, nextGappedGapmer, (gapmer_data_ <2, 1> const gd, nucleotide const nt1, nucleotide const nt2)) {
+	RC_GTEST_PROP(gapmer_arbitrary, NextGappedGapmer, (gapmer_data_ <2, 1> const gd, nucleotide const nt1, nucleotide const nt2)) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{gd};
 		auto const target{source.next(nt1, nt2)};
@@ -396,7 +396,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, alignEmptyGapmer, (gapmer_data_ <> const gd)) {
+	RC_GTEST_PROP(gapmer_arbitrary, AlignEmptyGapmer, (gapmer_data_ <> const gd)) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{};
 		gapmer_type const target(gd);
@@ -404,7 +404,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, alignNonemptyGapmer, (aligning_gapmer_pair const &pair)) {
+	RC_GTEST_PROP(gapmer_arbitrary, AlignNonemptyGapmer, (aligning_gapmer_pair const &pair)) {
 		typedef aligning_gapmer_pair::gapmer_type gapmer_type;
 		gapmer_type const source{pair.source};
 		gapmer_type const target{pair.target};
@@ -428,14 +428,14 @@ namespace sf {
 	> gapmer_arbitrary_aligns_to_reversible_test_types;
 	TYPED_TEST_SUITE(gapmer_arbitrary_aligns_to_reversible_fixture, gapmer_arbitrary_aligns_to_reversible_test_types);
 
-	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_fixture, alignNonMatchingGapmer, (TypeParam const &pair)) {
+	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_fixture, AlignNonMatchingGapmer, (TypeParam const &pair)) {
 		typedef typename TypeParam::gapmer_type gapmer_type;
 		gapmer_type const source{pair.source};
 		gapmer_type const target{pair.target};
 		RC_ASSERT((!source.template aligns_to <false>(target)));
 	}
 
-	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_reversible_fixture, alignNonMatchingGapmerReversible, (TypeParam const &pair)) {
+	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_reversible_fixture, AlignNonMatchingGapmerReversible, (TypeParam const &pair)) {
 		typedef typename TypeParam::gapmer_type gapmer_type;
 		gapmer_type const gg1{pair.source};
 		gapmer_type const gg2{pair.target};
