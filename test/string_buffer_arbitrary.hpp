@@ -7,30 +7,53 @@
 
 #include <cstddef>
 #include <cstdint>
-#include <gtest/gtest.h>
-#include <rapidcheck/gtest.h>
 #include <string>
 #include <string_view>
 #include "../include/string_buffer.hpp"
+#include "test.hpp"
+
+
+namespace {
+	struct non_empty_string
+	{
+		std::string value;
+
+		operator std::string const &() const { return value; }
+	};
+}
+
+
+namespace rc {
+	template <>
+	struct Arbitrary <non_empty_string>
+	{
+		static Gen <non_empty_string> arbitrary()
+		{
+			return gen::construct <non_empty_string>(rc::gen::nonEmpty <std::string>());
+		}
+	};
+}
 
 
 namespace sf { namespace tests {
 
 	typedef string_buffer <uint64_t> string_buffer_type; // FIXME: test uint16_t, uint32_t?
 
-	RC_GTEST_PROP(string_buffer_arbitrary, constructorsWorkAsExpected, ()) {
+
+	TEST(string_buffer_arbitrary, Constructor)
+	{
 		string_buffer_type sb;
 		RC_ASSERT(sb.empty());
 		RC_ASSERT(0 == sb.size());
 	}
 
-	RC_GTEST_PROP(string_buffer_arbitrary, assignWorksAsExpected, (std::string const &str)) {
+	SF_RC_TEST_WITH_BASE_CASE(string_buffer_arbitrary, Assign, std::string, non_empty_string, std::string const &str, (str.size())) {
 		string_buffer_type sb;
 		sb = str;
 		RC_ASSERT(std::string_view(sb) == str);
 	}
 
-	RC_GTEST_PROP(string_buffer_arbitrary, clearWorksAsExpected, (std::string const &str)) {
+	SF_RC_TEST_WITH_BASE_CASE(string_buffer_arbitrary, Clear, std::string, non_empty_string, std::string const &str, (str.size())) {
 		string_buffer_type sb;
 		sb = str;
 		sb.clear();
@@ -38,7 +61,7 @@ namespace sf { namespace tests {
 		RC_ASSERT(0 == sb.size());
 	}
 
-	RC_GTEST_PROP(string_buffer_arbitrary, appendWorksAsExpected, (std::string const &str)) {
+	SF_RC_TEST_WITH_BASE_CASE(string_buffer_arbitrary, Append, std::string, non_empty_string, std::string const &str, (str.size())) {
 		string_buffer_type sb;
 		sb += "test";
 		sb += str;
@@ -49,7 +72,10 @@ namespace sf { namespace tests {
 		RC_ASSERT(std::string_view(sb) == expected);
 	}
 
-	RC_GTEST_PROP(string_buffer_arbitrary, subscriptOperatorWorksAsExpected, (std::string const &str)) {
+	RC_GTEST_PROP(string_buffer_arbitrary, subscriptOperatorWorksAsExpected, (non_empty_string const &str_)) {
+		std::string const &str(str_);
+		SF_RC_TAG(str.length());
+
 		string_buffer_type sb;
 		sb = str;
 
