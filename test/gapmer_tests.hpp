@@ -1,6 +1,11 @@
 #pragma once
 
+#include <cstdint>
+#include <gtest/gtest.h>
 #include <string>
+#include <vector>
+#include "../include/gapmer.hpp"
+#include "../include/util.hpp"
 
 namespace sf {
 

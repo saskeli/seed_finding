@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include "../include/gapmer_count.hpp"
 
 namespace sf {

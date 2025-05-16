@@ -1,5 +1,9 @@
 #pragma once
 
+#include <gtest/gtest.h>
+#include "../include/util.hpp"
+
+
 namespace sf {
 TEST(Util, ByteRC1) { ASSERT_EQ(rc_byte[0b00011011], 0b00011011); }
 

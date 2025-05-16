@@ -5,9 +5,11 @@
 
 #pragma once
 
+#include <array>
 #include <bit>
 #include <cstdint>
 #include <gtest/gtest.h>
+#include <iostream>
 #include <ostream>
 #include <rapidcheck/gtest.h>
 #include <stdexcept>
