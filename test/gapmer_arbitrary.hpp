@@ -8,12 +8,11 @@
 #include <array>
 #include <bit>
 #include <cstdint>
-#include <gtest/gtest.h>
 #include <iostream>
 #include <ostream>
-#include <rapidcheck/gtest.h>
 #include <stdexcept>
 #include <vector>
+#include "test.hpp"
 #include "../include/gapmer.hpp"
 #include "../include/util.hpp"
 
@@ -161,6 +160,16 @@ namespace rc {
 			return gen::map(gen::elementOf(values), [](auto const cc) -> nucleotide {
 				return {cc};
 			});
+		}
+	};
+
+
+	template <>
+	struct Arbitrary <gapmer_data>
+	{
+		static Gen <gapmer_data> arbitrary()
+		{
+			return gen::just(gapmer_data{});
 		}
 	};
 
@@ -321,8 +330,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, Constructors, (gapmer_data_ <> const gd)) {
-
+	SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, Constructors, gapmer_data, gapmer_data_ <1>, gapmer_data const gd, (gd.length, gd.gap_length)) {
 		std::vector <uint64_t> seq;
 		gd.write_to_buffer(seq);
 
@@ -356,7 +364,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, ReverseComplementGapmer, (gapmer_data_ <> const gd)) {
+	SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, ReverseComplementGapmer, gapmer_data, gapmer_data_ <1>, gapmer_data const gd, (gd.length, gd.gap_length)) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{gd};
 		auto const target(source.reverse_complement());
@@ -371,6 +379,8 @@ namespace sf {
 
 
 	RC_GTEST_PROP(gapmer_arbitrary, NextGapmer, (gapmer_data_ <0, 0, 0> const gd, nucleotide const nt)) {
+		SF_RC_TAG(gd.length, gd.gap_length);
+
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{gd};
 		auto const target{source.next(nt)};
@@ -383,6 +393,8 @@ namespace sf {
 
 
 	RC_GTEST_PROP(gapmer_arbitrary, NextGappedGapmer, (gapmer_data_ <2, 1> const gd, nucleotide const nt1, nucleotide const nt2)) {
+		SF_RC_TAG(gd.length, gd.gap_length);
+
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{gd};
 		auto const target{source.next(nt1, nt2)};
@@ -396,7 +408,7 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, AlignEmptyGapmer, (gapmer_data_ <> const gd)) {
+	SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, AlignEmptyGapmer, gapmer_data, gapmer_data_ <1>, gapmer_data const gd, (gd.length, gd.gap_length)) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{};
 		gapmer_type const target(gd);
@@ -405,6 +417,8 @@ namespace sf {
 
 
 	RC_GTEST_PROP(gapmer_arbitrary, AlignNonemptyGapmer, (aligning_gapmer_pair const &pair)) {
+		SF_RC_TAG(pair.target.length, pair.target.gap_length);
+
 		typedef aligning_gapmer_pair::gapmer_type gapmer_type;
 		gapmer_type const source{pair.source};
 		gapmer_type const target{pair.target};
@@ -412,30 +426,29 @@ namespace sf {
 	}
 
 
-	// Needed by the template tests below.
-	template <typename> struct gapmer_arbitrary_aligns_to_fixture : public testing::Test {};
-	template <typename> struct gapmer_arbitrary_aligns_to_reversible_fixture : public testing::Test {};
-
-	typedef ::testing::Types <
+	SF_RC_TEMPLATE_TEST(
+		gapmer_arbitrary_aligns_to,
+		AlignNonMatchingGapmer,
+		(TypeParam const &pair),
 		non_aligning_gapmer_pair_value_mismatch,
 		non_aligning_gapmer_pair_source_length_greater
-	> gapmer_arbitrary_aligns_to_test_types;
-	TYPED_TEST_SUITE(gapmer_arbitrary_aligns_to_fixture, gapmer_arbitrary_aligns_to_test_types);
-
-	typedef ::testing::Types <
-		non_aligning_gapmer_pair_gap_length_mismatch,
-		non_aligning_gapmer_pair_gap_position_mismatch
-	> gapmer_arbitrary_aligns_to_reversible_test_types;
-	TYPED_TEST_SUITE(gapmer_arbitrary_aligns_to_reversible_fixture, gapmer_arbitrary_aligns_to_reversible_test_types);
-
-	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_fixture, AlignNonMatchingGapmer, (TypeParam const &pair)) {
+	) {
+		SF_RC_TAG(pair.target.length, pair.target.gap_length);
 		typedef typename TypeParam::gapmer_type gapmer_type;
 		gapmer_type const source{pair.source};
 		gapmer_type const target{pair.target};
 		RC_ASSERT((!source.template aligns_to <false>(target)));
 	}
 
-	RC_GTEST_TYPED_FIXTURE_PROP(gapmer_arbitrary_aligns_to_reversible_fixture, AlignNonMatchingGapmerReversible, (TypeParam const &pair)) {
+
+	SF_RC_TEMPLATE_TEST(
+		gapmer_arbitrary_aligns_to_reversible,
+		AlignNonMatchingGapmerReversible,
+		(TypeParam const &pair),
+		non_aligning_gapmer_pair_gap_length_mismatch,
+		non_aligning_gapmer_pair_gap_position_mismatch
+	) {
+		SF_RC_TAG(pair.target.length, pair.target.gap_length);
 		typedef typename TypeParam::gapmer_type gapmer_type;
 		gapmer_type const gg1{pair.source};
 		gapmer_type const gg2{pair.target};
