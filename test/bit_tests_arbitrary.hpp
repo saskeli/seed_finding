@@ -5,22 +5,13 @@
 
 #pragma once
 
-#include <exception> // IWYU pragma: keep // Needed by RapidCheck.
-
 #include <cstdint>
-#include <gtest/gtest.h>
-#include <rapidcheck/gtest.h>
+#include "test.hpp"
 #include "../include/bits.hpp"
 
 namespace sf {
 
-	// Needed by the template test below.
-	template <typename> struct bit_arbitrary_pext_fixture : public testing::Test {};
-
-	typedef ::testing::Types <uint32_t, uint64_t> bit_arbitrary_pext_test_types;
-	TYPED_TEST_SUITE(bit_arbitrary_pext_fixture, bit_arbitrary_pext_test_types);
-
-	RC_GTEST_TYPED_FIXTURE_PROP(bit_arbitrary_pext_fixture, pextWorkAsExpected, (TypeParam const value, TypeParam const mask)) {
+	SF_RC_TEMPLATE_TEST(bit_arbitrary_pext, PEXTWorksAsExpected, (TypeParam const value, TypeParam const mask), uint32_t, uint64_t) {
 		if constexpr (sf::bits::detail::pext_intrinsic_available)
 		{
 			auto const res(sf::bits::detail::pext(value, mask));
