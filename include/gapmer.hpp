@@ -91,8 +91,9 @@ class gapmer {
     return *this;
   }
 
+public:
   template <bool no_smaller, bool no_same, bool no_larger>
-  void middle_gap_neighbours(auto& callback) const {
+  void middle_gap_neighbours(auto&& callback) const {
     const uint64_t val = value();
     const uint8_t len = length();
     const uint8_t gap_s = gap_start();
@@ -384,6 +385,7 @@ class gapmer {
     }
   }
 
+private:
   template <bool no_smaller, bool no_same, bool no_larger>
   void all_gap_neighbours(auto& callback) const {
     const uint64_t val = value();
