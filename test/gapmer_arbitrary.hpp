@@ -337,28 +337,28 @@ namespace sf {
 		gapmer const gg1(gd.sequence, gd.length, gd.gap_start(), gd.gap_length);
 
 		// Compare gg1 to gd.
-		RC_ASSERT(gd.sequence == gg1.value());
-		RC_ASSERT(gd.length == gg1.length());
-		RC_ASSERT(gd.gap_start() == gg1.gap_start());
-		RC_ASSERT(gd.gap_length == gg1.gap_length());
+		SF_ASSERT(gd.sequence == gg1.value());
+		SF_ASSERT(gd.length == gg1.length());
+		SF_ASSERT(gd.gap_start() == gg1.gap_start());
+		SF_ASSERT(gd.gap_length == gg1.gap_length());
 
 		// FIXME: Currently this constructor only works for non-empty sequences.
 		if (gd.length)
 		{
 			gapmer const gg2(seq.data(), gd.length, gd.gap_start(), gd.gap_length);
-			RC_ASSERT(gg1 == gg2);
+			SF_ASSERT(gg1 == gg2);
 		}
 
 		if (!gd.suffix_length)
 		{
 			gapmer const gg3(gd.sequence, gd.length);
-			RC_ASSERT(gg1 == gg3);
+			SF_ASSERT(gg1 == gg3);
 
 			// FIXME: Currently this constructor only works for non-empty sequences.
 			if (gd.length)
 			{
 				gapmer const gg4(seq.data(), gd.length);
-				RC_ASSERT(gg1 == gg4);
+				SF_ASSERT(gg1 == gg4);
 			}
 		}
 	}
@@ -372,9 +372,9 @@ namespace sf {
 		auto const target_(target.to_string());
 
 		auto const length(source_.size());
-		RC_ASSERT(length == target_.size());
+		SF_ASSERT(length == target_.size());
 		for (std::size_t i{}; i < length; ++i)
-			RC_ASSERT(source_[i] == complement_nt(target_[length - i - 1]));
+			SF_ASSERT(source_[i] == complement_nt(target_[length - i - 1]));
 	}
 
 
@@ -412,7 +412,7 @@ namespace sf {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{};
 		gapmer_type const target(gd);
-		RC_ASSERT((source.aligns_to <false>(target))); // FIXME: also reverse complement (if needed).
+		SF_ASSERT((source.aligns_to <false>(target))); // FIXME: also reverse complement (if needed).
 	}
 
 
