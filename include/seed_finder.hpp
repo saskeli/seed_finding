@@ -297,8 +297,8 @@ class seed_finder {
       };
       p.first.template huddinge_neighbours<true, true, false>(callback);
     }
-    p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_,
-                                                            bg_path_, k);
+    p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_, bg_path_,
+                                                            k);
     auto hash = [](const G g) { return uint64_t(g); };
     std::unordered_set<G, decltype(hash)> del_set;
     for (auto p : a) {
@@ -451,12 +451,17 @@ class seed_finder {
       a.swap(b);
       std::cerr << int(k) - 1 << " -> " << seeds_.size() << " seeds."
                 << std::endl;
+      if (a.size() == 0) {
+        break;
+      }
     }
-    for (auto p : a) {
-      seeds_.push_back(p.second);
+    if (a.size() > 0) {
+      for (auto p : a) {
+        seeds_.push_back(p.second);
+      }
+      std::cerr << int(k_lim_) << " -> " << seeds_.size() << " seeds."
+                << std::endl;
     }
-    std::cerr << int(k_lim_) << " -> " << seeds_.size() << " seeds."
-              << std::endl;
   }
 
   const std::vector<Res>& get_seeds() const { return seeds_; }
