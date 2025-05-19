@@ -14,6 +14,7 @@
 #include <vector>
 #include "test.hpp"
 #include "../include/gapmer.hpp"
+#include "../include/string_buffer.hpp"
 #include "../include/util.hpp"
 
 
@@ -76,6 +77,30 @@ namespace {
 	struct non_aligning_gapmer_pair_gap_position_mismatch : public non_aligning_gapmer_pair {};
 
 
+	template <typename t_gapmer = sf::gapmer <>>
+	struct huddinge_neighbourhood
+	{
+		typedef t_gapmer gapmer_type;
+
+		struct cmp
+		{
+			bool operator()(gapmer_type const lhs, gapmer_type const rhs) const { return lhs.data() < rhs.data(); }
+		};
+
+		gapmer_data gd{};
+
+		std::vector <gapmer_type> values;
+	};
+
+
+	// Parametrised for rc::Arbitrary.
+	template <typename t_gapmer_data>
+	struct huddinge_neighbourhood_ : public huddinge_neighbourhood <typename t_gapmer_data::gapmer_type>
+	{
+		typedef t_gapmer_data gapmer_data_type;
+	};
+
+
 	auto gapmer_data::to_gapmer() const -> gapmer_type
 	{
 		auto const retval(gapmer_type(sequence, length, gap_start(), gap_length));
@@ -129,6 +154,14 @@ namespace {
 	std::ostream &operator<<(std::ostream &os, gapmer_pair const &pp)
 	{
 		os << "source: " << pp.source << " target: " << pp.target;
+		return os;
+	}
+
+
+	template <typename t_gapmer>
+	std::ostream &operator<<(std::ostream &os, huddinge_neighbourhood <t_gapmer> const &hn)
+	{
+		os << "source: '" << hn.gd << "' values.size(): " << hn.values.size();
 		return os;
 	}
 
@@ -318,6 +351,77 @@ namespace rc {
 			});
 		}
 	};
+
+
+	template <typename t_gapmer_data>
+	struct Arbitrary <huddinge_neighbourhood_ <t_gapmer_data>>
+	{
+		static Gen <huddinge_neighbourhood_ <t_gapmer_data>> arbitrary()
+		{
+			return gen::map(gen::arbitrary <t_gapmer_data>(), [](auto const gd) -> huddinge_neighbourhood_ <t_gapmer_data> {
+				// Given a gapmer_data, we generate its Huddinge neighbourhood by replacing its defined
+				// characters and the first and last middle gap characters one by one. We then proceed to
+				// prepend and append one character.
+				// We try to ensure correctness at the cost of speed.
+				typedef typename huddinge_neighbourhood_ <t_gapmer_data>::gapmer_type gapmer_type;
+				constexpr static std::array const characters{'A', 'C', 'G', 'T'};
+
+				huddinge_neighbourhood_ <t_gapmer_data> retval;
+				sf::string_buffer <uint64_t> str;
+				auto const gg(gd.to_gapmer());
+				auto const gap_start(gg.gap_start());
+				auto const gap_length(gg.gap_length());
+				str = gg.to_string();
+				auto span(str.to_span());
+
+				auto const modify_([&](auto it){
+					auto &cc(*it);
+					auto const orig_cc(cc);
+					for (auto const cc_ : characters)
+					{
+						cc = cc_;
+						gapmer_type const gg_(str.data(), span.size(), gap_start, gap_length);
+						retval.values.push_back(gg_);
+					}
+					cc = orig_cc;
+				});
+
+				auto const modify([&](auto it, auto end){
+					while (it != end)
+					{
+						modify_(it);
+						++it;
+					}
+				});
+
+				switch (gap_length)
+				{
+					case 0:
+					case 1:
+						modify(span.begin(), span.end());
+						break;
+
+					default:
+						modify(span.begin(), span.begin() + gap_start + 1);
+						modify(span.begin() + gap_start + gap_length - 1, span.end());
+						break;
+				}
+
+				// Implicit gaps at each end.
+				str.append(" ");
+				modify_(span.rbegin());
+
+				if (gd.length)
+				{
+					str >>= 1;
+					modify_(span.begin());
+				}
+
+				std::sort(retval.values.begin(), retval.values.end(), typename decltype(retval)::cmp{});
+				return retval;
+			});
+		}
+	};
 }
 
 
@@ -454,5 +558,28 @@ namespace sf {
 		gapmer_type const gg2{pair.target};
 		RC_ASSERT((!gg1.template aligns_to <false>(gg2)));
 		RC_ASSERT((!gg2.template aligns_to <false>(gg1)));
+	}
+
+
+	// FIXME: Test other gapmer types.
+	SF_RC_TEST_WITH_BASE_CASE(
+		gapmer_arbitrary,
+		GenerateHuddingeNeighbourhood,
+		huddinge_neighbourhood_ <gapmer_data>,
+		huddinge_neighbourhood_ <gapmer_data_ <1>>,
+		huddinge_neighbourhood <> const &hn,
+		(hn.gd.length, hn.gd.gap_length)
+	) {
+		typedef huddinge_neighbourhood <>::gapmer_type gapmer_type; // FIXME: Use a type parameter here.
+
+		auto const gd(hn.gd);
+		gapmer_type const gg{gd};
+		std::vector <gapmer_type> actual;
+		gg.huddinge_neighbours <>([&](gapmer_type const gg_) {
+			actual.push_back(gg_);
+		});
+		std::sort(actual.begin(), actual.end(), huddinge_neighbourhood <>::cmp{}); // FIXME: Use a type parameter here.
+		SF_ASSERT(hn.values == actual);
+
 	}
 }
