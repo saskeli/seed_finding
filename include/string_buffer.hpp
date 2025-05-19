@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <climits>
 #include <cstddef>
+#include <cstdint>
 #include <ostream>
+#include <span>
 #include <string_view>
 #include <vector>
 
@@ -31,12 +33,16 @@ namespace sf {
 		void clear();
 		void assign(std::string_view sv);
 		void append(std::string_view sv);
+		void shift_right(uint64_t const amt);
+		std::span <char> to_span() { return {reinterpret_cast <char *>(data_.data()), size_}; }
+		std::span <char const> to_span() const { return {reinterpret_cast <char const *>(data_.data()), size_}; }
 		std::string_view to_string_view() const { return {reinterpret_cast <char const *>(data_.data()), size_}; }
 
 		char operator[](std::size_t idx) const { return 0xff & (data_[idx / sizeof(t_type)] >> (idx % sizeof(t_type) * CHAR_BIT)); }
 		/* implicit */ operator std::string_view() const { return to_string_view(); }
 		string_buffer &operator=(std::string_view sv) { assign(sv); return *this; }
 		string_buffer &operator+=(std::string_view sv) { append(sv); return *this; }
+		string_buffer &operator>>=(uint64_t const amt) { shift_right(amt); return *this; }
 	};
 
 
@@ -70,6 +76,24 @@ namespace sf {
 		std::copy_n(sv.data(), added_length, dst);
 
 		size_ += added_length;
+	}
+
+
+	template <typename t_type>
+	void string_buffer <t_type>::shift_right(uint64_t const amt)
+	{
+		// Deletes characters from the right end, does not reset the characters at the left end.
+		if (length <= amt)
+		{
+			clear();
+			return;
+		}
+
+		auto span(to_span());
+		auto const begin(span.begin());
+		auto const end(span.end());
+		auto const src_end(end - amt);
+		std::move_backward(begin, src_end, end);
 	}
 
 
