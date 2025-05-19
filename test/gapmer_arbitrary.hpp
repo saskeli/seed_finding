@@ -307,7 +307,11 @@ namespace rc {
 				if (gd.length < gapmer_data::gapmer_type::max_k)
 					++gd.length;
 				else
+				{
+					// Make sure that the resulting gapmer is valid by removing the extra character.
 					--gd_.length;
+					gd_.sequence >>= 2;
+				}
 
 				return {gd, gd_};
 			});
