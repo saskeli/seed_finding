@@ -898,7 +898,10 @@ class gapmer {
   }
 
   /// Get the packed data.
-  operator uint64_t() const { return data_; }
+  uint64_t data() const { return data_; }
+
+  /// Get the packed data.
+  operator uint64_t() const { return data(); }
 
   /// Compare packed bytes.
   bool operator==(const gapmer& rhs) const { return data_ == rhs.data_; }
