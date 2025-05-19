@@ -573,4 +573,13 @@ TEST(gapmer, Align4) {
   ASSERT_TRUE(res);
 }
 
+TEST(gapmer, Align5) {
+  std::string s = "GTGAATGATTAA";
+  auto vec = vec_from_string(s);
+  gapmer<true, 5> g(vec.data(), 9, 4, 3);
+  gapmer<true, 5> o(vec.data(), 12);
+  bool res = g.template aligns_to(o);
+  ASSERT_TRUE(res);
+}
+
 }  // namespace sf
