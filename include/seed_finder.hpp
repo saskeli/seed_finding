@@ -320,16 +320,25 @@ class seed_finder {
             b[o] = {p.first, 1.0, 1, 1};
           }
         } else {
-          auto sig_bg = p_counter.smooth_count(o);
-          uint64_t o_a = sig_bg.first + 1;
-          uint64_t o_b = sig_bg.second + 1;
+          double o_a, o_b;
+          if constexpr (enable_smootihing) {
+            auto sig_bg = p_counter.smooth_count(o);
+            o_a = sig_bg.first;
+            o_b = sig_bg.second;
+          } else {
+            auto sig_bg = p_counter.count(o);
+            o_a = sig_bg.first;
+            o_b = sig_bg.second;
+          }
+          o_a += 1;
+          o_b += 1;
           if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
             return;
           }
           double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
           if (do_extend<false>(p.first, o, p.second.sig_count,
                                p.second.bg_count, o_a, o_b, p.second.p, o_r)) {
-            b[o] = {o, o_r, o_a, o_b};
+            b[o] = {o, o_r, uint64_t(o_a), uint64_t(o_b)};
             keep = false;
           }
         }
