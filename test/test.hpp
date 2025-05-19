@@ -28,7 +28,7 @@
 // We would like to do so but only once, so we use GoogleTest for the empty case.
 // Since we are not in RapidCheck's test case, we would like to conditionally use
 // GoogleTest's assertions.
-#define SF_ASSERT(CONDITION) (([&](){ if (sf_test_uses_rapidcheck) RC_ASSERT(CONDITION) else ASSERT_TRUE(CONDITION))())
+#define SF_ASSERT(CONDITION) (([&](){ if (sf_test_uses_rapidcheck) RC_ASSERT(CONDITION); else ASSERT_TRUE(CONDITION); })())
 
 // Mainly for checking if empty parentheses are passed in place of a macro parameter.
 // We could detect this with __VA_OPT__ but since it is fairly new, we use the GCC extension
