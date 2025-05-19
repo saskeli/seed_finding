@@ -1248,7 +1248,7 @@ class gapmer {
 
   template <bool no_smaller = false, bool no_same = false,
             bool no_larger = false>
-  void huddinge_neighbours(auto& callback) const {
+  void huddinge_neighbours(auto&& callback) const {
     if constexpr (middle_gap_only) {
       middle_gap_neighbours<no_smaller, no_same, no_larger>(callback);
     } else {
