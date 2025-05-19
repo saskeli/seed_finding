@@ -89,7 +89,7 @@ namespace {
 
 		gapmer_data gd{};
 
-		std::vector <gapmer_type> values;
+		std::set <gapmer_type, cmp> values;
 	};
 
 
@@ -367,6 +367,8 @@ namespace rc {
 				constexpr static std::array const characters{'A', 'C', 'G', 'T'};
 
 				huddinge_neighbourhood_ <t_gapmer_data> retval;
+				retval.gd = gd;
+				
 				sf::string_buffer <uint64_t> str;
 				auto const gg(gd.to_gapmer());
 				auto const gap_start(gg.gap_start());
@@ -381,7 +383,7 @@ namespace rc {
 					{
 						cc = cc_;
 						gapmer_type const gg_(str.data(), span.size(), gap_start, gap_length);
-						retval.values.push_back(gg_);
+						retval.values.insert(gg_);
 					}
 					cc = orig_cc;
 				});
@@ -409,6 +411,7 @@ namespace rc {
 
 				// Implicit gaps at each end.
 				str.append(" ");
+				span = str.to_span();
 				modify_(span.rbegin());
 
 				if (gd.length)
@@ -417,7 +420,6 @@ namespace rc {
 					modify_(span.begin());
 				}
 
-				std::sort(retval.values.begin(), retval.values.end(), typename decltype(retval)::cmp{});
 				return retval;
 			});
 		}
@@ -562,6 +564,7 @@ namespace sf {
 
 
 	// FIXME: Test other gapmer types.
+#if 0
 	SF_RC_TEST_WITH_BASE_CASE(
 		gapmer_arbitrary,
 		GenerateHuddingeNeighbourhood,
@@ -569,17 +572,27 @@ namespace sf {
 		huddinge_neighbourhood_ <gapmer_data_ <1>>,
 		huddinge_neighbourhood <> const &hn,
 		(hn.gd.length, hn.gd.gap_length)
-	) {
+	)
+#else
+	SF_RC_TEST_PROP(
+		gapmer_arbitrary,
+		GenerateHuddingeNeighbourhood,
+		huddinge_neighbourhood_ <gapmer_data_ <5>>,
+		huddinge_neighbourhood <> const &hn,
+		(hn.gd.length, hn.gd.gap_length)
+	)
+#endif
+	{
 		typedef huddinge_neighbourhood <>::gapmer_type gapmer_type; // FIXME: Use a type parameter here.
 
 		auto const gd(hn.gd);
 		gapmer_type const gg{gd};
-		std::vector <gapmer_type> actual;
-		gg.huddinge_neighbours <>([&](gapmer_type const gg_) {
-			actual.push_back(gg_);
-		});
-		std::sort(actual.begin(), actual.end(), huddinge_neighbourhood <>::cmp{}); // FIXME: Use a type parameter here.
-		SF_ASSERT(hn.values == actual);
 
+		std::set <gapmer_type, huddinge_neighbourhood <>::cmp> actual; // FIXME: Use a type parameter here.
+		gg.middle_gap_neighbours <false, false, false>([&](gapmer_type const gg_) {
+			SF_EXPECT(gg_.is_valid());
+			actual.insert(gg_);
+		});
+		SF_ASSERT(hn.values == actual);
 	}
 }
