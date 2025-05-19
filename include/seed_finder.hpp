@@ -12,6 +12,7 @@
 #include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
+#include "partial_count.hpp"
 
 namespace sf {
 
@@ -27,11 +28,11 @@ class seed_finder {
     uint64_t bg_count;
   };
 
-  fm_index<> sig_index_;
-  fm_index<> bg_index_;
   const std::string sig_path_;
   const std::string bg_path_;
   std::vector<Res> seeds_;
+  uint64_t sig_size_;
+  uint64_t bg_size_;
   double p_;
   double p_ext_;
   double fold_lim_;
@@ -78,7 +79,7 @@ class seed_finder {
                   << ")\n            with p " << b_r << std::endl;
       }
     }
-    return b_r < a_r;
+    return b_r <= a_r;
   }
 
   template <bool calc_b_r>
@@ -101,7 +102,8 @@ class seed_finder {
   }
 
   void check_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                   uint8_t gap_l, uint64_t offset, G_C& sig_bg_a, G_C& sig_bg_b) {
+                   uint8_t gap_l, uint64_t offset, G_C& sig_bg_a,
+                   G_C& sig_bg_b) {
 #ifdef DEBUG
     if (offset + v >= G_C::lookup_elems(k)) {
       std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
@@ -121,7 +123,7 @@ class seed_finder {
     }
     uint64_t a = sig_bg_a.sig_counts[offset + v] + 1;
     uint64_t b = sig_bg_a.bg_counts[offset + v] + 1;
-    if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
+    if (a * sig_size_ <= fold_lim_ * b * bg_size_) {
 #pragma omp critical(a_bv)
       sig_bg_a.discarded[offset + v] = true;
     }
@@ -136,7 +138,7 @@ class seed_finder {
       uint64_t o_v = o.value();
       uint64_t o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
       uint64_t o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1;
-      if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
+      if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(a_bv)
         sig_bg_a.discarded[o_offset + o_v] = true;
         return;
@@ -156,7 +158,7 @@ class seed_finder {
       uint64_t o_v = o.value();
       uint64_t o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
       uint64_t o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
-      if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
+      if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(o_bv)
         sig_bg_b.discarded[o_offset + o_v] = true;
         return;
@@ -179,8 +181,7 @@ class seed_finder {
 
   template <class M>
   void filter_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                    uint8_t gap_l, uint64_t offset, G_C& sig_bg_c,
-                    M& m) {
+                    uint8_t gap_l, uint64_t offset, G_C& sig_bg_c, M& m) {
 #ifdef DEBUG
     if (offset + v >= G_C::lookup_elems(k)) {
       std::cerr << "k = " << int(k) << " & sig_bg_c.k_ = " << int(sig_bg_c.k_)
@@ -200,7 +201,7 @@ class seed_finder {
     }
     uint64_t a = sig_bg_c.sig_counts[offset + v] + 1;
     uint64_t b = sig_bg_c.bg_counts[offset + v] + 1;
-    if (a * sig_index_.size() <= fold_lim_ * b * bg_index_.size()) {
+    if (a * sig_size_ <= fold_lim_ * b * bg_size_) {
 #pragma omp critical(d_bv)
       sig_bg_c.discarded[offset + v] = true;
     }
@@ -215,7 +216,7 @@ class seed_finder {
       uint64_t o_v = o.value();
       uint64_t o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
       uint64_t o_b = sig_bg_c.bg_counts[o_offset + v] + 1;
-      if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
+      if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(d_bv)
         sig_bg_c.discarded[o_offset + o_v] = true;
         return;
@@ -285,9 +286,19 @@ class seed_finder {
     return k_lim;
   }
 
-  template <class M>
-  void extend(M& a, M& b) {
+  template <class M, class P>
+  void extend(M& a, M& b, P& p_counter, uint16_t k) {
     std::cerr << "    Extend " << a.size() << " mers." << std::endl;
+    for (auto p : a) {
+      auto callback = [&](G o) {
+        p_counter.init(p.first);
+        auto ccb = [&](G h_n) { p_counter.init(h_n); };
+        o.hamming_neighbours(ccb);
+      };
+      p.first.template huddinge_neighbours<true, true, false>(callback);
+    }
+    p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_,
+                                                            bg_path_, k);
     auto hash = [](const G g) { return uint64_t(g); };
     std::unordered_set<G, decltype(hash)> del_set;
     for (auto p : a) {
@@ -309,9 +320,10 @@ class seed_finder {
             b[o] = {p.first, 1.0, 1, 1};
           }
         } else {
-          uint64_t o_a = sig_index_.count(o) + 1;
-          uint64_t o_b = bg_index_.count(o) + 1;
-          if (o_a * sig_index_.size() <= fold_lim_ * o_b * bg_index_.size()) {
+          auto sig_bg = p_counter.smooth_count(o);
+          uint64_t o_a = sig_bg.first + 1;
+          uint64_t o_b = sig_bg.second + 1;
+          if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
             return;
           }
           double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
@@ -330,6 +342,7 @@ class seed_finder {
     for (auto d : del_set) {
       a.erase(d);
     }
+    p_counter.clear();
   }
 
   template <class M>
@@ -349,7 +362,7 @@ class seed_finder {
         if (it->first.template is_neighbour<true>(iit->first)) {
           if (it->second.p > iit->second.p) {
             del_set.insert(iit->first);
-          } else if (keep) {
+          } else if (it->second.p < iit->second.p && keep) {
             del_set.insert(it->first);
             keep = false;
           }
@@ -366,17 +379,35 @@ class seed_finder {
   seed_finder(const char* sig_path, const char* bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01)
-      : sig_index_(sig_path),
-        bg_index_(bg_path),
-        sig_path_(sig_path),
+      : sig_path_(sig_path),
         bg_path_(bg_path),
         seeds_(),
+        sig_size_(),
+        bg_size_(),
         p_(p),
         p_ext_(p_ext),
         fold_lim_(std::pow(2, log_fold)),
         memory_limit_(memory_limit),
         k_lim_(max_k) {
-    x_ = double(sig_index_.size()) / (sig_index_.size() + bg_index_.size());
+    seq_io::Reader sr(sig_path_);
+    sr.enable_reverse_complements();
+    while (true) {
+      uint64_t len = sr.get_next_read_to_buffer();
+      if (len == 0) {
+        break;
+      }
+      sig_size_ += len;
+    }
+    seq_io::Reader br(sig_path_);
+    br.enable_reverse_complements();
+    while (true) {
+      uint64_t len = br.get_next_read_to_buffer();
+      if (len == 0) {
+        break;
+      }
+      bg_size_ += len;
+    }
+    x_ = double(sig_size_) / (sig_size_ + bg_size_);
   }
 
   void find_seeds() {
@@ -405,9 +436,10 @@ class seed_finder {
         }
       }
     }
+    partial_count<G> p_counter;
     for (; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
-      extend(a, b);
+      extend(a, b, p_counter, k);
       std::cerr << "    " << a.size() << " " << int(k) - 1 << " seeds\n"
                 << "    " << b.size() << " " << int(k) << " candidates"
                 << std::endl;

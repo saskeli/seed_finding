@@ -1239,6 +1239,7 @@ class gapmer {
   }
 
   void hamming_neighbours(auto& callback) const {
+    uint16_t len = length();
     for (uint64_t n = 1; n < 4; ++n) {
       uint64_t xor_val = n;
       for (size_t i = 0; i < len; ++i) {
