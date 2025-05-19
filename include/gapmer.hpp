@@ -1044,9 +1044,11 @@ class gapmer {
   /// Returns true iff.
   ///  1. data and lengths match exactly or
   ///  2. other’s length is strictly greater and
-  ///     2.1 other’s gap length is non-zero, this’s gap length is zero and this is a substring of other’s prefix or suffix or
-  ///     2.2 gap lengths match and this’s prefix is a suffix of other’s prefix and this’s suffix is a prefix of other’s suffix or
-  ///     2.3 both gap lengths are zero and this is a substring of other.
+  ///     2.1 other’s gap length is non-zero, this’s gap length is zero and this
+  ///     is a substring of other’s prefix or suffix or 2.2 gap lengths match
+  ///     and this’s prefix is a suffix of other’s prefix and this’s suffix is a
+  ///     prefix of other’s suffix or 2.3 both gap lengths are zero and this is
+  ///     a substring of other.
   template <bool compare_rc = true, bool debug = false>
   bool aligns_to(gapmer other) const {
     if constexpr (debug) {
@@ -1072,81 +1074,73 @@ class gapmer {
     uint16_t gs = gap_start();
     uint16_t o_gl = other.gap_length();
     uint16_t o_gs = other.gap_start();
-    // Must be able to match gaps
-    if (gl > 0 && o_gl == 0) {
-      return false;
-    }
-    if (o_gl > 0 && gl == 0) {
-      // this must fit either before or after the gap
-      if (o_gs >= len) {
-        for (uint16_t offset = 0; offset <= o_gs - len; ++offset) {
-          bool matches = true;
-          if constexpr (debug) {
-            for (uint16_t space = 0; space < offset; ++space) {
-              std::cerr << " ";
-            }
-            std::cerr << to_string();
-          }
-          for (uint16_t i = 0; i < len; ++i) {
-            if (nuc(i) != other.nuc(i + offset)) {
-              matches = false;
-              break;
-            }
-          }
-          if constexpr (debug) {
-            std::cerr << "\t" << matches << std::endl;
-          }
-          if (matches) {
-            return true;
-          }
-        }
-      }
-      if (o_len - o_gs >= len) {
-        for (uint16_t offset = o_gs; offset <= o_len - len; ++offset) {
-          bool matches = true;
-          if constexpr (debug) {
-            for (uint16_t space = 0; space < offset + o_gl; ++space) {
-              std::cerr << " ";
-            }
-            std::cerr << to_string();
-          }
-          for (uint16_t i = 0; i < len; ++i) {
-            if (nuc(i) != other.nuc(i + offset)) {
-              matches = false;
-              break;
-            }
-          }
-          if constexpr (debug) {
-            std::cerr << "\t" << matches << std::endl;
-          }
-          if (matches) {
-            return true;
-          }
-        }
-      }
-      if constexpr (compare_rc) {
-        return reverse_complement().template aligns_to<false, debug>(other);
-      }
-      return false;
-    }
-    // Check if prefix (resp. suffix) can be a substring of other’s prefix (suffix).
-    if (o_gs < gs || o_len - o_gs < len - gs) {
-      if constexpr (compare_rc) {
-        return reverse_complement().template aligns_to<false, debug>(other);
-      }
-      return false;
-    }
-    // if gl > 0, gaps must align.
-    // FIXME: should we check for gl == o_gl? Or is this implied?
-    if (gl > 0) {
-      uint16_t offset = o_gs - gs;
-      for (uint16_t i = 0; i < len; ++i) {
-        if (nuc(i) != other.nuc(i + offset)) {
-          if constexpr (compare_rc) {
-            return reverse_complement().template aligns_to<false, debug>(other);
-          }
+    if (gl) {
+      // Gap in *this
+      uint16_t v_len = len + gl;
+      if (o_gl) {
+        // gap also on other
+        uint16_t ov_len = o_len + o_gl;
+        if (v_len > ov_len) {
           return false;
         }
+        for (uint16_t offset = 0; offset <= ov_len - v_len; ++offset) {
+          bool ok = true;
+          if constexpr (debug) {
+            for (uint16_t sc = 0; sc < offset; ++sc) {
+              std::cerr << " ";
+            }
+            std::cerr << to_string() << std::endl;
+          }
+          for (uint16_t i = 0; i < len; ++i) {
+            uint16_t o_i = i + offset;
+            o_i += i >= gs ? gl : 0;
+            if (o_i >= o_gs) {
+              if (o_i < o_gs + o_gl) {
+                ok = false;
+                break;
+              }
+              o_i -= o_gl;
+            }
+            if (nuc(i) != other.nuc(o_i)) {
+              ok = false;
+              break;
+            }
+          }
+          if (ok) {
+            return true;
+          }
+        }
+      } else {
+        // no gap in other
+        if (v_len > o_len) {
+          return false;
+        }
+        for (uint16_t offset = 0; offset <= o_len - v_len; ++offset) {
+          bool ok = true;
+          if constexpr (debug) {
+            for (uint16_t sc = 0; sc < offset; ++sc) {
+              std::cerr << " ";
+            }
+            std::cerr << to_string() << std::endl;
+          }
+          for (uint16_t i = 0; i < len; ++i) {
+            uint16_t o_i = i + offset;
+            o_i += i >= gs ? gl : 0;
+            if (o_i >= o_gs) {
+              if (nuc(i) != other.nuc(o_i)) {
+                ok = false;
+                break;
+              }
+            }
+            if (ok) {
+              return true;
+            }
+          }
+        }
+        if constexpr (compare_rc) {
+          return aligns_to<false, debug>(other.reverse_complement());
+        }
+        return false;
       }
     }
     // else no gaps so brute force align is easy.
