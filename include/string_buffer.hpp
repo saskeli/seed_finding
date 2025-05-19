@@ -83,7 +83,7 @@ namespace sf {
 	void string_buffer <t_type>::shift_right(uint64_t const amt)
 	{
 		// Deletes characters from the right end, does not reset the characters at the left end.
-		if (length <= amt)
+		if (size_ <= amt)
 		{
 			clear();
 			return;
