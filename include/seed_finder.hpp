@@ -41,10 +41,10 @@ class seed_finder {
   uint8_t k_lim_;
 
   template <bool debug = false>
-  bool do_extend([[maybe_unused]] G a, [[maybe_unused]] G b, uint64_t a_sig,
-                 uint64_t a_bg, uint64_t b_sig, uint64_t b_bg, double a_r,
+  bool do_extend([[maybe_unused]] G a, [[maybe_unused]] G b, double a_sig,
+                 double a_bg, double b_sig, double b_bg, double a_r,
                  double b_r) {
-    if (a_bg == 1 && b_bg == 1) {
+    if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (a_sig > b_sig * 4) {
         return false;
       }
@@ -83,8 +83,8 @@ class seed_finder {
   }
 
   template <bool calc_b_r>
-  bool do_filter([[maybe_unused]] G a, [[maybe_unused]] G b, uint64_t a_sig,
-                 uint64_t a_bg, uint64_t b_sig, uint64_t b_bg, double a_r,
+  bool do_filter([[maybe_unused]] G a, [[maybe_unused]] G b, double a_sig,
+                 double a_bg, double b_sig, double b_bg, double a_r,
                  double& b_r) {
     if (a_bg == 1 && b_bg == 1) {
       if (b_sig > a_sig) {
@@ -136,8 +136,8 @@ class seed_finder {
     auto callback_a = [&](G o) {
       uint64_t o_offset = sig_bg_a.offset(o.gap_start(), o.gap_length());
       uint64_t o_v = o.value();
-      uint64_t o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
-      uint64_t o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1;
+      double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
+      double o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1;
       if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(a_bv)
         sig_bg_a.discarded[o_offset + o_v] = true;
@@ -156,8 +156,8 @@ class seed_finder {
     auto callback_b = [&](G o) {
       uint64_t o_offset = sig_bg_b.offset(o.gap_start(), o.gap_length());
       uint64_t o_v = o.value();
-      uint64_t o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
-      uint64_t o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
+      double o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
+      double o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
       if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(o_bv)
         sig_bg_b.discarded[o_offset + o_v] = true;
@@ -214,8 +214,8 @@ class seed_finder {
     auto callback = [&](G o) {
       uint64_t o_offset = sig_bg_c.offset(o.gap_start(), o.gap_length());
       uint64_t o_v = o.value();
-      uint64_t o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
-      uint64_t o_b = sig_bg_c.bg_counts[o_offset + v] + 1;
+      double o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
+      double o_b = sig_bg_c.bg_counts[o_offset + v] + 1;
       if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(d_bv)
         sig_bg_c.discarded[o_offset + o_v] = true;
