@@ -33,6 +33,7 @@
 // GoogleTest's assertions.
 #define SF_EXPECT(CONDITION) (([&](){ if (sf_test_uses_rapidcheck) SF_RC_EXPECT(CONDITION); else EXPECT_TRUE(CONDITION); })()) // RapidCheck does not have EXPECT.
 #define SF_ASSERT(CONDITION) (([&](){ if (sf_test_uses_rapidcheck) RC_ASSERT(CONDITION); else ASSERT_TRUE(CONDITION); })())
+#define SF_FAIL() (([&](){ if (sf_test_uses_rapidcheck) RC_FAIL(); else FAIL(); })())
 
 // Mainly for checking if empty parentheses are passed in place of a macro parameter.
 // We could detect this with __VA_OPT__ but since it is fairly new, we use the GCC extension
