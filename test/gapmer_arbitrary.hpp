@@ -5,10 +5,12 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <bit>
 #include <cstdint>
 #include <iostream>
+#include <iterator>
 #include <ostream>
 #include <stdexcept>
 #include <vector>
@@ -371,8 +373,7 @@ namespace rc {
 				constexpr static std::array const characters{'A', 'C', 'G', 'T'};
 
 				huddinge_neighbourhood_ <t_gapmer_data> retval;
-				retval.gd = gd;
-				
+
 				sf::string_buffer <uint64_t> str;
 				auto const gg(gd.to_gapmer());
 				auto const gap_start(gg.gap_start());
@@ -380,14 +381,49 @@ namespace rc {
 				str = gg.to_string();
 				auto span(str.to_span());
 
-				auto const modify_([&](auto it){
+				auto const add_gaps([&](){
+					if (3 <= span.size())
+					{
+						if (0 == gap_length)
+						{
+							// Replace each character that is not the first or the last with a gap, one at a time.
+							uint8_t const count(span.size() - 2);
+							for (uint8_t i{}; i < count; ++i)
+							{
+								// The constructor takes the number of defined characters as the second parameter.
+								gapmer_type const gg_(str.data(), span.size() - 1, 1 + i, 1);
+								retval.values.insert(gg_);
+							}
+						}
+						else
+						{
+							// Extend the gap if there is enough space.
+							if (2 <= gap_start)
+							{
+								gapmer_type const gg_(str.data(), span.size() - gap_length - 1, gap_start - 1, gap_length + 1);
+								retval.values.insert(gg_);
+							}
+
+							if (gap_start + gap_length + 1U < span.size())
+							{
+								gapmer_type const gg_(str.data(), span.size() - gap_length - 1, gap_start, gap_length + 1);
+								retval.values.insert(gg_);
+							}
+						}
+					}
+				});
+
+				auto const modify_([&](auto it, bool const should_add_gaps){
 					auto &cc(*it);
 					auto const orig_cc(cc);
 					for (auto const cc_ : characters)
 					{
 						cc = cc_;
-						gapmer_type const gg_(str.data(), span.size(), gap_start, gap_length);
+						gapmer_type const gg_(str.data(), span.size() - gap_length, gap_start, gap_length);
 						retval.values.insert(gg_);
+
+						if (should_add_gaps)
+							add_gaps();
 					}
 					cc = orig_cc;
 				});
@@ -395,7 +431,7 @@ namespace rc {
 				auto const modify([&](auto it, auto end){
 					while (it != end)
 					{
-						modify_(it);
+						modify_(it, false);
 						++it;
 					}
 				});
@@ -413,16 +449,49 @@ namespace rc {
 						break;
 				}
 
-				// Implicit gaps at each end.
+				add_gaps();
+
+				// Shorten the gapmer from each end if possible.
+				if (gd.length && ((gap_length == 0 || 2 <= gap_start) || (gap_start + gap_length + 1U < str.size())))
+				{
+					auto str_(str);
+
+					if (gap_start + gap_length + 1U < str.size())
+					{
+						// Remove the last character.
+						str_.resize(str_.size() - 1);
+						gapmer_type const gg_(str_.data(), str_.size() - gap_length, gap_start, gap_length);
+						retval.values.insert(gg_);
+
+						// Restore for the branch below.
+						str_.resize(str_.size() + 1);
+					}
+
+					if (0 == gap_length || 2 <= gap_start)
+					{
+						str_ <<= 1;
+						str_.resize(str_.size() - 1);
+						gapmer_type const gg_(str_.data(), str_.size() - gap_length, gap_start, gap_length);
+						// No need to compare to the gapmer generated in the branch above since values is a std::set.
+						retval.values.insert(gg_);
+					}
+				}
+
+				// Replace the implicit gaps at each end with a defined character.
 				str.append(" ");
 				span = str.to_span();
-				modify_(span.rbegin());
+				modify_(span.rbegin(), true);
 
+				// One replacement suffices if the gapmer has zero length.
 				if (gd.length)
 				{
 					str >>= 1;
-					modify_(span.begin());
+					modify_(span.begin(), true);
 				}
+
+				// Remove the input gapmer from the neighbourhood since its distance to itsef is zero, not one.
+				retval.values.erase(gg);
+				retval.gd = gd;
 
 				return retval;
 			});
@@ -597,6 +666,31 @@ namespace sf {
 			SF_EXPECT(gg_.is_valid());
 			actual.insert(gg_);
 		});
-		SF_ASSERT(hn.values == actual);
+
+		if (hn.values != actual)
+		{
+			std::cerr << "** Unexpected results in GenerateHuddingeNeighbourhood:\n";
+			std::cerr << "Tested gapmer: " << gg.to_string() << '\n';
+
+			std::vector <gapmer_type> not_found_in_actual, extra_elements_in_actual;
+			std::set_difference(hn.values.begin(), hn.values.end(), actual.begin(), actual.end(), std::back_inserter(not_found_in_actual));
+			std::set_difference(actual.begin(), actual.end(), hn.values.begin(), hn.values.end(), std::back_inserter(extra_elements_in_actual));
+
+			if (!not_found_in_actual.empty())
+			{
+				std::cerr << "* Elements not found in actual:\n";
+				for (auto const gg_ : not_found_in_actual)
+					std::cerr << gg_.to_string() << '\n';
+			}
+
+			if (!extra_elements_in_actual.empty())
+			{
+				std::cerr << "* Extra elements in actual:\n";
+				for (auto const gg_ : extra_elements_in_actual)
+					std::cerr << gg_.to_string() << '\n';
+			}
+
+			SF_FAIL();
+		}
 	}
 }
