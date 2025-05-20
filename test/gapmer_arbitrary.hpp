@@ -670,7 +670,7 @@ namespace sf {
 		if (hn.values != actual)
 		{
 			std::cerr << "** Unexpected results in GenerateHuddingeNeighbourhood:\n";
-			std::cerr << "Tested gapmer: " << gg.to_string() << '\n';
+			std::cerr << "* Tested gapmer: " << gg.to_string() << '\n';
 
 			std::vector <gapmer_type> not_found_in_actual, extra_elements_in_actual;
 			std::set_difference(hn.values.begin(), hn.values.end(), actual.begin(), actual.end(), std::back_inserter(not_found_in_actual));
