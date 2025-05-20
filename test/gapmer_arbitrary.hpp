@@ -637,16 +637,6 @@ namespace sf {
 
 
 	// FIXME: Test other gapmer types.
-#if 0
-	SF_RC_TEST_WITH_BASE_CASE(
-		gapmer_arbitrary,
-		GenerateHuddingeNeighbourhood,
-		huddinge_neighbourhood_ <gapmer_data>,
-		huddinge_neighbourhood_ <gapmer_data_ <1>>,
-		huddinge_neighbourhood <> const &hn,
-		(hn.gd.length, hn.gd.gap_length)
-	)
-#else
 	SF_RC_TEST_PROP(
 		gapmer_arbitrary,
 		GenerateHuddingeNeighbourhood,
@@ -654,7 +644,6 @@ namespace sf {
 		huddinge_neighbourhood <> const &hn,
 		(hn.gd.length, hn.gd.gap_length)
 	)
-#endif
 	{
 		typedef huddinge_neighbourhood <>::gapmer_type gapmer_type; // FIXME: Use a type parameter here.
 
