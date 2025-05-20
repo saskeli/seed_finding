@@ -37,7 +37,8 @@ class gapmer {
   const static constexpr uint64_t meta_mask = 0b11111;
 
   // data_ formatted as follows. We denote M = max_k. The length does not include the gap length.
-  // The value is stored in reverse order, i.e. (2M, 0]. Note that the padding must be zeroed to make operator== etc. work.
+  // The value is stored such that the rightmost character is at position zero, the next one at
+  // position 2 and so on. Note that the padding must be zeroed to make operator== etc. work.
   //
   //  0                    2M           2M + 5       2M + 10      2M + 15  63
   // +--------------------+------------+------------+------------+-----------+
