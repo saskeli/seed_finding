@@ -71,6 +71,24 @@ TEST(gapmer, StrConstructor5) {
   ASSERT_EQ(sm, s);
 }
 
+TEST(gapmer, StrConstructor6) {
+  sf::string_buffer <uint64_t> str;
+  str = "CCCCC";
+  const gapmer<> gg(str.data(), str.size(), 0, 0);
+  ASSERT_TRUE(gg.is_valid()) << gg.to_string() << " " << gg.bits();
+  const auto sm(gg.to_string());
+  ASSERT_EQ(sm, str);
+}
+
+TEST(gapmer, StrConstructor7) {
+  sf::string_buffer <uint64_t> str;
+  str = "C.CCC";
+  const gapmer<> gg(str.data(), str.size() - 1, 1, 1);
+  ASSERT_TRUE(gg.is_valid()) << gg.to_string() << " " << gg.bits();
+  const auto sm(gg.to_string());
+  ASSERT_EQ(sm, str);
+}
+
 TEST(gapmer, NextComp1) {
   std::string s = "CATTATAC";
   auto vec = vec_from_string(s);
