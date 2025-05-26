@@ -1238,6 +1238,17 @@ private:
     return (data_ & ~value_mask) | v;
   }
 
+  void hamming_neighbours(auto& callback) const {
+    uint16_t len = length();
+    for (uint64_t n = 1; n < 4; ++n) {
+      uint64_t xor_val = n;
+      for (size_t i = 0; i < len; ++i) {
+        callback(gapmer(data_ ^ xor_val));
+        xor_val <<= 2;
+      }
+    }
+  }
+
   template <bool no_smaller = false, bool no_same = false,
             bool no_larger = false>
   void huddinge_neighbours(auto&& callback) const {
