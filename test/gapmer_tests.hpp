@@ -89,6 +89,15 @@ TEST(gapmer, StrConstructor7) {
   ASSERT_EQ(sm, str);
 }
 
+TEST(gapmer, StrConstructor8) {
+  sf::string_buffer <uint64_t> str;
+  str = "AAAA.....A";
+  const gapmer<> gg(str.data(), 5, 4, 5);
+  ASSERT_TRUE(gg.is_valid()) << gg.to_string() << " " << gg.bits();
+  const auto sm(gg.to_string());
+  ASSERT_EQ(sm, str);
+}
+
 TEST(gapmer, NextComp1) {
   std::string s = "CATTATAC";
   auto vec = vec_from_string(s);
