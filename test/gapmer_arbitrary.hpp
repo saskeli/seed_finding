@@ -368,125 +368,210 @@ namespace rc {
 				// Given a gapmer_data, we generate its Huddinge neighbourhood by replacing its defined
 				// characters and the first and last middle gap characters one by one. We then proceed to
 				// prepend and append one character.
+				//
+				// We first transform the string by adding the implicit gaps:
+				//
+				// i.   ACGT ~> -ACGT- (no initial gap run)
+				// ii.  GAT--TACA ~> -GAT--TACA- (has initial “non-edge” gap run)
+				// iv.  G-ATTACA ~> -G-ATTACA- (has initial “edge” gap run)
+				//
+				// One modification may be done as follows.
+				// 1. By replacing one defined character with another, i.e. -ACGT- ~> -ACCT-
+				// 2. By replacing a non-boundary character with a gap, i.e. -ACGT- ~> -A-GT- in cases i and 4c.
+				// 3. By replacing a defined character on gap boundary with a gap, i.e.
+				// 	  (a) -GAT-TACA- ~> -GA--TACA-
+				//    (b) -ACGT- ~> --CGT- (no initial gap run)
+				// 4. By replacing a gap character on gap boundary with a defined character, i.e.
+				//    (a) -GAT---TACA- ~> -GATC--TACA-
+				//    (b) -GAT---TACA- ~> -GAT---TACAA
+				//    (c) -ACGT- ~> AACGT- (no initial gap run)
+				// 5. In cases i, 3b and 4c by extending the gap run at one boundary up to five gap characters
+				//    and prepending or appending a defined character, i.e. -ACGT- ~> A--ACGT.
+				//    (Remember to check that for 3b the contracted strings do not match or process only either case.)
+				// 6. In case iii, by extending the gap run, i.e. -G-ATTACA- ~> -G--ATTACA-.
+				//
 				// We try to ensure correctness at the cost of speed.
 				typedef typename huddinge_neighbourhood_ <t_gapmer_data>::gapmer_type gapmer_type;
+				typedef sf::string_buffer <uint64_t> string_buffer_type;
+
 				constexpr static std::array const characters{'A', 'C', 'G', 'T'};
+				constexpr static uint8_t const max_edge_gap_length{3}; // FIXME: This should be ~5.
 
 				huddinge_neighbourhood_ <t_gapmer_data> retval;
 
-				sf::string_buffer <uint64_t> str;
+				string_buffer_type str, str_;
 				auto const gg(gd.to_gapmer());
 				auto const gap_start(gg.gap_start());
 				auto const gap_length(gg.gap_length());
 				str = gg.to_string();
 				auto span(str.to_span());
 
-				auto const add_gaps([&](){
-					if (3 <= span.size())
-					{
-						if (0 == gap_length)
-						{
-							// Replace each character that is not the first or the last with a gap, one at a time.
-							uint8_t const count(span.size() - 2);
-							for (uint8_t i{}; i < count; ++i)
-							{
-								// The constructor takes the number of defined characters as the second parameter.
-								gapmer_type const gg_(str.data(), span.size() - 1, 1 + i, 1);
-								retval.values.insert(gg_);
-							}
-						}
-						else
-						{
-							// Extend the gap if there is enough space.
-							if (2 <= gap_start)
-							{
-								gapmer_type const gg_(str.data(), span.size() - gap_length - 1, gap_start - 1, gap_length + 1);
-								retval.values.insert(gg_);
-							}
-
-							if (gap_start + gap_length + 1U < span.size())
-							{
-								gapmer_type const gg_(str.data(), span.size() - gap_length - 1, gap_start, gap_length + 1);
-								retval.values.insert(gg_);
-							}
-						}
-					}
+				auto const add_gapmer([&retval](string_buffer_type const &sb, uint8_t const size, uint8_t const gap_start_, uint8_t const gap_length_){
+					// The constructor takes the number of defined characters as the second parameter.
+					gapmer_type const gg_(sb.data(), size - gap_length_, gap_start_, gap_length_);
+					RC_ASSERT(gg_.is_valid());
+					retval.values.insert(gg_);
 				});
 
-				auto const modify_([&](auto it, bool const should_add_gaps){
+				auto const modify__([&add_gapmer](string_buffer_type const &sb, uint8_t const size, uint8_t const gap_start_, uint8_t const gap_length_, auto it){
 					auto &cc(*it);
 					auto const orig_cc(cc);
 					for (auto const cc_ : characters)
 					{
 						cc = cc_;
-						gapmer_type const gg_(str.data(), span.size() - gap_length, gap_start, gap_length);
-						retval.values.insert(gg_);
-
-						if (should_add_gaps)
-							add_gaps();
+						add_gapmer(sb, size, gap_start_, gap_length_);
 					}
 					cc = orig_cc;
 				});
 
+				auto const modify_([&](auto it){ modify__(str, str.size(), gap_start, gap_length, it); });
+
 				auto const modify([&](auto it, auto end){
 					while (it != end)
 					{
-						modify_(it, false);
+						modify_(it);
 						++it;
 					}
 				});
 
+				auto const insert_gap_if_needed([&](){
+					if (0 == gap_length && 3 <= str.size())
+					{
+						auto it(span.begin() + 1);
+						auto const end(span.end() - 1);
+						uint8_t pos{1};
+						while (it != end)
+						{
+							auto const cc(*it);
+							*it = '-';
+							add_gapmer(str, str.size(), pos, 1);
+							*it = cc;
+							++it;
+							++pos;
+						}
+					}
+				});
+
+				// Case 1.
 				switch (gap_length)
 				{
 					case 0:
+						insert_gap_if_needed(); // Case 1b.
+						// Fall through.
+
 					case 1:
-						modify(span.begin(), span.end());
+						modify(span.begin(), span.end()); // Case 1a.
 						break;
 
 					default:
+						// Case 1a.
 						modify(span.begin(), span.begin() + gap_start + 1);
 						modify(span.begin() + gap_start + gap_length - 1, span.end());
 						break;
 				}
 
-				add_gaps();
-
-				// Shorten the gapmer from each end if possible.
-				if (gd.length && ((gap_length == 0 || 2 <= gap_start) || (gap_start + gap_length + 1U < str.size())))
+				// FIXME: Make this a function, use as part of case 4c.
+				if (3 <= str.size())
 				{
-					auto str_(str);
-
-					if (gap_start + gap_length + 1U < str.size())
+					if (0 == gap_length)
 					{
-						// Remove the last character.
-						str_.resize(str_.size() - 1);
-						gapmer_type const gg_(str_.data(), str_.size() - gap_length, gap_start, gap_length);
-						retval.values.insert(gg_);
-
-						// Restore for the branch below.
-						str_.resize(str_.size() + 1);
+						// Case 2.
+						// Replace each character that is not the first or the last with a gap, one at a time.
+						uint8_t const count(str.size() - 2);
+						for (uint8_t i{}; i < count; ++i)
+						{
+							// The constructor takes the number of defined characters as the second parameter.
+							add_gapmer(str, str.size(), 1 + i, 1);
+						}
 					}
-
-					if (0 == gap_length || 2 <= gap_start)
+					else
 					{
-						str_ <<= 1;
-						str_.resize(str_.size() - 1);
-						gapmer_type const gg_(str_.data(), str_.size() - gap_length, gap_start, gap_length);
-						// No need to compare to the gapmer generated in the branch above since values is a std::set.
-						retval.values.insert(gg_);
+						// Case 3a.
+						// Extend the gap if there is enough space.
+						if (2 <= gap_start)
+							add_gapmer(str, str.size(), gap_start - 1, gap_length + 1);
+
+						if (gap_start + gap_length + 1U < str.size())
+							add_gapmer(str, str.size(), gap_start, gap_length + 1);
 					}
 				}
 
-				// Replace the implicit gaps at each end with a defined character.
-				str.append(" ");
-				span = str.to_span();
-				modify_(span.rbegin(), true);
-
-				// One replacement suffices if the gapmer has zero length.
-				if (gd.length)
+				if (0 == gap_length)
 				{
-					str >>= 1;
-					modify_(span.begin(), true);
+					// Case 3b.
+					add_gapmer(str, str.size() - 1, 0, 0);
+					str_ = str;
+					str_ <<= 1;
+					add_gapmer(str_, str.size() - 1, 0, 0);
+				}
+				else
+				{
+					// Case 4a.
+					modify_(span.begin() + gap_start);
+					modify_(span.begin() + gap_start - 1 + gap_length);
+				}
+
+				// Cases 4b, 4c and 5.
+				{
+					str_ = str;
+
+					uint8_t const limit(gap_length ? 1 : max_edge_gap_length + 1);
+					auto gap_start_(gap_start);
+					auto gap_length_(gap_length);
+					for (uint8_t i{}; i < limit; ++i)
+					{
+						str_.append("-");
+						auto span_(str_.to_span());
+						modify__(str_, str_.size(), gap_start_, gap_length_, span_.rbegin());
+						gap_start_ = str.size();
+						gap_length_ = i + 1;
+					}
+
+					// There is a chance that we get the same string as by appending (for strings without gaps and i = 0),
+					// but since we insert to the std::set, it does not matter that much.
+					gap_start_ = gap_start;
+					gap_length_ = gap_length;
+					for (uint8_t i{}; i < limit; ++i)
+					{
+						str_ >>= 1;
+						auto span_(str_.to_span());
+						modify__(str_, str.size() + 1 + i, gap_start_, gap_length_, span_.begin());
+						gap_start_ = 1;
+						gap_length_ = i + 1;
+					}
+				}
+
+				// Case 6.
+				if (gap_length && (1U == gap_start || 1U + gap_start + gap_length == str.size()))
+				{
+					// Head.
+					if (1 == gap_start)
+					{
+						str_ = str;
+						for (uint8_t i(gap_length); i < max_edge_gap_length + 1; ++i)
+						{
+							str_.append(" ");
+							str_ >>= 1;
+							auto span_(str_.to_span());
+							span_[0] = span_[1];
+							span_[1] = '-';
+							add_gapmer(str_, str_.size(), 1, gap_length + i + 1);
+						}
+					}
+
+					// Tail.
+					if (1U + gap_start + gap_length == str.size())
+					{
+						str_ = str;
+						for (uint8_t i(gap_length); i < max_edge_gap_length + 1; ++i)
+						{
+							auto span_(str_.to_span());
+							char const cc(span_.back());
+							span_.back() = '-';
+							str_.append(cc); // span_ becomes invalid.
+							add_gapmer(str_, str_.size(), gap_start, gap_length + i + 1);
+						}
+					}
 				}
 
 				// Remove the input gapmer from the neighbourhood since its distance to itsef is zero, not one.
@@ -651,7 +736,7 @@ namespace sf {
 		gapmer_type const gg{gd};
 
 		std::set <gapmer_type, huddinge_neighbourhood <>::cmp> actual; // FIXME: Use a type parameter here.
-		gg.middle_gap_neighbours <false, false, false>([&](gapmer_type const gg_) {
+		gg.all_gap_neighbours <false, false, false>([&](gapmer_type const gg_) {
 			SF_EXPECT(gg_.is_valid());
 			actual.insert(gg_);
 		});
