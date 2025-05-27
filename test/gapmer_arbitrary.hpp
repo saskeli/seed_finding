@@ -395,7 +395,7 @@ namespace rc {
 				typedef sf::string_buffer <uint64_t> string_buffer_type;
 
 				constexpr static std::array const characters{'A', 'C', 'G', 'T'};
-				constexpr static uint8_t const max_edge_gap_length{3}; // FIXME: This should be ~5.
+				constexpr static uint8_t const max_edge_gap_length{5};
 
 				huddinge_neighbourhood_ <t_gapmer_data> retval;
 
@@ -413,16 +413,64 @@ namespace rc {
 					retval.values.insert(gg_);
 				});
 
-				auto const modify__([&add_gapmer](string_buffer_type const &sb, uint8_t const size, uint8_t const gap_start_, uint8_t const gap_length_, auto it){
-					auto &cc(*it);
-					auto const orig_cc(cc);
-					for (auto const cc_ : characters)
-					{
-						cc = cc_;
-						add_gapmer(sb, size, gap_start_, gap_length_);
+				auto const insert_or_extend_gap_run(
+					[&add_gapmer](
+						string_buffer_type &sb,
+						uint8_t const size,
+						uint8_t const gap_start_,
+						uint8_t const gap_length_
+					){
+						if (3 <= size)
+						{
+							if (0 == gap_length_)
+							{
+								// Cases 2 and 4c.
+								// Replace each character that is not the first or the last with a gap, one at a time.
+								uint8_t const count(size - 2);
+								for (uint8_t i{}; i < count; ++i)
+								{
+									auto const cc(sb[1 + i]);
+									sb[1 + i] = '-';
+									add_gapmer(sb, size, 1 + i, 1);
+									sb[1 + i] = cc;
+								}
+							}
+							else
+							{
+								// Case 3a.
+								// Extend the gap if there is enough space.
+								if (2 <= gap_start_)
+									add_gapmer(sb, size, gap_start_ - 1, gap_length_ + 1);
+
+								if (gap_start_ + gap_length_ + 1U < size)
+									add_gapmer(sb, size, gap_start_, gap_length_ + 1);
+							}
+						}
 					}
-					cc = orig_cc;
-				});
+				);
+
+				auto const modify__(
+					[&add_gapmer, &insert_or_extend_gap_run](
+						string_buffer_type &sb,
+						uint8_t const size,
+						uint8_t const gap_start_,
+						uint8_t const gap_length_,
+						auto it,
+						bool const should_insert_gaps = false
+					){
+						auto &cc(*it);
+						auto const orig_cc(cc);
+						for (auto const cc_ : characters)
+						{
+							cc = cc_;
+							add_gapmer(sb, size, gap_start_, gap_length_);
+
+							if (should_insert_gaps)
+								insert_or_extend_gap_run(sb, size, gap_start_, gap_length_);
+						}
+						cc = orig_cc;
+					}
+				);
 
 				auto const modify_([&](auto it){ modify__(str, str.size(), gap_start, gap_length, it); });
 
@@ -470,31 +518,8 @@ namespace rc {
 						break;
 				}
 
-				// FIXME: Make this a function, use as part of case 4c.
-				if (3 <= str.size())
-				{
-					if (0 == gap_length)
-					{
-						// Case 2.
-						// Replace each character that is not the first or the last with a gap, one at a time.
-						uint8_t const count(str.size() - 2);
-						for (uint8_t i{}; i < count; ++i)
-						{
-							// The constructor takes the number of defined characters as the second parameter.
-							add_gapmer(str, str.size(), 1 + i, 1);
-						}
-					}
-					else
-					{
-						// Case 3a.
-						// Extend the gap if there is enough space.
-						if (2 <= gap_start)
-							add_gapmer(str, str.size(), gap_start - 1, gap_length + 1);
-
-						if (gap_start + gap_length + 1U < str.size())
-							add_gapmer(str, str.size(), gap_start, gap_length + 1);
-					}
-				}
+				// Cases 2 and 3a.
+				insert_or_extend_gap_run(str, str.size(), gap_start, gap_length);
 
 				if (0 == gap_length)
 				{
@@ -515,14 +540,14 @@ namespace rc {
 				{
 					str_ = str;
 
-					uint8_t const limit(gap_length ? 1 : max_edge_gap_length + 1);
+					uint8_t const limit(gap_length ? 1 : max_edge_gap_length + 1); // Limit is one less b.c. modify__() is called s.t. gaps are added.
 					auto gap_start_(gap_start);
 					auto gap_length_(gap_length);
 					for (uint8_t i{}; i < limit; ++i)
 					{
 						str_.append("-");
 						auto span_(str_.to_span());
-						modify__(str_, str_.size(), gap_start_, gap_length_, span_.rbegin());
+						modify__(str_, str_.size(), gap_start_, gap_length_, span_.rbegin(), gap_length_ < gapmer_type::max_gap);
 						gap_start_ = str.size();
 						gap_length_ = i + 1;
 					}
@@ -535,7 +560,7 @@ namespace rc {
 					{
 						str_ >>= 1;
 						auto span_(str_.to_span());
-						modify__(str_, str.size() + 1 + i, gap_start_, gap_length_, span_.begin());
+						modify__(str_, str.size() + 1 + i, gap_start_, gap_length_, span_.begin(), gap_length_ < gapmer_type::max_gap);
 						gap_start_ = 1;
 						gap_length_ = i + 1;
 					}
