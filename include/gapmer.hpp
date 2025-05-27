@@ -92,7 +92,7 @@ class gapmer {
     return *this;
   }
 
-public:
+public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. For now they are public so that unit tests can access them.
   template <bool no_smaller, bool no_same, bool no_larger>
   void middle_gap_neighbours(auto&& callback) const {
     const uint64_t val = value();
@@ -386,9 +386,8 @@ public:
     }
   }
 
-private:
   template <bool no_smaller, bool no_same, bool no_larger>
-  void all_gap_neighbours(auto& callback) const {
+  void all_gap_neighbours(auto&& callback) const {
     const uint64_t val = value();
     const uint8_t len = length();
     const uint8_t gap_s = gap_start();
