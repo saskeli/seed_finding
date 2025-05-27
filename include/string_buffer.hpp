@@ -34,6 +34,7 @@ namespace sf {
 		void clear();
 		void assign(std::string_view sv);
 		void append(std::string_view sv);
+		void append(char cc) { append(std::string_view{&cc, 1}); }
 		void shift_left(uint64_t const amt);
 		void shift_right(uint64_t const amt);
 		std::span <char> to_span() { return {reinterpret_cast <char *>(data_.data()), size_}; }
@@ -41,6 +42,7 @@ namespace sf {
 		std::string_view to_string_view() const { return {reinterpret_cast <char const *>(data_.data()), size_}; }
 
 		char operator[](std::size_t idx) const { return 0xff & (data_[idx / sizeof(t_type)] >> (idx % sizeof(t_type) * CHAR_BIT)); }
+		char &operator[](std::size_t idx) { return to_span()[idx]; }
 		/* implicit */ operator std::string_view() const { return to_string_view(); }
 		string_buffer &operator=(std::string_view sv) { assign(sv); return *this; }
 		string_buffer &operator+=(std::string_view sv) { append(sv); return *this; }
