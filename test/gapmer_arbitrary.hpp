@@ -46,6 +46,7 @@ namespace {
 		void write_to_buffer(std::vector <uint64_t> &buffer) const;
 		uint8_t gap_start() const { return suffix_length ? length - suffix_length : 0; }
 		uint8_t suffix_start() const { return suffix_length ? gap_start() + gap_length : 0; }
+		uint8_t prefix_length() const { return suffix_length ? length - suffix_length : length; }
 	};
 
 
@@ -309,11 +310,23 @@ namespace rc {
 				auto gd_(gd);
 				if (gd.length < gapmer_data::gapmer_type::max_k)
 					++gd.length;
-				else
+				else if (2 <= gd.prefix_length())
 				{
 					// Make sure that the resulting gapmer is valid by removing the extra character.
 					--gd_.length;
 					gd_.sequence >>= 2;
+				}
+				else
+				{
+					RC_ASSERT(2 <= gd.suffix_length);
+					--gd_.length;
+					--gd_.suffix_length;
+					
+					// Remove the extra character.
+					uint64_t mask{};
+					mask = ~mask;
+					mask >>= 64 - (2 * gd_.length);
+					gd_.sequence &= mask;
 				}
 
 				return {gd, gd_};
