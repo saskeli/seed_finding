@@ -605,8 +605,11 @@ namespace rc {
 				});
 
 				// Case 6a.
-				str_ = str;
-				extend_both(str_, gap_start, gap_length);
+				if (gd.length < gapmer_type::max_k)
+				{
+					str_ = str;
+					extend_both(str_, gap_start, gap_length);
+				}
 
 				// Case 8.
 				{
@@ -670,14 +673,17 @@ namespace rc {
 				case 1:
 				{
 					// Case 4b.
-					auto &cc(*(span.begin() + gap_start));
-					auto const orig_cc(cc);
-					for (auto const cc_ : characters)
+					if (gd.length < gapmer_type::max_k)
 					{
-						cc = cc_;
-						add_gapmer(str, 0, 0);
-						insert_gap_if_needed(false);
-						cc = orig_cc;
+						auto &cc(*(span.begin() + gap_start));
+						auto const orig_cc(cc);
+						for (auto const cc_ : characters)
+						{
+							cc = cc_;
+							add_gapmer(str, 0, 0);
+							insert_gap_if_needed(false);
+							cc = orig_cc;
+						}
 					}
 					break;
 
@@ -685,8 +691,11 @@ namespace rc {
 
 				default:
 					// Case 4a.
-					modify_(str, gap_start + 1, gap_length - 1, span.begin() + gap_start);
-					modify_(str, gap_start, gap_length - 1, span.begin() + gap_start + gap_length - 1);
+					if (gd.length < gapmer_type::max_k)
+					{
+						modify_(str, gap_start + 1, gap_length - 1, span.begin() + gap_start);
+						modify_(str, gap_start, gap_length - 1, span.begin() + gap_start + gap_length - 1);
+					}
 					break;
 				}
 
@@ -725,7 +734,7 @@ namespace rc {
 						if (gap_length < gapmer_type::max_gap)
 						{
 							str_ = str;
-							extend_both(str_, gap_start - 1, gap_length + 1);
+							extend_both(str_, gap_start - 1, gap_length + 1); // Same as in 3a.
 						}
 
 						cc = cc_;
@@ -762,7 +771,7 @@ namespace rc {
 						if (gap_length < gapmer_type::max_gap)
 						{
 							str_ = str;
-							extend_both(str_, gap_start, gap_length + 1);
+							extend_both(str_, gap_start, gap_length + 1); // Same as in 3a.
 						}
 
 						cc = cc_;
