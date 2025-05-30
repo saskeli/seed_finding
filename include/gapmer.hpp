@@ -1,10 +1,14 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
+#include <bit>
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 #include <string>
+#include <unistd.h>
 
 #include "bits.hpp"
 #include "util.hpp"
@@ -811,6 +815,13 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
     }
   }
 
+  /// Writes the 2-bit compressed string representation to the given buffer.
+  /// When the span is dynamically sized, the caller is responsible for reserving
+  /// enough memory.
+  template <std::size_t t_n>
+  void write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span)
+  requires(2 * (max_k + max_gap) <= t_n);
+
  public:
   /// Construct an empty value.
   gapmer() : data_(0) {}
@@ -1258,6 +1269,9 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
     }
   }
 
+  /// Calculate the Huddinge distance.
+  uint16_t huddinge_distance(gapmer const other) const;
+
   /// Returns the sequence as std::string.
   std::string to_string() const {
     std::string ret;
@@ -1358,5 +1372,98 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
 
   std::bitset<64> bits() const { return data_; }
 };
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+template <std::size_t t_n>
+void gapmer <middle_gap_only, t_max_gap>::write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span)
+requires(2 * (max_k + max_gap) <= t_n)
+{
+	auto const gl(gap_length());
+	span.front() = suffix();
+	bits::shift_left(span, 2 * gl);
+	span.front() |= prefix();
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const other) const
+{
+	// Given this's and other's (gapped) lengths l_1 and l_2, we iterate over the l_1 + l_2 - 1
+	// alignments, check for matching characters with XOR and count them with PEXT and POPCOUNT.
+	// This could possibly be made faster by using large registers instead of arrays and applying SIMD.
+	auto const lglen{gap_length()};
+	auto const rglen{other.gap_length()};
+	auto const llen{length() + lglen};
+	auto const rlen{other.length() + rglen};
+	if (! (llen && rlen))
+		return std::max(llen, rlen);
+
+	// Set up the defined character masks.
+	auto const lplen{gap_start()};
+	auto const rplen{other.gap_start()};
+	auto const lslen{llen - lplen - lglen};
+	auto const rslen{rlen - rplen - rglen};
+	auto const lmask{~(~(~(uint64_t(-1) << lslen) << lglen) << lplen)};
+	auto const rmask{~(~(~(uint64_t(-1) << rslen) << rglen) << rplen)};
+
+	// Set up the buffers.
+	constexpr auto const max_aln_length(2 * (max_k + max_gap) - 1);
+	uint64_t buf1[2 * max_aln_length]{};
+	uint64_t buf2[2 * max_aln_length]{};
+	uint64_t maskbuf2[max_aln_length]{};
+	std::span b1s{buf1};
+	std::span b2s{buf2};
+	std::span m2s{maskbuf2};
+
+	// The longer one goes to buf1.
+	auto const m1([&](){
+		if (llen <= rlen)
+		{
+			write_2bit_coded_to_buffer(buf2);
+			other.write_2bit_coded_to_buffer(buf1);
+			m2s.front() = rmask;
+			bits::shift_left(buf2, rlen - 1);
+			bits::shift_left(m2s, rlen + rglen - 1);
+			return lmask;
+		}
+		else
+		{
+			write_2bit_coded_to_buffer(buf1);
+			other.write_2bit_coded_to_buffer(buf2);
+			m2s.front() = lmask;
+			bits::shift_left(buf2, llen - 1);
+			bits::shift_left(m2s, llen + lglen - 1);
+			return rmask;
+		}
+	}());
+
+	constexpr auto const pm1{0x5555'5555'5555'5555UL}; // PEXT mask 1
+	constexpr auto const pm2{0xAAAA'AAAA'AAAA'AAAAUL}; // PEXT mask 2
+	auto const count{llen + lglen + rlen + rglen - 1};
+	uint16_t max_score{};
+	for (std::size_t i{}; i < count; ++i)
+	{
+		// Compare.
+		auto const cm{b1s.front() ^ b2s.front()};
+		auto const p1{bits::pext(cm, pm1)};
+		auto const p2{bits::pext(cm, pm2)};
+		auto const cm_{p1 | p2}; // Get the non-matching character mask.
+
+		// Get the relevant characters.
+		auto const mm(m1 & m2s.front());
+		auto const cm__((~cm_) & mm);
+
+		// Update the score if needed.
+		uint16_t const score(std::popcount(cm__));
+		max_score = std::max(max_score, score);
+
+		// Shift the buffers.
+		bits::shift_right(b2s, 2);
+		bits::shift_right(m2s, 1);
+	}
+
+	return std::max(llen, rlen) - max_score;
+}
 
 }  // namespace sf
