@@ -1,6 +1,12 @@
 #include "include/seed_finder.hpp"
 
+#ifndef MAX_GAP
+#define MAX_GAP 5
+#endif
+
+#ifdef _OPENMP
 #include <omp.h>
+#endif
 #include <unistd.h>
 
 #include <iostream>
@@ -85,7 +91,11 @@ int main(int argc, char const* argv[]) {
   double p = 0.01;
   double p_ext = 0.01;
   double log_fold = 0.5;
+#ifdef _OPENMP
   uint64_t threads = omp_get_max_threads();
+#else
+  uint64_t threads = 1;
+#endif
   uint8_t max_k = 20;
   double mem_limit = available_gigs();
   bool print_help = false;
@@ -128,7 +138,9 @@ int main(int argc, char const* argv[]) {
     help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
     exit(1);
   }
+#ifdef _OPENMP
   omp_set_num_threads(threads);
+#endif
 
   mem_limit *= 1000;
   mem_limit *= 1000;

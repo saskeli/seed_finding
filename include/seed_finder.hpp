@@ -50,35 +50,35 @@ class seed_finder {
       }
       double p_extend = gsl_cdf_binomial_Q(b_sig, 0.25, a_sig);
       if (p_extend < p_ext_ && b_r < p_) {
-        if constexpr (debug) {
-          std::cerr << "        " << a.to_string() << " discarded by "
-                    << b.to_string() << "\n            (" << a_sig << ", "
-                    << a_bg << ") <-> (" << b_sig << ", " << b_bg
-                    << ")\n            with p_extend " << p_extend << std::endl;
-        }
-        return true;
-      }
-      if constexpr (debug) {
-        std::cerr << "        " << a.to_string() << " discards "
-                  << b.to_string() << "\n            (" << a_sig << ", " << a_bg
-                  << ") <-> (" << b_sig << ", " << b_bg
-                  << ")\n            with p_extend " << p_extend << std::endl;
-      }
-      return false;
-    }
-    if constexpr (debug) {
-      if (b_r < a_r) {
+#ifdef DEBUG
         std::cerr << "        " << a.to_string() << " discarded by "
                   << b.to_string() << "\n            (" << a_sig << ", " << a_bg
                   << ") <-> (" << b_sig << ", " << b_bg
-                  << ")\n            with p " << b_r << std::endl;
-      } else {
-        std::cerr << "        " << a.to_string() << " discards "
-                  << b.to_string() << "\n            (" << a_sig << ", " << a_bg
-                  << ") <-> (" << b_sig << ", " << b_bg
-                  << ")\n            with p " << b_r << std::endl;
+                  << ")\n            with p_extend " << p_extend << std::endl;
+#endif
+        return true;
       }
+#ifdef DEBUG
+      std::cerr << "        " << a.to_string() << " discards " << b.to_string()
+                << "\n            (" << a_sig << ", " << a_bg << ") <-> ("
+                << b_sig << ", " << b_bg << ")\n            with p_extend "
+                << p_extend << std::endl;
+#endif
+      return false;
     }
+#ifdef DEBUG
+    if (b_r < a_r) {
+      std::cerr << "        " << a.to_string() << " discarded by "
+                << b.to_string() << "\n            (" << a_sig << ", " << a_bg
+                << ") <-> (" << b_sig << ", " << b_bg
+                << ")\n            with p " << b_r << std::endl;
+    } else {
+      std::cerr << "        " << a.to_string() << " discards " << b.to_string()
+                << "\n            (" << a_sig << ", " << a_bg << ") <-> ("
+                << b_sig << ", " << b_bg << ")\n            with p " << b_r
+                << std::endl;
+    }
+#endif
     return b_r <= a_r;
   }
 
