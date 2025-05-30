@@ -606,9 +606,8 @@ namespace rc {
 							str_.resize(str_.size() + 1);
 							str_ >>= 1;
 							auto span_(str_.to_span());
-
-							using std::swap;
-							swap(span_[0], span_[1]);
+							span_[0] = span_[1];
+							span_[1] = '.';
 							add_gapmer(str_, 1, i + 1);
 						}
 					}
@@ -678,7 +677,7 @@ namespace rc {
 					break;
 				}
 
-				// Cases 3a, 3b, 6d, 7b.
+				// Cases 3a, 3b, 4d, 6d, 7b.
 				if (gap_length)
 				{
 					// Head.
@@ -702,15 +701,19 @@ namespace rc {
 						auto &cc(span[gap_start - 1]);
 						auto const cc_(cc);
 						cc = '.';
-						add_gapmer(str, gap_start - 1, gap_length + 1);
+						if (gap_length < gapmer_type::max_gap)
+							add_gapmer(str, gap_start - 1, gap_length + 1);
 
 						// Case 4d.
 						if (2 <= gap_length)
 							modify_(str, gap_start - 1, gap_length, span.begin() + gap_start + gap_length - 1);
 
 						// Case 6d.
-						str_ = str;
-						extend_both(str_, gap_start - 1, gap_length + 1);
+						if (gap_length < gapmer_type::max_gap)
+						{
+							str_ = str;
+							extend_both(str_, gap_start - 1, gap_length + 1);
+						}
 
 						cc = cc_;
 					}
@@ -735,15 +738,19 @@ namespace rc {
 						auto &cc(span[gap_start + gap_length]);
 						auto const cc_(cc);
 						cc = '.';
-						add_gapmer(str, gap_start, gap_length + 1);
+						if (gap_length < gapmer_type::max_gap)
+							add_gapmer(str, gap_start, gap_length + 1);
 
 						// Case 4d.
 						if (2 <= gap_length)
 							modify_(str, gap_start + 1, gap_length, span.begin() + gap_start);
 
 						// Case 6d.
-						str_ = str;
-						extend_both(str_, gap_start, gap_length + 1);
+						if (gap_length < gapmer_type::max_gap)
+						{
+							str_ = str;
+							extend_both(str_, gap_start, gap_length + 1);
+						}
 
 						cc = cc_;
 					}
