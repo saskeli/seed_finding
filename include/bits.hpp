@@ -5,11 +5,14 @@
 
 #pragma once
 
+#include <bit>
 #include <concepts>
+#include <climits>
+#include <csignal>
+#include <cstddef>
+#include <cstdint>
+#include <span>
 
-#if defined(__cpp_lib_byteswap)
-#	include <bit>
-#endif
 #if defined(__linux__)
 #	include <byteswap.h>
 #endif
@@ -109,6 +112,55 @@ namespace sf::bits {
 				return detail::pext_intrinsic(source, mask);
 			else
 				return detail::pext(source, mask);
+		}
+	}
+
+	template <std::unsigned_integral t_unsigned, std::size_t t_n>
+	constexpr inline void shift_left(std::span <t_unsigned, t_n> span, t_unsigned const count)
+	{
+		if (!count) return;
+
+		auto const value_bits{sizeof(t_unsigned) * CHAR_BIT};
+		assert(count < value_bits); // The general case has not been implemented.
+		auto const lower_mask([&]() constexpr {
+			t_unsigned mask{};
+			mask = ~mask;
+			mask >>= value_bits - count;
+		}());
+		auto const higher_mask(~lower_mask);
+
+		t_unsigned lower{};
+		for (auto &word : span)
+		{
+			auto word_(std::rotl(word, count));
+			word = word_ & higher_mask;
+			word |= lower;
+			lower = word_ & lower_mask;
+		}
+	}
+
+	template <std::unsigned_integral t_unsigned, std::size_t t_n>
+	constexpr inline void shift_right(std::span <t_unsigned, t_n> span, t_unsigned const count)
+	{
+		if (!count) return;
+
+		auto const value_bits{sizeof(t_unsigned) * CHAR_BIT};
+		assert(count < value_bits); // The general case has not been implemented.
+		auto const higher_mask([&]() constexpr {
+			t_unsigned mask{};
+			mask = ~mask;
+			mask <<= value_bits - count;
+		}());
+		auto const lower_mask(~higher_mask);
+
+		t_unsigned higher{};
+		for (auto it(span.rbegin()); it != span.rend(); ++it)
+		{
+			auto &word(it);
+			auto word_(std::rotr(word, count));
+			word = word_ & lower_mask;
+			word |= higher;
+			higher = word_ & higher_mask;
 		}
 	}
 }
