@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <bit>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
 #include <iterator>
@@ -369,28 +370,33 @@ namespace rc {
 				// characters and the first and last middle gap characters one by one. We then proceed to
 				// prepend and append one character.
 				//
-				// We first transform the string by adding the implicit gaps:
-				//
-				// i.   ACGT ~> -ACGT- (no initial gap run)
-				// ii.  GAT--TACA ~> -GAT--TACA- (has initial “non-edge” gap run)
-				// iii. G-ATTACA ~> -G-ATTACA- (has initial “edge” gap run)
-				//
 				// One modification may be done as follows.
-				// 1. By replacing one defined character with another, i.e. -ACGT- ~> -ACCT-
-				// 2. By replacing a non-boundary character with a gap, i.e. -ACGT- ~> -A-GT- in cases i and 4c.
+				// 1. By replacing one defined character with another, i.e. ACGT ~> ACCT
+				// 2. By replacing a non-boundary character with a gap, i.e.
+				//    (a) ACGT ~> A-GT (no initial gap run)
+				//    (b) in case 4b
 				// 3. By replacing a defined character on gap boundary with a gap, i.e.
-				// 	  (a) -GAT-TACA- ~> -GA--TACA-
-				//    (b) -ACGT- ~> --CGT- (no initial gap run)
-				//    (c) -A-CGT- ~> ---CGT- (has initial “edge” gap run)
+				// 	  (a) GAT-TACA ~> GA--TACA
+				//    (b) A-GT ~> GT
 				// 4. By replacing a gap character on gap boundary with a defined character, i.e.
-				//    (a) -GAT---TACA- ~> -GATC--TACA-
-				//    (b) -GAT---TACA- ~> -GAT---TACAA
-				//    (c) -ACGT- ~> AACGT- (no initial gap run)
-				// 5. In cases i, 3b and 4c by extending the gap run at one boundary up to five gap characters
-				//    and prepending or appending a defined character, i.e. -ACGT- ~> A--ACGT.
-				//    (Remember to check that for 3b the contracted strings do not match or process only either case.)
-				// 6. In case iii, by extending the gap run, i.e. -G-ATTACA- ~> -G--ATTACA-.
-				// 7. In cases 3a and 3c by extending the resulting string by one defined character and in case 3b by extending from the opposite end.
+				//    (a) GAT---TACA ~> GATC--TACA
+				//    (b) AC-T ~> ACGT
+				//    (c) in case 5b (either end)
+				//    (d) in case 3a (opposite end)
+				// 5. By contracting the string by one defined character, i.e.
+				//    (a) ACGT ~> CGT
+				//    (b) GAT--TACA ~> GAT--TAC
+				// 6. By extending the string by one character
+				//    (a) in the base case
+				//    (b) in case 2a
+				//    (c) in case 5 (opposite end only)
+				//    (d) in case 3
+				// 7. By prepending (appending) a string with a defined character followed (preceded) by an arbitrary number of gaps
+				//    (a) in the base case without initial gap run
+				//    (b) in case 3b
+				//    (c) in case 5a (this covers inserting arbitrary number of gaps to a string without an initial gap run)
+				// 8. If the string has a defined character followed (preceded) by a run of gap characters, arbitrarily extending
+				//    the gap run in the base case.
 				//
 				// We try to ensure correctness at the cost of speed.
 				typedef typename huddinge_neighbourhood_ <t_gapmer_data>::gapmer_type gapmer_type;
@@ -408,82 +414,33 @@ namespace rc {
 				str = gg.to_string();
 				auto span(str.to_span());
 
-				auto const add_gapmer([&retval](string_buffer_type const &sb, uint8_t const size, uint8_t const gap_start_, uint8_t const gap_length_){
+				auto const add_gapmer([&retval](string_buffer_type const &sb, uint8_t const gap_start_, uint8_t const gap_length_){
 					// The constructor takes the number of defined characters as the second parameter.
-					gapmer_type const gg_(sb.data(), size - gap_length_, gap_start_, gap_length_);
+					gapmer_type const gg_(sb.data(), sb.size() - gap_length_, gap_start_, gap_length_);
 					auto const expected(sb.to_string_view());
 					auto const actual(gg_.to_string());
 					RC_ASSERT(expected == actual);
 					RC_ASSERT(gg_.is_valid());
+
+					if (expected == "GACGCAAC")
+						std::cerr << "test\n";
+
 					retval.values.insert(gg_);
 				});
 
-				auto const insert_or_extend_gap_run(
-					[&add_gapmer](
-						string_buffer_type &sb,
-						uint8_t const size,
-						uint8_t const gap_start_,
-						uint8_t const gap_length_
-					){
-						if (3 <= size)
-						{
-							if (0 == gap_length_)
-							{
-								// Cases 2 and 4c.
-								// Replace each character that is not the first or the last with a gap, one at a time.
-								uint8_t const count(size - 2);
-								for (uint8_t i{}; i < count; ++i)
-								{
-									auto const cc(sb[1 + i]);
-									sb[1 + i] = '.';
-									add_gapmer(sb, size, 1 + i, 1);
-									sb[1 + i] = cc;
-								}
-							}
-							else
-							{
-								// Case 3a.
-								// Extend the gap if there is enough space.
-								if (2 <= gap_start_)
-								{
-									auto const pp(gap_start_ - 1);
-									auto const cc(sb[pp]);
-									sb[pp] = '.';
-									add_gapmer(sb, size, gap_start_ - 1, gap_length_ + 1);
-									sb[pp] = cc;
-								}
-
-								if (gap_start_ + gap_length_ + 1U < size)
-								{
-									auto const pp(gap_start_ + gap_length_);
-									auto const cc(sb[pp]);
-									sb[pp] = '.';
-									add_gapmer(sb, size, gap_start_, gap_length_ + 1);
-									sb[pp] = cc;
-								}
-							}
-						}
-					}
-				);
-
 				auto const modify_(
-					[&add_gapmer, &insert_or_extend_gap_run](
+					[&add_gapmer](
 						string_buffer_type &sb,
 						uint8_t const gap_start_,
 						uint8_t const gap_length_,
-						auto it,
-						bool const should_insert_gaps = false
+						auto it
 					){
-						auto const size(sb.size());
 						auto &cc(*it);
 						auto const orig_cc(cc);
 						for (auto const cc_ : characters)
 						{
 							cc = cc_;
-							add_gapmer(sb, size, gap_start_, gap_length_);
-
-							if (should_insert_gaps)
-								insert_or_extend_gap_run(sb, size, gap_start_, gap_length_);
+							add_gapmer(sb, gap_start_, gap_length_);
 						}
 						cc = orig_cc;
 					}
@@ -505,153 +462,350 @@ namespace rc {
 					}
 				);
 
-				auto const insert_gap_if_needed([&add_gapmer](string_buffer_type &sb, uint8_t const gap_length_){
-					if (0 == gap_length_ && 3 <= sb.size())
-					{
+				auto const extend_both(
+					[&modify_](
+						string_buffer_type &sb,
+						uint8_t const gap_start_,
+						uint8_t const gap_length_
+					){
+						// Case 6.
+						// Restores sb.
+
+						// Tail.
+						sb.append('.');
 						auto span_(sb.to_span());
-						auto it(span_.begin() + 1);
-						auto const end(span_.end() - 1);
-						uint8_t pos{1};
-						while (it != end)
+						modify_(sb, gap_start_, gap_length_, span_.rbegin());
+
+						// Head.
+						sb >>= 1;
+						span_[0] = '.';
+						modify_(sb, gap_start_ ? gap_start_ + 1 : 0, gap_length_, span_.begin());
+
+						// Restore.
+						sb <<= 1;
+						sb.resize(sb.size() - 1);
+					}
+				);
+
+				auto const extend_with_edge_gap_run(
+					[&modify_](string_buffer_type &sb){
+						// Case 7.
+						// Does not restore sb.
+						auto const orig_size(sb.size());
+
+						// Tail.
 						{
-							auto const cc(*it);
-							*it = '.';
-							add_gapmer(sb, sb.size(), pos, 1);
-							*it = cc;
-							++it;
-							++pos;
+							sb.append('.');
+							for (uint8_t i{}; i < max_edge_gap_length; ++i)
+							{
+								sb.append('.');
+								auto span_(sb.to_span());
+								modify_(sb, orig_size, i + 1, span_.rbegin());
+							}
+						}
+
+						// Head.
+						sb >>= 1;
+
+						{
+							auto span_(sb.to_span());
+							span_[0] = '.';
+						}
+
+						for (uint8_t i{}; i < max_edge_gap_length; ++i)
+						{
+							sb.resize(orig_size + i + 2);
+							sb >>= 1;
+							auto span_(sb.to_span());
+							span_[0] = '.';
+							modify_(sb, 1, i + 1, span_.begin());
+						}
+					}
+				);
+
+				auto const extend_middle_gap_both_ends(
+					[&add_gapmer, &modify_](
+						string_buffer_type &sb,
+						uint8_t const gap_start_,
+						uint8_t const gap_length_
+					){
+						// Case 4c.
+						switch (gap_length_)
+						{
+							case 0:
+								break;
+
+							case 1:
+							{
+								auto span_(sb.to_span());
+								modify_(sb, 0, 0, span_.begin() + gap_start_);
+								break;
+							}
+
+							default:
+							{
+								auto span_(sb.to_span());
+								modify_(sb, gap_start_ + 1, gap_length_ - 1, span_.begin() + gap_start_);
+								modify_(sb, gap_start_ , gap_length_ - 1, span_.begin() + gap_start_ + gap_length_ - 1);
+
+#if 0 // FIXME: delete this?
+								auto it(span_.begin() + gap_start_ + gap_length_ - 1);
+								for (auto const cc_ : characters)
+								{
+									auto &cc(*it);
+									auto const orig_cc(cc);
+
+									cc = cc_;
+									add_gapmer(sb, gap_start_, gap_length_ - 1);
+									uint8_t const gap_start__(2 == gap_length_ ? 0 : gap_start_ + 1);
+									modify_(sb, gap_start__, gap_length_ - 2, span_.begin() + gap_start_);
+									cc = orig_cc;
+								}
+#endif
+								break;
+							}
+						}
+					}
+				);
+
+				auto const insert_gap_if_needed([&](bool const should_extend){
+					// Cases 2a, 4b, 6b.
+					if (3 <= str.size())
+					{
+						auto const limit(str.size() - 2);
+						for (std::size_t i{}; i < limit; ++i)
+						{
+							auto const cc_(span[i + 1]);
+							span[i + 1] = '.';
+							add_gapmer(str, i + 1, 1);
+
+							if (should_extend)
+							{
+								// Case 6b.
+								str_ = str;
+								extend_both(str_, i + 1, 1);
+							}
+
+							span[i + 1] = cc_;
 						}
 					}
 				});
 
-				auto const extend([gap_start, gap_length, &str_, &modify_](bool const should_insert_or_extend_gaps = true){
-					auto const orig_size(str_.size());
-					uint8_t const limit(gap_length ? 1 : max_edge_gap_length + 1); // First iteration adds a defined character.
-					auto gap_start_(gap_start);
-					auto gap_length_(gap_length);
-					for (uint8_t i{}; i < limit; ++i)
+				// Case 6a.
+				str_ = str;
+				extend_both(str_, gap_start, gap_length);
+
+				// Case 8.
+				{
+					if (1 == gap_start)
 					{
-						str_.append(".");
-						auto span_(str_.to_span());
-						modify_(str_, gap_start_, gap_length_, span_.rbegin(), should_insert_or_extend_gaps && gap_length_ < gapmer_type::max_gap);
-						gap_start_ = orig_size;
-						gap_length_ = i + 1;
+						// Head.
+						str_ = str;
+						for (auto i{gap_length}; i < max_edge_gap_length; ++i)
+						{
+							str_.resize(str_.size() + 1);
+							str_ >>= 1;
+							auto span_(str_.to_span());
+
+							using std::swap;
+							swap(span_[0], span_[1]);
+							add_gapmer(str_, 1, i + 1);
+						}
 					}
 
-					// There is a chance that we get the same string as by appending (for strings without gaps and i = 0),
-					// but since we insert to the std::set, it does not matter that much.
-					str_.resize(orig_size);
-					gap_start_ = gap_length ? gap_start + 1 : 0;
-					gap_length_ = gap_length;
-					for (uint8_t i{}; i < limit; ++i)
+					if (gap_start + gap_length + 1U == str.size())
 					{
-						str_.resize(str_.size() + 1);
-						str_ >>= 1;
-						auto span_(str_.to_span());
-						span_[0] = '.';
-						modify_(str_, gap_start_, gap_length_, span_.begin(), should_insert_or_extend_gaps && gap_length_ < gapmer_type::max_gap);
-						gap_start_ = 1;
-						gap_length_ = i + 1;
-					}
-				});
+						// Tail.
+						str_ = str;
+						for (auto i{gap_length}; i < max_edge_gap_length; ++i)
+						{
+							str_.append('.');
+							auto span_(str_.to_span());
 
-				// Case 1.
+							using std::swap;
+							swap(*span_.rbegin(), *(span_.rbegin() + 1));
+							add_gapmer(str_, gap_start, i + 1);
+						}
+					}
+				}
+
+				// Cases 1, 2a, 6b and 7a.
 				if (0 == gap_length)
 				{
-					insert_gap_if_needed(str, gap_length);
+					// Case 1.
 					modify(str, 0, 0, span.begin(), span.end());
+
+					// Cases 2a and 6b.
+					insert_gap_if_needed(true);
+
+					// Case 7a.
+					str_ = str;
+					extend_with_edge_gap_run(str_);
 				}
 				else
 				{
+					// Case 1.
 					modify(str, gap_start, gap_length, span.begin(), span.begin() + gap_start);
 					modify(str, gap_start, gap_length, span.begin() + gap_start + gap_length, span.end());
 				}
 
-				// Cases 2 and 3a.
-				insert_or_extend_gap_run(str, str.size(), gap_start, gap_length);
-
-				// Cases 3b and 4a.
+				// Cases 4a and 4b (and 2b).
 				switch (gap_length)
 				{
-					case 0:
+				case 0:
+					break;
+
+				case 1:
+				{
+					// Case 4b.
+					auto &cc(*(span.begin() + gap_start));
+					auto const orig_cc(cc);
+					for (auto const cc_ : characters)
 					{
-						// Case 3b.
-						str_ = str;
-						str_.resize(str_.size() - 1);
-						add_gapmer(str_, str_.size(), 0, 0);
-						extend(false);
-
-						str_ = str;
-						str_ <<= 1;
-						str_.resize(str_.size() - 1);
-						add_gapmer(str_, str_.size(), 0, 0);
-						extend(false);
-
-						break;
+						cc = cc_;
+						add_gapmer(str, 0, 0);
+						insert_gap_if_needed(false);
+						cc = orig_cc;
 					}
+					break;
 
-					case 1:
-					{
-						// Case 4a.
-						modify_(str, 0, 0, span.begin() + gap_start);
-						break;
-					}
-
-					default:
-					{
-						// Case 4a.
-						modify_(str, gap_start + 1, gap_length - 1, span.begin() + gap_start);
-						modify_(str, gap_start, gap_length - 1, span.begin() + gap_start - 1 + gap_length);
-						break;
-					}
 				}
 
-				// Cases 4b, 4c and 5.
-				str_ = str;
-				extend();
+				default:
+					// Case 4a.
+					modify_(str, gap_start + 1, gap_length - 1, span.begin() + gap_start);
+					modify_(str, gap_start, gap_length - 1, span.begin() + gap_start + gap_length - 1);
+					break;
+				}
 
-				// Cases 3c and 6.
-				if (gap_length && (1U == gap_start || 1U + gap_start + gap_length == str.size()))
+				// Cases 3a, 3b, 6d, 7b.
+				if (gap_length)
 				{
 					// Head.
 					if (1 == gap_start)
 					{
-						// Case 3c.
+						// Case 3b.
 						str_ = str;
 						str_ <<= gap_start + gap_length;
 						str_.resize(str.size() - gap_start - gap_length);
-						add_gapmer(str_, str_.size(), 0, 0);
+						add_gapmer(str_, 0, 0);
 
-						// Case 6.
+						// Case 6d.
+						extend_both(str_, 0, 0);
+
+						// Case 7b.
+						extend_with_edge_gap_run(str_);
+					}
+					else
+					{
+						// Case 3a.
+						auto &cc(span[gap_start - 1]);
+						auto const cc_(cc);
+						cc = '.';
+						add_gapmer(str, gap_start - 1, gap_length + 1);
+
+						// Case 4d.
+						if (2 <= gap_length)
+							modify_(str, gap_start - 1, gap_length, span.begin() + gap_start + gap_length - 1);
+
+						// Case 6d.
 						str_ = str;
-						for (uint8_t i(gap_length); i < max_edge_gap_length; ++i)
+						extend_both(str_, gap_start - 1, gap_length + 1);
+
+						cc = cc_;
+					}
+
+					// Tail.
+					if (gap_start + gap_length + 1U == str.size())
+					{
+						// Case 3b.
+						str_ = str;
+						str_.resize(gap_start);
+						add_gapmer(str_, 0, 0);
+
+						// Case 6d.
+						extend_both(str_, 0, 0);
+
+						// Case 7b.
+						extend_with_edge_gap_run(str_);
+					}
+					else
+					{
+						// Case 3a.
+						auto &cc(span[gap_start + gap_length]);
+						auto const cc_(cc);
+						cc = '.';
+						add_gapmer(str, gap_start, gap_length + 1);
+
+						// Case 4d.
+						if (2 <= gap_length)
+							modify_(str, gap_start + 1, gap_length, span.begin() + gap_start);
+
+						// Case 6d.
+						str_ = str;
+						extend_both(str_, gap_start, gap_length + 1);
+
+						cc = cc_;
+					}
+				}
+
+				// Cases 4c, 5, 6c and 7c.
+				if (1 < str.size())
+				{
+					// Head.
+					if (0 == gap_start || 1 < gap_start)
+					{
+						// Case 5.
+						str_ = str;
+						str_ <<= 1;
+						str_.resize(str.size() - 1);
+						add_gapmer(str_, gap_length ? gap_start - 1 : 0, gap_length);
+
+						// Case 6c.
+						str_.append('.');
+						auto span_(str_.to_span());
+						modify_(str_, gap_length ? gap_start - 1 : 0, gap_length, span_.rbegin());
+						str_.resize(str_.size() - 1);
+
+						if (gap_start)
 						{
-							str_.append(".");
-							str_ >>= 1;
-							auto span_(str_.to_span());
-							span_[0] = span_[1];
-							span_[1] = '.';
-							add_gapmer(str_, str_.size(), 1, i + 1);
+							// Case 4c.
+							extend_middle_gap_both_ends(str_, gap_start - 1, gap_length);
+						}
+						else
+						{
+							// Case 7c.
+							extend_with_edge_gap_run(str_);
 						}
 					}
 
 					// Tail.
-					if (1U + gap_start + gap_length == str.size())
+					if (gap_start + gap_length + 1U < str.size())
 					{
-						// Case 3c.
 						str_ = str;
-						str_.resize(gap_start);
-						add_gapmer(str_, str_.size(), 0, 0);
 
-						// Case 6.
-						str_ = str;
-						for (uint8_t i(gap_length); i < max_edge_gap_length; ++i)
 						{
+							// Case 6c.
+							str_ >>= 1;
+							str_[0] = '.';
 							auto span_(str_.to_span());
-							char const cc(span_.back());
-							span_.back() = '.';
-							str_.append(cc); // span_ becomes invalid.
-							add_gapmer(str_, str_.size(), gap_start, i + 1);
+							modify_(str_, gap_length ? gap_start + 1 : 0, gap_length, span_.begin());
+							str_ <<= 1;
+						}
+
+						// Case 5.
+						str_.resize(str_.size() - 1);
+						add_gapmer(str_, gap_start, gap_length);
+
+						if (gap_start)
+						{
+							// Case 4c.
+							extend_middle_gap_both_ends(str_, gap_start, gap_length);
+						}
+						else
+						{
+							// Case 7c.
+							extend_with_edge_gap_run(str_);
 						}
 					}
 				}
