@@ -321,7 +321,7 @@ namespace rc {
 					RC_ASSERT(2 <= gd.suffix_length);
 					--gd_.length;
 					--gd_.suffix_length;
-					
+
 					// Remove the extra character.
 					uint64_t mask{};
 					mask = ~mask;
@@ -560,21 +560,6 @@ namespace rc {
 								auto span_(sb.to_span());
 								modify_(sb, gap_start_ + 1, gap_length_ - 1, span_.begin() + gap_start_);
 								modify_(sb, gap_start_ , gap_length_ - 1, span_.begin() + gap_start_ + gap_length_ - 1);
-
-#if 0 // FIXME: delete this?
-								auto it(span_.begin() + gap_start_ + gap_length_ - 1);
-								for (auto const cc_ : characters)
-								{
-									auto &cc(*it);
-									auto const orig_cc(cc);
-
-									cc = cc_;
-									add_gapmer(sb, gap_start_, gap_length_ - 1);
-									uint8_t const gap_start__(2 == gap_length_ ? 0 : gap_start_ + 1);
-									modify_(sb, gap_start__, gap_length_ - 2, span_.begin() + gap_start_);
-									cc = orig_cc;
-								}
-#endif
 								break;
 							}
 						}
