@@ -657,18 +657,16 @@ namespace rc {
 
 				case 1:
 				{
-					// Case 4b.
-					if (gd.length < gapmer_type::max_k)
+					// Cases 4b and 2b.
+					auto &cc(*(span.begin() + gap_start));
+					auto const orig_cc(cc);
+					for (auto const cc_ : characters)
 					{
-						auto &cc(*(span.begin() + gap_start));
-						auto const orig_cc(cc);
-						for (auto const cc_ : characters)
-						{
-							cc = cc_;
+						cc = cc_;
+						if (gd.length < gapmer_type::max_k)
 							add_gapmer(str, 0, 0);
-							insert_gap_if_needed(false);
-							cc = orig_cc;
-						}
+						insert_gap_if_needed(false);
+						cc = orig_cc;
 					}
 					break;
 
@@ -1000,18 +998,22 @@ namespace sf {
 			std::set_difference(hn.values.begin(), hn.values.end(), actual.begin(), actual.end(), std::back_inserter(not_found_in_actual));
 			std::set_difference(actual.begin(), actual.end(), hn.values.begin(), hn.values.end(), std::back_inserter(extra_elements_in_actual));
 
+			auto const output([gg](auto const gg_){
+				std::cerr << gg_.to_string() << " (H = " << gg.huddinge_distance(gg_) << ")\n";
+			});
+
 			if (!not_found_in_actual.empty())
 			{
 				std::cerr << "* Elements not found in actual:\n";
 				for (auto const gg_ : not_found_in_actual)
-					std::cerr << gg_.to_string() << '\n';
+					output(gg_);
 			}
 
 			if (!extra_elements_in_actual.empty())
 			{
 				std::cerr << "* Extra elements in actual:\n";
 				for (auto const gg_ : extra_elements_in_actual)
-					std::cerr << gg_.to_string() << '\n';
+					output(gg_);
 			}
 
 			SF_FAIL();
