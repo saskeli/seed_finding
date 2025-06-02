@@ -645,6 +645,50 @@ TEST(gapmer, HuddingeDistance3) {
 TEST(gapmer, HuddingeDistance4) {
 	typedef sf::string_buffer<uint64_t> string_buffer_type;
 	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("AAAAA");
+	string_buffer_type const rhs("AAAAAC");
+	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
+	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance5) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("CCCCC");
+	string_buffer_type const rhs("CCCCCG");
+	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
+	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance6) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("AAAAA");
+	string_buffer_type const rhs("AAAAA....A");
+	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+	gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
+	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance7) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("GGGGG");
+	string_buffer_type const rhs("GGGGG....G");
+	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+	gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
+	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance8) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
 	string_buffer_type const lhs("TGTTTTGTGCATAATCG...TCGC");
 	string_buffer_type const rhs("CCATGTTTTGTGCATAAT...CGTCGC");
 	gapmer_type const lhs_(lhs.data(), lhs.size() - 3, 17, 3);
