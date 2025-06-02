@@ -1438,8 +1438,8 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 		}
 	}());
 
-	constexpr auto const pm1{0x5555'5555'5555'5555UL}; // PEXT mask 1
-	constexpr auto const pm2{0xAAAA'AAAA'AAAA'AAAAUL}; // PEXT mask 2
+	constexpr auto const pm1{UINT64_C(0x5555'5555'5555'5555)}; // PEXT mask 1
+	constexpr auto const pm2{UINT64_C(0xAAAA'AAAA'AAAA'AAAA)}; // PEXT mask 2
 	std::size_t const count{llen + lglen + rlen + rglen - 1U};
 	uint16_t max_score{};
 	for (std::size_t i{}; i < count; ++i)
