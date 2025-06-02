@@ -51,6 +51,8 @@ sig_fasta    Signal fasta file.
 -t <val>     Total number of threads to use. ()"
             << threads << R"(
 -s           Disable smoothing of counted mers.
+-f           Disable mer filtering.
+--ouput_mers Ouput found siginificant mers to standard out.
 -mem <val>   Memory limit for lookup tables (ish). ()"
             << gigs << " GB).\n\n"
             << std::endl;
@@ -59,29 +61,60 @@ sig_fasta    Signal fasta file.
 
 const constexpr uint16_t max_gap = MAX_GAP;
 
-void filter_seeds(auto& seeds, auto callback) {
+void filter_seeds(auto& seeds) {
   std::cerr << "Filtering.." << std::endl;
   uint64_t discarded_seeds = 0;
-  auto it = seeds.begin();
-  for (; it != seeds.end(); ++it) {
-    auto iit = it;
-    ++iit;
-    bool is_partial = false;
-    for (; iit != seeds.end(); ++iit) {
-      auto a = (*it).g;
-      auto b = (*iit).g;
-      if (a.aligns_to(b)) {
-        is_partial = true;
+  size_t trg = 0;
+  for (size_t i = 0; i < seeds.size(); ++i) {
+    bool keep = true;
+    for (size_t j = i + 1; j < seeds.size(); ++j) {
+      if (seeds[i].g.aligns_to(seeds[j].g)) {
+        keep = false;
         ++discarded_seeds;
         break;
       }
     }
-    if (not is_partial) {
-      auto seed = *it;
-      callback(seed);
+    if (keep) {
+      seeds[trg++] = seeds[i];
     }
   }
+  seeds.resize(trg);
   std::cerr << discarded_seeds << " seeds discarded in filtering" << std::endl;
+}
+
+template <bool middle_gap_only, bool do_smoothing, bool do_filtering>
+void run(const char* sig_path, const char* bg_path, double p, double log_fold,
+         uint8_t max_k, double memory_limit, double p_ext, bool output_mers) {
+  sf::seed_finder<true, max_gap, do_smoothing, do_filtering> sf(
+      sig_path, bg_path, p, log_fold, max_k, memory_limit, p_ext);
+  sf.find_seeds();
+  auto seeds = sf.get_seeds();
+  if constexpr (do_filtering) {
+    filter_seeds(seeds);
+  }
+  if (output_mers) {
+    for (auto seed : seeds) {
+      std::cout << seed.g.to_string() << "\t" << seed.p << "\t("
+                << seed.sig_count - 1 << ", " << seed.bg_count - 1 << ")"
+                << std::endl;
+    }
+  }
+  auto alignment = sf.align();
+  for (size_t i = 0; i < alignment.size(); ++i) {
+    if (i >= 4) {
+      break;
+    }
+    std::string fname("align/al_");
+    fname.append(std::to_string(i));
+    fname.append(".fa");
+    std::cerr << "Dumping " << alignment[i].size() << " sequences to " << fname << std::endl;
+    std::ofstream outf(fname);
+    size_t seq_c = 0;
+    for (auto s : alignment[i]) {
+      outf << "> seq " << seq_c << "\n";
+      outf << s << "\n";
+    }
+  }
 }
 
 int main(int argc, char const* argv[]) {
@@ -100,6 +133,8 @@ int main(int argc, char const* argv[]) {
   double mem_limit = available_gigs();
   bool print_help = false;
   bool enable_smoothing = true;
+  bool enable_filtering = true;
+  bool output_mers = false;
   for (int i = 1; i < argc; ++i) {
     std::string arg(argv[i]);
     if (arg == "-h") {
@@ -122,6 +157,10 @@ int main(int argc, char const* argv[]) {
       threads = std::stoull(argv[++i]);
     } else if (arg == "-s") {
       enable_smoothing = false;
+    } else if (arg == "-f") {
+      enable_filtering = false;
+    } else if (arg == "--output_mers") {
+      output_mers = true;
     } else if (arg.starts_with("-")) {
       std::cerr << "Invalid parameter \"" << arg << "\"." << std::endl;
       print_help = true;
@@ -145,41 +184,43 @@ int main(int argc, char const* argv[]) {
   mem_limit *= 1000;
   mem_limit *= 1000;
   mem_limit *= 1000;
-  auto cb = [](auto s) {
-    std::cout << s.g.to_string() << "\t" << s.p << "\t(" << s.sig_count - 1
-              << ", " << s.bg_count - 1 << ")" << std::endl;
-  };
-  if (enable_smoothing) {
-    if (middle_gap_only) {
-      sf::seed_finder<true, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
-                                        log_fold, max_k, mem_limit, p_ext);
-      sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+
+  if (enable_filtering) {
+    if (enable_smoothing) {
+      if (middle_gap_only) {
+        run<true, true, true>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                              max_k, mem_limit, p_ext, output_mers);
+      } else {
+        run<false, true, true>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                               max_k, mem_limit, p_ext, output_mers);
+      }
     } else {
-      sf::seed_finder<false, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
-                                         log_fold, max_k, mem_limit, p_ext);
-      sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+      if (middle_gap_only) {
+        run<true, false, true>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                               max_k, mem_limit, p_ext, output_mers);
+      } else {
+        run<false, false, true>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                                max_k, mem_limit, p_ext, output_mers);
+      }
     }
   } else {
-    if (middle_gap_only) {
-      sf::seed_finder<true, max_gap, false> sf(sig_path.c_str(),
-                                               bg_path.c_str(), p, log_fold,
-                                               max_k, mem_limit, p_ext);
-      sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+    if (enable_smoothing) {
+      if (middle_gap_only) {
+        run<true, true, false>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                               max_k, mem_limit, p_ext, output_mers);
+      } else {
+        run<false, true, false>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                                max_k, mem_limit, p_ext, output_mers);
+      }
     } else {
-      sf::seed_finder<false, max_gap, false> sf(sig_path.c_str(),
-                                                bg_path.c_str(), p, log_fold,
-                                                max_k, mem_limit, p_ext);
-      sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+      if (middle_gap_only) {
+        run<true, false, false>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                                max_k, mem_limit, p_ext, output_mers);
+      } else {
+        run<false, false, false>(sig_path.c_str(), bg_path.c_str(), p, log_fold,
+                                 max_k, mem_limit, p_ext, output_mers);
+      }
     }
   }
-
   return 0;
 }

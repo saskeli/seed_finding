@@ -3,8 +3,10 @@
 #include <gsl/gsl_cdf.h>
 #include <gsl/gsl_sf_gamma.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <regex>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -16,7 +18,8 @@
 
 namespace sf {
 
-template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true>
+template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true,
+          bool enable_filter = true>
 class seed_finder {
  private:
   typedef gapmer<middle_gap_only, max_gap> G;
@@ -123,14 +126,20 @@ class seed_finder {
     }
     uint64_t a = sig_bg_a.sig_counts[offset + v] + 1;
     uint64_t b = sig_bg_a.bg_counts[offset + v] + 1;
-    if (a * sig_size_ <= fold_lim_ * b * bg_size_) {
+    if (a * bg_size_ <= fold_lim_ * b * sig_size_) {
 #pragma omp critical(a_bv)
       sig_bg_a.discarded[offset + v] = true;
+      return;
     }
     double r = gsl_sf_beta_inc(a, b, x_);
     if (r > p_) {
 #pragma omp critical(a_bv)
       sig_bg_a.discarded[offset + v] = true;
+      return;
+    }
+    if constexpr (not enable_filter) {
+#pragma omp critical
+      seeds_.push_back({g, r, a, b});
       return;
     }
     auto callback_a = [&](G o) {
@@ -407,7 +416,7 @@ class seed_finder {
       }
       sig_size_ += len;
     }
-    seq_io::Reader br(sig_path_);
+    seq_io::Reader br(bg_path_);
     br.enable_reverse_complements();
     while (true) {
       uint64_t len = br.get_next_read_to_buffer();
@@ -417,6 +426,9 @@ class seed_finder {
       bg_size_ += len;
     }
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
+    std::cerr << "Background " << bg_path_ << " with length " << bg_size_ << std::endl;
+    std::cerr << "Background " << sig_path_ << " with length " << sig_size_ << std::endl;
+    std::cerr << "X = " << x_ << std::endl;
   }
 
   void find_seeds() {
@@ -456,7 +468,9 @@ class seed_finder {
         seeds_.push_back(p.second);
       }
       a.clear();
-      filter(b);
+      if (enable_filter) {
+        filter(b);
+      }
       a.swap(b);
       std::cerr << int(k) - 1 << " -> " << seeds_.size() << " seeds."
                 << std::endl;
@@ -471,6 +485,120 @@ class seed_finder {
       std::cerr << int(k_lim_) << " -> " << seeds_.size() << " seeds."
                 << std::endl;
     }
+  }
+
+  std::vector<std::vector<std::string>> align() {
+    typedef std::pair<G, int> P;
+    std::vector<std::vector<std::string>> ret;
+    if (seeds_.size() == 0) {
+      return ret;
+    }
+    std::vector<bool> done(seeds_.size(), false);
+    int offset;
+    bool rev_comp;
+    for (size_t i = seeds_.size() - 1; i > 0; --i) {
+      if (done[i]) {
+        continue;
+      }
+      done[i] = true;
+      std::vector<P> aligns;
+      G seed_seed = seeds_[i].g;
+      int min_align = 0;
+      int max_fill = seed_seed.length() + seed_seed.gap_length();
+      aligns.push_back({seed_seed, 0});
+      for (size_t j = 0; j < aligns.size(); ++j) {
+        seed_seed = aligns[j].first;
+        int seed_offset = aligns[j].second;
+        int s_len = seed_seed.length();
+        int s_gapl = seed_seed.gap_length();
+        for (size_t k = 0; k < i; ++k) {
+          if (done[k]) {
+            continue;
+          }
+          G cand = seeds_[k].g;
+          if (cand.template aligns_to<true, false, true>(seed_seed, &offset,
+                                                         &rev_comp)) {
+            done[k] = true;
+            if (rev_comp) {
+              cand = cand.reverse_complement();
+            }
+            aligns.push_back({cand, seed_offset + offset});
+          } else if (seed_seed.template aligns_to<true, false, true>(
+                         cand, &offset, &rev_comp)) {
+            done[k] = true;
+            int c_len = cand.length();
+            int c_gapl = cand.gap_length();
+            if (rev_comp) {
+              cand = cand.reverse_complement();
+              offset = seed_offset - c_len - c_gapl + s_len + s_gapl + offset;
+              aligns.push_back({cand, offset});
+              min_align = std::min(min_align, offset);
+              max_fill = std::max(max_fill, offset + c_len + c_gapl);
+            } else {
+              //   .......
+              // GCGCAAAACG
+              //     AAAA   2, 4
+              // offset = seed_seed.offset - offset;
+              offset = seed_offset - offset;
+              aligns.push_back({cand, offset});
+              min_align = std::min(min_align, offset);
+              max_fill = std::max(max_fill, offset + c_len + c_gapl);
+            }
+          }
+        }
+      }
+      std::sort(aligns.begin(), aligns.end(), [](const P& lhs, const P& rhs) {
+        return lhs.first.length() < rhs.first.length();
+      });
+      size_t trg = 1;
+      for (size_t j = trg; j < aligns.size(); ++j) {
+        bool keep = true;
+        for (size_t k = 0; k < trg; ++k) {
+          if (aligns[k].first.aligns_to(aligns[j].first)) {
+            keep = false;
+            break;
+          }
+        }
+        if (keep) {
+          aligns[trg++] = aligns[j];
+        }
+      }
+      aligns.resize(trg);
+      std::string reg = "(";
+      for (size_t j = 0; j < aligns.size(); ++j) {
+        if (j > 0) {
+          reg.push_back('|');
+        }
+        auto al = aligns[j];
+        for (int k = min_align; k < al.second; ++k) {
+          reg.push_back('.');
+        }
+        std::string nucs = al.first.to_string();
+        reg.append(nucs);
+        for (int k = nucs.size() + al.second; k < max_fill; ++k) {
+          reg.push_back('.');
+        }
+      }
+      reg.push_back(')');
+      std::vector<std::string> msa;
+      std::regex rex(reg);
+      seq_io::Reader sr(sig_path_);
+      sr.enable_reverse_complements();
+      while (true) {
+        uint64_t len = sr.get_next_read_to_buffer();
+        if (len == 0) {
+          break;
+        }
+        std::string read(sr.read_buf, len);
+        auto e = std::sregex_iterator();
+        auto m = std::sregex_iterator(read.begin(), read.end(), rex);
+        for (; m != e; ++m) {
+          msa.push_back(m->str());
+        }
+      }
+      ret.push_back(msa);
+    }
+    return ret;
   }
 
   const std::vector<Res>& get_seeds() const { return seeds_; }

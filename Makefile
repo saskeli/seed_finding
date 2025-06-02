@@ -57,7 +57,7 @@ huddinge_deb: huddinge.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
 seed_finder_deb: seed_finder.cpp $(HEADERS) | $(SDSL_DIR)
-	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
+	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) -fopenmp $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
 
 clean:
 	rm -f huddinge huddinge_deb seed_finder seed_finder_deb comp

@@ -16,19 +16,33 @@
 #endif
 
 namespace sf {
+
+std::vector<uint64_t> vec_from_string(const std::string& s) {
+  if (s.empty()) return {};
+
+  std::vector<uint64_t> vec(8U * (s.length() - 1) +
+                            1);  // Causes the string to be not NUL-terminated.
+  char* ptr = reinterpret_cast<char*>(vec.data());
+  for (uint16_t i = 0; i < s.size(); ++i) {
+    ptr[i] = s[i];
+  }
+  return vec;
+}
+
 template <bool middle_gap_only = false, uint16_t t_max_gap = 5>
 class gapmer {
-
   // Public constructor synopsis:
   // gapmer();
   // gapmer(const uint64_t * s, uint8_t k);
   // gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length);
   // gapmer(uint64_t v, uint8_t k);
-  // gapmer(const uint64_t *s, uint8_t k, uint8_t gap_start, uint8_t gap_length);
+  // gapmer(const uint64_t *s, uint8_t k, uint8_t gap_start, uint8_t
+  // gap_length);
 
  public:
   const static constexpr uint64_t max_k = 24;
   const static constexpr uint16_t max_gap = t_max_gap;
+
  private:
   const static constexpr uint64_t ONE = 1;
   const static constexpr uint64_t value_mask = (ONE << (max_k * 2)) - 1;
@@ -36,9 +50,10 @@ class gapmer {
   const static constexpr uint64_t pext_mask = 0x0606060606060606;
   const static constexpr uint64_t meta_mask = 0b11111;
 
-  // data_ formatted as follows. We denote M = max_k. The length does not include the gap length.
-  // The value is stored such that the rightmost character is at position zero, the next one at
-  // position 2 and so on. Note that the padding must be zeroed to make operator== etc. work.
+  // data_ formatted as follows. We denote M = max_k. The length does not
+  // include the gap length. The value is stored such that the rightmost
+  // character is at position zero, the next one at position 2 and so on. Note
+  // that the padding must be zeroed to make operator== etc. work.
   //
   //  0                    2M           2M + 5       2M + 10      2M + 15  63
   // +--------------------+------------+------------+------------+-----------+
@@ -850,7 +865,8 @@ class gapmer {
   }
 
   /// Construct from the given character data ([ACGT.]*) aligned to 8 bytes.
-  gapmer(const uint64_t* d_ptr, uint8_t k, uint8_t gap_start, uint8_t gap_length)
+  gapmer(const uint64_t* d_ptr, uint8_t k, uint8_t gap_start,
+         uint8_t gap_length)
       : data_(0) {
     if (gap_start == 0) {
       *this = gapmer(d_ptr, k);
@@ -1053,8 +1069,14 @@ class gapmer {
   ///     and this’s prefix is a suffix of other’s prefix and this’s suffix is a
   ///     prefix of other’s suffix or 2.3 both gap lengths are zero and this is
   ///     a substring of other.
-  template <bool compare_rc = true, bool debug = false>
-  bool aligns_to(gapmer other) const {
+  template <bool compare_rc = true, bool debug = false,
+            bool output_offset = false>
+  bool aligns_to(gapmer other, int* out = nullptr,
+                 bool* is_rc = nullptr) const {
+    if constexpr (output_offset) {
+      assert(out != nullptr);
+      assert(is_rc != nullptr);
+    }
     if constexpr (debug) {
       std::cerr << "Aligns_to comparison " << to_string() << " to\n"
                 << other.to_string() << std::endl;
@@ -1063,10 +1085,15 @@ class gapmer {
     uint16_t o_len = other.length();
     if (len == o_len) {
       if (other.data_ == data_) {
+        if constexpr (output_offset) {
+          *out = 0;
+          *is_rc = not compare_rc;
+        }
         return true;
       }
       if constexpr (compare_rc) {
-        return aligns_to<false, debug>(other.reverse_complement());
+        return reverse_complement()
+            .template aligns_to<false, debug, output_offset>(other, out, is_rc);
       }
       return false;
     }
@@ -1111,6 +1138,10 @@ class gapmer {
             }
           }
           if (ok) {
+            if constexpr (output_offset) {
+              *out = offset >= o_gs ? offset + o_gl : offset;
+              *is_rc = not compare_rc;
+            }
             return true;
           }
         }
@@ -1136,13 +1167,19 @@ class gapmer {
                 break;
               }
             }
-            if (ok) {
-              return true;
+          }
+          if (ok) {
+            if constexpr (output_offset) {
+              *out = offset;
+              *is_rc = not compare_rc;
             }
+            return true;
           }
         }
         if constexpr (compare_rc) {
-          return aligns_to<false, debug>(other.reverse_complement());
+          return reverse_complement()
+              .template aligns_to<false, debug, output_offset>(other, out,
+                                                               is_rc);
         }
         return false;
       }
@@ -1169,11 +1206,16 @@ class gapmer {
         std::cerr << "\t" << matches << std::endl;
       }
       if (matches) {
+        if constexpr (output_offset) {
+          *out = offset;
+          *is_rc = not compare_rc;
+        }
         return true;
       }
     }
     if constexpr (compare_rc) {
-      return reverse_complement().template aligns_to<false, debug>(other);
+      return reverse_complement()
+          .template aligns_to<false, debug, output_offset>(other, out, is_rc);
     }
     return false;
   }
@@ -1210,8 +1252,8 @@ class gapmer {
   /// Get the encoded value.
   uint64_t value() const { return data_ & value_mask; }
 
-  /// For a non-gapped gapmer, returns a copy of it with c appended and the leftmost character removed.
-  /// If this is empty, returns an empty gapmer.
+  /// For a non-gapped gapmer, returns a copy of it with c appended and the
+  /// leftmost character removed. If this is empty, returns an empty gapmer.
   gapmer next(char c) const {
 #ifdef DEBUG
     assert(gap_length() == 0);
@@ -1222,7 +1264,9 @@ class gapmer {
     return (data_ & ~value_mask) | v;
   }
 
-  /// For a gapped gapmer, returns a copy of it with c1 and c2 appended respectively to the prefix and to the suffix, with the leftmost characters removed.
+  /// For a gapped gapmer, returns a copy of it with c1 and c2 appended
+  /// respectively to the prefix and to the suffix, with the leftmost characters
+  /// removed.
   gapmer next(char c1, char c2) const {
 #ifdef DEBUG
     assert(gap_length() > 0);
@@ -1277,7 +1321,8 @@ class gapmer {
     return ret;
   }
 
-  /// Returns true iff. this is lexicographically equal or smaller than its reverse complement.
+  /// Returns true iff. this is lexicographically equal or smaller than its
+  /// reverse complement.
   // FIXME: is the statement above true?
   bool is_canonical() const {
     uint8_t a = 0;
@@ -1335,7 +1380,7 @@ class gapmer {
                 << std::endl;
       return false;
     }
-    if (len && g_s >= len) { // g_s == 0 && g_l > 0 checked earlier.
+    if (len && g_s >= len) {  // g_s == 0 && g_l > 0 checked earlier.
       std::cerr << "Gapmer validation error gap start >= " << int(len) << ": "
                 << int(g_s) << std::endl;
       return false;
@@ -1350,7 +1395,8 @@ class gapmer {
     if (not valid) {
       std::cerr << "Gapmer validation error:\n"
                 << to_string() << ", " << bits() << "\n"
-                << o.to_string() << ", " << o.bits() << "\nShould be equal" << std::endl;
+                << o.to_string() << ", " << o.bits() << "\nShould be equal"
+                << std::endl;
     }
     return valid;
   }
