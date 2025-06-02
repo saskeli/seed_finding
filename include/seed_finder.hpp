@@ -123,7 +123,7 @@ class seed_finder {
     }
     uint64_t a = sig_bg_a.sig_counts[offset + v] + 1;
     uint64_t b = sig_bg_a.bg_counts[offset + v] + 1;
-    if (a * sig_size_ <= fold_lim_ * b * bg_size_) {
+    if (a * bg_size_ <= fold_lim_ * b * sig_size_) {
 #pragma omp critical(a_bv)
       sig_bg_a.discarded[offset + v] = true;
     }
@@ -407,7 +407,7 @@ class seed_finder {
       }
       sig_size_ += len;
     }
-    seq_io::Reader br(sig_path_);
+    seq_io::Reader br(bg_path_);
     br.enable_reverse_complements();
     while (true) {
       uint64_t len = br.get_next_read_to_buffer();
@@ -417,6 +417,9 @@ class seed_finder {
       bg_size_ += len;
     }
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
+    std::cerr << "Background " << bg_path_ << " with length " << bg_size_ << std::endl;
+    std::cerr << "Background " << sig_path_ << " with length " << sig_size_ << std::endl;
+    std::cerr << "X = " << x_ << std::endl;
   }
 
   void find_seeds() {
