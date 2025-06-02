@@ -820,7 +820,7 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
   /// enough memory.
   template <std::size_t t_n>
   void write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span) const
-  requires(2 * (max_k + max_gap) <= t_n);
+  requires((2U * (max_k + max_gap) + 7U) / 8U <= t_n);
 
  public:
   /// Construct an empty value.
@@ -1377,12 +1377,14 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <std::size_t t_n>
 void gapmer <middle_gap_only, t_max_gap>::write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span) const
-requires(2 * (max_k + max_gap) <= t_n)
+requires((2U * (max_k + max_gap) + 7U) / 8U <= t_n)
 {
+	auto const ll(length());
+	auto const gs(gap_start());
 	auto const gl(gap_length());
-	span.front() = suffix();
-	bits::shift_left(span, 2U * gl);
-	span.front() |= prefix();
+	span.front() = prefix();
+	bits::shift_left(span, 2U * (ll - gs + gl)); // Prefix length + gap length
+	span.front() |= suffix();
 }
 
 
@@ -1392,26 +1394,26 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 	// Given this's and other's (gapped) lengths l_1 and l_2, we iterate over the l_1 + l_2 - 1
 	// alignments, check for matching characters with XOR and count them with PEXT and POPCOUNT.
 	// This could possibly be made faster by using large registers instead of arrays and applying SIMD.
-	auto const lglen{gap_length()};
-	auto const rglen{other.gap_length()};
-	auto const llen{length() + lglen};
-	auto const rlen{other.length() + rglen};
+	auto const llen{length()};
+	auto const rlen{other.length()};
 	if (! (llen && rlen))
 		return std::max(llen, rlen);
 
 	// Set up the defined character masks.
 	auto const lplen{gap_start()};
 	auto const rplen{other.gap_start()};
-	auto const lslen{llen - lplen - lglen};
-	auto const rslen{rlen - rplen - rglen};
-	auto const lmask{~(~(~(uint64_t(-1) << lslen) << lglen) << lplen)};
-	auto const rmask{~(~(~(uint64_t(-1) << rslen) << rglen) << rplen)};
+	auto const lglen{gap_length()};
+	auto const rglen{other.gap_length()};
+	auto const lslen{llen - lplen};
+	auto const rslen{rlen - rplen};
+	auto const lmask{~(~(~(uint64_t(-1) << lplen) << lglen) << lslen)};
+	auto const rmask{~(~(~(uint64_t(-1) << rplen) << rglen) << rslen)};
 
 	// Set up the buffers.
-	constexpr auto const max_aln_length(2 * (max_k + max_gap) - 1);
-	uint64_t buf1[2 * max_aln_length]{};
-	uint64_t buf2[2 * max_aln_length]{};
-	uint64_t maskbuf2[max_aln_length]{};
+	constexpr auto const max_aln_length(2 * (max_k + max_gap) - 1U);
+	uint64_t buf1[(2 * max_aln_length + 7) / 8]{};
+	uint64_t buf2[(2 * max_aln_length + 7) / 8]{};
+	uint64_t maskbuf2[(max_aln_length + 7) / 8]{};
 	std::span b1s{buf1};
 	std::span b2s{buf2};
 	std::span m2s{maskbuf2};
@@ -1423,7 +1425,7 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 			write_2bit_coded_to_buffer(b2s);
 			other.write_2bit_coded_to_buffer(b1s);
 			m2s.front() = rmask;
-			bits::shift_left(b2s, rlen - 1U);
+			bits::shift_left(b2s, 2 * (rlen + rglen - 1U));
 			bits::shift_left(m2s, rlen + rglen - 1U);
 			return lmask;
 		}
@@ -1432,14 +1434,14 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 			write_2bit_coded_to_buffer(b1s);
 			other.write_2bit_coded_to_buffer(b2s);
 			m2s.front() = lmask;
-			bits::shift_left(b2s, llen - 1U);
+			bits::shift_left(b2s, 2 * (llen + lglen - 1U));
 			bits::shift_left(m2s, llen + lglen - 1U);
 			return rmask;
 		}
 	}());
 
-	constexpr auto const pm1{0x5555'5555'5555'5555UL}; // PEXT mask 1
-	constexpr auto const pm2{0xAAAA'AAAA'AAAA'AAAAUL}; // PEXT mask 2
+	constexpr auto const pm1{UINT64_C(0x5555'5555'5555'5555)}; // PEXT mask 1
+	constexpr auto const pm2{UINT64_C(0xAAAA'AAAA'AAAA'AAAA)}; // PEXT mask 2
 	std::size_t const count{llen + lglen + rlen + rglen - 1U};
 	uint16_t max_score{};
 	for (std::size_t i{}; i < count; ++i)

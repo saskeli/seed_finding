@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include "../include/gapmer.hpp"
+#include "../include/string_buffer.hpp"
 #include "../include/util.hpp"
 
 namespace sf {
@@ -607,6 +608,49 @@ TEST(gapmer, Align5) {
   gapmer<true, 5> o(vec.data(), 12);
   bool res = g.template aligns_to(o);
   ASSERT_TRUE(res);
+}
+
+TEST(gapmer, HuddingeDistance1) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const sb("ACGT");
+	gapmer_type const lhs_(sb.data(), sb.size(), 0, 0);
+	gapmer_type const rhs_(sb.data(), sb.size(), 0, 0);
+	ASSERT_EQ(0, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(0, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance2) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("ACGT");
+	string_buffer_type const rhs("A.GT");
+	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+	gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 1, 1);
+	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance3) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("ACGT");
+	string_buffer_type const rhs("AC.T");
+	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+	gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 2, 1);
+	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance4) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("TGTTTTGTGCATAATCG...TCGC");
+	string_buffer_type const rhs("CCATGTTTTGTGCATAAT...CGTCGC");
+	gapmer_type const lhs_(lhs.data(), lhs.size() - 3, 17, 3);
+	gapmer_type const rhs_(rhs.data(), rhs.size() - 3, 18, 3);
+	ASSERT_EQ(5, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(5, rhs_.huddinge_distance(lhs_));
 }
 
 }  // namespace sf
