@@ -634,6 +634,17 @@ TEST(gapmer, HuddingeDistance2) {
 TEST(gapmer, HuddingeDistance3) {
 	typedef sf::string_buffer<uint64_t> string_buffer_type;
 	typedef sf::gapmer<> gapmer_type;
+	string_buffer_type const lhs("ACGT");
+	string_buffer_type const rhs("AC.T");
+	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+	gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 2, 1);
+	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_));
+	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_));
+}
+
+TEST(gapmer, HuddingeDistance4) {
+	typedef sf::string_buffer<uint64_t> string_buffer_type;
+	typedef sf::gapmer<> gapmer_type;
 	string_buffer_type const lhs("TGTTTTGTGCATAATCG...TCGC");
 	string_buffer_type const rhs("CCATGTTTTGTGCATAAT...CGTCGC");
 	gapmer_type const lhs_(lhs.data(), lhs.size() - 3, 17, 3);
