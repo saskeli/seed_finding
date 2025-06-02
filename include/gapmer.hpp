@@ -1424,19 +1424,19 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 		{
 			write_2bit_coded_to_buffer(b2s);
 			other.write_2bit_coded_to_buffer(b1s);
-			m2s.front() = rmask;
+			m2s.front() = lmask;
 			bits::shift_left(b2s, 2 * (rlen + rglen - 1U));
 			bits::shift_left(m2s, rlen + rglen - 1U);
-			return lmask;
+			return rmask;
 		}
 		else
 		{
 			write_2bit_coded_to_buffer(b1s);
 			other.write_2bit_coded_to_buffer(b2s);
-			m2s.front() = lmask;
+			m2s.front() = rmask;
 			bits::shift_left(b2s, 2 * (llen + lglen - 1U));
 			bits::shift_left(m2s, llen + lglen - 1U);
-			return rmask;
+			return lmask;
 		}
 	}());
 
