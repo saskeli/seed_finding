@@ -6,9 +6,18 @@
 #pragma once
 
 #include <exception>			// IWYU pragma: keep // Needed by RapidCheck.
+#include <iostream>
 
 #include <gtest/gtest.h>		// IWYU pragma: export
 #include <rapidcheck/gtest.h>	// IWYU pragma: export
+
+namespace sf {
+	// For adding a breakpoint.
+	inline void log_rc_expect(char const *condition)
+	{
+		std::cerr << "Condition " << condition << " evaluates to false.\n";
+	}
+}
 
 #if defined(SF_REPORT_TESTED_VALUE_DISTRIBUTION) && SF_REPORT_TESTED_VALUE_DISTRIBUTION
 #	define SF_RC_TAG(...) RC_TAG(__VA_ARGS__)
@@ -25,7 +34,7 @@
 	RC_GTEST_TYPED_FIXTURE_PROP(FIXTURE_PREFIX##_rc_fixture, TEST, TEST_PARAMS)
 
 // Implementation of EXPECT for RapidCheck.
-#define SF_RC_EXPECT(CONDITION) do { if (!(CONDITION)) { sf_rc_retval = false; std::cerr << "Condition " << #CONDITION << " evaluates to false.\n"; } } while (false)
+#define SF_RC_EXPECT(CONDITION) do { if (!(CONDITION)) { sf_rc_retval = false; log_rc_expect(#CONDITION); } } while (false)
 
 // RapidCheck seems to repeatedly test with empty values in some cases.
 // We would like to do so but only once, so we use GoogleTest for the empty case.
