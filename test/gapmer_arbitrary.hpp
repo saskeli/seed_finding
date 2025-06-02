@@ -639,8 +639,11 @@ namespace rc {
 					insert_gap_if_needed(true);
 
 					// Case 7a.
-					str_ = str;
-					extend_with_edge_gap_run(str_);
+					if (gd.length < gapmer_type::max_k)
+					{
+						str_ = str;
+						extend_with_edge_gap_run(str_);
+					}
 				}
 				else
 				{
