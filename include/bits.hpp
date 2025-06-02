@@ -6,6 +6,7 @@
 #pragma once
 
 #include <bit>
+#include <cassert>
 #include <concepts>
 #include <climits>
 #include <csignal>
@@ -115,21 +116,22 @@ namespace sf::bits {
 		}
 	}
 
-	template <std::unsigned_integral t_unsigned, std::size_t t_n>
-	constexpr inline void shift_left(std::span <t_unsigned, t_n> span, t_unsigned const count)
+	template <std::unsigned_integral t_value, std::size_t t_n, std::unsigned_integral t_count>
+	constexpr inline void shift_left(std::span <t_value, t_n> span, t_count const count)
 	{
 		if (!count) return;
 
-		auto const value_bits{sizeof(t_unsigned) * CHAR_BIT};
+		auto const value_bits{sizeof(t_value) * CHAR_BIT};
 		assert(count < value_bits); // The general case has not been implemented.
 		auto const lower_mask([&]() constexpr {
-			t_unsigned mask{};
+			t_value mask{};
 			mask = ~mask;
 			mask >>= value_bits - count;
+			return mask;
 		}());
 		auto const higher_mask(~lower_mask);
 
-		t_unsigned lower{};
+		t_value lower{};
 		for (auto &word : span)
 		{
 			auto word_(std::rotl(word, count));
@@ -139,24 +141,25 @@ namespace sf::bits {
 		}
 	}
 
-	template <std::unsigned_integral t_unsigned, std::size_t t_n>
-	constexpr inline void shift_right(std::span <t_unsigned, t_n> span, t_unsigned const count)
+	template <std::unsigned_integral t_value, std::size_t t_n, std::unsigned_integral t_count>
+	constexpr inline void shift_right(std::span <t_value, t_n> span, t_count const count)
 	{
 		if (!count) return;
 
-		auto const value_bits{sizeof(t_unsigned) * CHAR_BIT};
+		auto const value_bits{sizeof(t_value) * CHAR_BIT};
 		assert(count < value_bits); // The general case has not been implemented.
 		auto const higher_mask([&]() constexpr {
-			t_unsigned mask{};
+			t_value mask{};
 			mask = ~mask;
 			mask <<= value_bits - count;
+			return mask;
 		}());
 		auto const lower_mask(~higher_mask);
 
-		t_unsigned higher{};
+		t_value higher{};
 		for (auto it(span.rbegin()); it != span.rend(); ++it)
 		{
-			auto &word(it);
+			auto &word(*it);
 			auto word_(std::rotr(word, count));
 			word = word_ & lower_mask;
 			word |= higher;
