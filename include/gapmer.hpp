@@ -819,7 +819,7 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
   /// When the span is dynamically sized, the caller is responsible for reserving
   /// enough memory.
   template <std::size_t t_n>
-  void write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span)
+  void write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span) const
   requires(2 * (max_k + max_gap) <= t_n);
 
  public:
@@ -1376,12 +1376,12 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <std::size_t t_n>
-void gapmer <middle_gap_only, t_max_gap>::write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span)
+void gapmer <middle_gap_only, t_max_gap>::write_2bit_coded_to_buffer(std::span <uint64_t, t_n> span) const
 requires(2 * (max_k + max_gap) <= t_n)
 {
 	auto const gl(gap_length());
 	span.front() = suffix();
-	bits::shift_left(span, 2 * gl);
+	bits::shift_left(span, 2U * gl);
 	span.front() |= prefix();
 }
 
@@ -1420,27 +1420,27 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 	auto const m1([&](){
 		if (llen <= rlen)
 		{
-			write_2bit_coded_to_buffer(buf2);
-			other.write_2bit_coded_to_buffer(buf1);
+			write_2bit_coded_to_buffer(b2s);
+			other.write_2bit_coded_to_buffer(b1s);
 			m2s.front() = rmask;
-			bits::shift_left(buf2, rlen - 1);
-			bits::shift_left(m2s, rlen + rglen - 1);
+			bits::shift_left(b2s, rlen - 1U);
+			bits::shift_left(m2s, rlen + rglen - 1U);
 			return lmask;
 		}
 		else
 		{
-			write_2bit_coded_to_buffer(buf1);
-			other.write_2bit_coded_to_buffer(buf2);
+			write_2bit_coded_to_buffer(b1s);
+			other.write_2bit_coded_to_buffer(b2s);
 			m2s.front() = lmask;
-			bits::shift_left(buf2, llen - 1);
-			bits::shift_left(m2s, llen + lglen - 1);
+			bits::shift_left(b2s, llen - 1U);
+			bits::shift_left(m2s, llen + lglen - 1U);
 			return rmask;
 		}
 	}());
 
 	constexpr auto const pm1{0x5555'5555'5555'5555UL}; // PEXT mask 1
 	constexpr auto const pm2{0xAAAA'AAAA'AAAA'AAAAUL}; // PEXT mask 2
-	auto const count{llen + lglen + rlen + rglen - 1};
+	std::size_t const count{llen + lglen + rlen + rglen - 1U};
 	uint16_t max_score{};
 	for (std::size_t i{}; i < count; ++i)
 	{
@@ -1459,8 +1459,8 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 		max_score = std::max(max_score, score);
 
 		// Shift the buffers.
-		bits::shift_right(b2s, 2);
-		bits::shift_right(m2s, 1);
+		bits::shift_right(b2s, 2U);
+		bits::shift_right(m2s, 1U);
 	}
 
 	return std::max(llen, rlen) - max_score;
