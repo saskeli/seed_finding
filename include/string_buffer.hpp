@@ -27,6 +27,9 @@ namespace sf {
 		std::size_t				size_{};
 
 	public:
+		string_buffer() = default;
+		explicit string_buffer(std::string_view sv) { assign(sv); }
+
 		t_type const *data() const { return data_.data(); }
 		bool empty() const { return 0 == size_; }
 		std::size_t size() const { return size_; }
