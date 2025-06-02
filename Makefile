@@ -4,7 +4,7 @@ ifndef MAX_GAP
 MAX_GAP = 10
 endif
 
-CFLAGS = -static -static-libgcc -static-libstdc++ -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=x86-64 -DMAX_GAP=$(MAX_GAP)
+CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)
 
 PERF_FLAGS = -Ofast -DNDEBUG -fopenmp
 TEST_PERF_FLAGS = -O0 -g -DDEBUG
