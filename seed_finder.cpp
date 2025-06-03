@@ -46,10 +46,10 @@ sig_fasta    Signal fasta file.
 -lf <val>    Discard all mers with log fold change smaller than this ()"
             << log_fold << R"().
 -h           Print this and terminate. Overrides all other options.
--mk <val>    Maximum mer length. ()"
+-mk <val>    Maximum mer length in [6, 24] range. ()"
             << max_k << R"().
 -t <val>     Total number of threads to use. ()"
-            << threads << R"(
+            << threads << R"()
 -s           Disable smoothing of counted mers.
 -mem <val>   Memory limit for lookup tables (ish). ()"
             << gigs << " GB).\n\n"
@@ -135,6 +135,11 @@ int main(int argc, char const* argv[]) {
   }
   if (bg_path.size() == 0 || sig_path.size() == 0) {
     std::cerr << "Input fasta files are required." << std::endl;
+    help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
+    exit(1);
+  }
+  if (max_k < 6 || max_k > 24) {
+    std::cerr << "invalide value for maximum k: " << max_k << ", shoudl be in [6, 24] range." << std::endl;
     help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
     exit(1);
   }
