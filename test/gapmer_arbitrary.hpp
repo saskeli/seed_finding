@@ -1054,10 +1054,17 @@ namespace sf {
 
 
 	// FIXME: Test other gapmer types.
+	typedef huddinge_neighbourhood_ <
+		gapmer_data_ <
+			gapmer_min_length_constraint{5},
+			gapmer_max_length_constraint{huddinge_neighbourhood <>::gapmer_type::max_k - 1}  // FIXME: Use a type parameter here.
+		>
+	> huddinge_neighbourhood_test_type;
+
 	SF_RC_TEST_PROP(
 		gapmer_arbitrary,
 		GenerateHuddingeNeighbourhood,
-		huddinge_neighbourhood_ <gapmer_data_ <gapmer_min_length_constraint{5}>>,
+		huddinge_neighbourhood_test_type,
 		huddinge_neighbourhood <> const &hn,
 		(hn.gd.length, hn.gd.gap_length)
 	)

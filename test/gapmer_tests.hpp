@@ -721,8 +721,8 @@ TEST(gapmer, HuddingeNeighbourhood1) {
 TEST(gapmer, HuddingeNeighbourhood2) {
 	typedef sf::string_buffer<uint64_t> string_buffer_type;
 	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const ss("AAAAAAAAAAAAAAAAAAAAAAAA");
-	gapmer_type gg(ss.data(), 24, 0, 0);
+	string_buffer_type const ss("CCCCCCCCCCCCCCCCCCCCCCC");
+	gapmer_type gg(ss.data(), 23, 0, 0);
 	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
 		EXPECT_EQ(1, gg.huddinge_distance(gg_)) << gg.to_string() << " (length: " << gg.length() << "), " << gg_.to_string() << " (length: " << gg_.length() << ")\n" << gg.bits() << '\n' << gg_.bits();
 	});
@@ -731,8 +731,8 @@ TEST(gapmer, HuddingeNeighbourhood2) {
 TEST(gapmer, HuddingeNeighbourhood3) {
 	typedef sf::string_buffer<uint64_t> string_buffer_type;
 	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const ss("TGCTCAT..TAGGAAGCCGCCTTGAA");
-	gapmer_type gg(ss.data(), 24, 7, 2);
+	string_buffer_type const ss("TGCTCAT..TAGGAAGCCGCCTTGA");
+	gapmer_type gg(ss.data(), 23, 7, 2);
 	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
 		EXPECT_EQ(1, gg.huddinge_distance(gg_)) << gg.to_string() << " (length: " << gg.length() << "), " << gg_.to_string() << " (length: " << gg_.length() << ")\n" << gg.bits() << '\n' << gg_.bits();
 	});
