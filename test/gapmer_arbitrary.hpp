@@ -14,6 +14,7 @@
 #include <iterator>
 #include <ostream>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 #include "test.hpp"
 #include "../include/gapmer.hpp"
@@ -28,6 +29,66 @@ namespace {
 		char value{};
 
 		/* implicit */ operator char() const { return value; }
+	};
+
+
+	constexpr static inline uint8_t const GAPMER_MAX_SUFFIX_LENGTH_DEFAULT{UINT8_MAX - 1};
+
+
+	// The purpose of the following is to make it nicer to specify constraints for producing gapmer_data.
+	template <typename> struct pointer_to_data_member_traits {};
+
+	template <typename t_data_member, typename t_class>
+	struct pointer_to_data_member_traits <t_data_member t_class::*>
+	{
+		typedef t_class class_type;
+		typedef t_data_member data_member_type;
+	};
+
+	template <typename t_data_member_ptr>
+	using pointer_to_data_member_t = pointer_to_data_member_traits <t_data_member_ptr>::data_member_type;
+
+
+	struct gapmer_data_config_base
+	{
+		uint8_t min_length{};
+		uint8_t max_length{sf::gapmer <>::max_k};
+		uint8_t min_suffix_length{};
+		uint8_t max_suffix_length{GAPMER_MAX_SUFFIX_LENGTH_DEFAULT};
+	};
+
+
+	template <typename t_type, t_type gapmer_data_config_base::*t_member>
+	struct gapmer_data_constraint_tpl
+	{
+		t_type value{};
+
+		constexpr gapmer_data_constraint_tpl(t_type value_): value{value_} {};
+		constexpr void assign(gapmer_data_config_base &config) const { config.*t_member = value; }
+	};
+
+	template <auto t_data_member_ptr>
+	using gapmer_data_constraint_t = gapmer_data_constraint_tpl <pointer_to_data_member_t <decltype(t_data_member_ptr)>, t_data_member_ptr>;
+
+	typedef gapmer_data_constraint_t <&gapmer_data_config_base::min_length> gapmer_min_length_constraint;
+	typedef gapmer_data_constraint_t <&gapmer_data_config_base::max_length> gapmer_max_length_constraint;
+	typedef gapmer_data_constraint_t <&gapmer_data_config_base::min_suffix_length> gapmer_min_suffix_length_constraint;
+	typedef gapmer_data_constraint_t <&gapmer_data_config_base::max_suffix_length> gapmer_max_suffix_length_constraint;
+
+
+	template <auto... t_constraint> // For now this requires C++20 (I think).
+	struct gapmer_data_config : gapmer_data_config_base
+	{
+		constexpr gapmer_data_config()
+		{
+			(t_constraint.assign(*this), ...);
+
+			if (! (0 == min_suffix_length || min_suffix_length < min_length))
+				throw std::logic_error{"Invalid min suffix length."};
+
+			if (! (GAPMER_MAX_SUFFIX_LENGTH_DEFAULT == max_suffix_length || ((0 == max_suffix_length || max_suffix_length < min_length) && min_suffix_length <= max_suffix_length)))
+				throw std::logic_error{"Invalid max suffix length."};
+		}
 	};
 
 
@@ -50,16 +111,9 @@ namespace {
 	};
 
 
-	constexpr static inline uint8_t const MAX_SUFFIX_LENGTH_DEFAULT{UINT8_MAX - 1};
-
-
 	// Parametrised for rc::Arbitrary.
-	template <uint8_t t_min_length = 0, uint8_t t_min_suffix_length = 0, uint8_t t_max_suffix_length = MAX_SUFFIX_LENGTH_DEFAULT>
-	struct gapmer_data_ : public gapmer_data
-	{
-		static_assert(0 == t_min_suffix_length || t_min_suffix_length < t_min_length);
-		static_assert(MAX_SUFFIX_LENGTH_DEFAULT == t_max_suffix_length || ((0 == t_max_suffix_length || t_max_suffix_length < t_min_length) && t_min_suffix_length <= t_max_suffix_length));
-	};
+	template <auto... t_constraint>
+	struct gapmer_data_ : public gapmer_data {};
 
 
 	struct gapmer_pair
@@ -211,19 +265,21 @@ namespace rc {
 	};
 
 
-	template <uint8_t t_min_length, uint8_t t_min_suffix_length, uint8_t t_max_suffix_length>
-	struct Arbitrary <gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>>
+	template <auto... t_constraint>
+	struct Arbitrary <gapmer_data_ <t_constraint...>>
 	{
-		static Gen <gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length>> arbitrary()
+		static Gen <gapmer_data_ <t_constraint...>> arbitrary()
 		{
 			// We first determine the k-mer length. If it is at least two, we allow a non-zero suffix length.
 			// If we got a non-empty suffix, we determine a non-zero gap length.
 
-			typedef gapmer_data_ <t_min_length, t_min_suffix_length, t_max_suffix_length> return_type;
+			typedef gapmer_data_ <t_constraint...> return_type;
 			typedef typename return_type::gapmer_type gapmer_type;
 
-			return gen::mapcat(gen::inRange <uint8_t>(t_min_length, gapmer_type::max_k + 1), [](auto const length){
-				auto suffix_length_gen(length ? gen::inRange(+t_min_suffix_length, std::min(+length, 1 + t_max_suffix_length)) : gen::just(0));
+			constexpr static gapmer_data_config <t_constraint...> const config; // static b.c. I don’t want to capture config in every lambda.
+
+			return gen::mapcat(gen::inRange <uint8_t>(config.min_length, config.max_length + 1), [](auto const length){
+				auto suffix_length_gen(length ? gen::inRange(+config.min_suffix_length, std::min(+length, 1 + config.max_suffix_length)) : gen::just(0));
 				return gen::mapcat(suffix_length_gen, [length](uint8_t const suffix_length){ // Suffix length depends on total length.
 					auto gap_length_gen(suffix_length ? gen::inRange <uint8_t>(1, gapmer_type::max_gap + 1) : gen::just(uint8_t{}));
 					return gen::mapcat(gap_length_gen, [length, suffix_length](auto const gap_length){ // Gap length depends on suffix length.
@@ -261,6 +317,7 @@ namespace rc {
 							mask = ~mask;
 							mask >>= 2 * (32 - length);
 							sequence &= mask;
+
 						}
 
 						// Determine the suffix length and the gap length of the source.
@@ -284,7 +341,7 @@ namespace rc {
 	{
 		static Gen <non_aligning_gapmer_pair_value_mismatch> arbitrary()
 		{
-			return gen::mapcat(gen::arbitrary <gapmer_data_ <1>>(), [](auto const gd){
+			return gen::mapcat(gen::arbitrary <gapmer_data_ <gapmer_min_length_constraint{1}>>(), [](auto const gd){
 				return gen::map(gen::inRange(0, 2 * gd.length), [gd](auto const pos) -> non_aligning_gapmer_pair_value_mismatch {
 					// Make a new value by flipping some bit in the value.
 					// (Currently all bit patterns are valid in the range specified by length.)
@@ -340,7 +397,8 @@ namespace rc {
 	{
 		static Gen <non_aligning_gapmer_pair_gap_length_mismatch> arbitrary()
 		{
-			return gen::map(gen::arbitrary <gapmer_data_ <2, 1>>(), []<typename t_gapmer_data>(t_gapmer_data const gd) -> non_aligning_gapmer_pair_gap_length_mismatch {
+			typedef gapmer_data_ <gapmer_min_length_constraint{2}, gapmer_min_suffix_length_constraint{1}> gapmer_data_type;
+			return gen::map(gen::arbitrary <gapmer_data_type>(), []<typename t_gapmer_data>(t_gapmer_data const gd) -> non_aligning_gapmer_pair_gap_length_mismatch {
 				typedef typename t_gapmer_data::gapmer_type gapmer_type;
 				static_assert(1 <= gapmer_type::max_gap);
 
@@ -361,7 +419,8 @@ namespace rc {
 	{
 		static Gen <non_aligning_gapmer_pair_gap_position_mismatch> arbitrary()
 		{
-			return gen::map(gen::arbitrary <gapmer_data_ <3, 1>>(), []<typename t_gapmer_data>(t_gapmer_data const gd) -> non_aligning_gapmer_pair_gap_position_mismatch {
+			typedef gapmer_data_ <gapmer_min_length_constraint{3}, gapmer_min_suffix_length_constraint{1}> gapmer_data_type;
+			return gen::map(gen::arbitrary <gapmer_data_type>(), []<typename t_gapmer_data>(t_gapmer_data const gd) -> non_aligning_gapmer_pair_gap_position_mismatch {
 				auto gd_(gd);
 				if (1 == gd_.suffix_length)
 					++gd_.suffix_length;
@@ -845,7 +904,7 @@ namespace sf {
 	}
 
 
-	SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, Constructors, gapmer_data, gapmer_data_ <1>, gapmer_data const gd, (gd.length, gd.gap_length)) {
+	SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, Constructors, gapmer_data, gapmer_data_ <gapmer_min_length_constraint{1}>, gapmer_data const gd, (gd.length, gd.gap_length)) {
 		std::vector <uint64_t> seq;
 		gd.write_to_buffer(seq);
 
@@ -879,7 +938,14 @@ namespace sf {
 	}
 
 
-	SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, ReverseComplementGapmer, gapmer_data, gapmer_data_ <1>, gapmer_data const gd, (gd.length, gd.gap_length)) {
+	SF_RC_TEST_WITH_BASE_CASE(
+		gapmer_arbitrary,
+		ReverseComplementGapmer,
+		gapmer_data,
+		gapmer_data_ <gapmer_min_length_constraint{1}>,
+		gapmer_data const gd,
+		(gd.length, gd.gap_length)
+	) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{gd};
 		auto const target(source.reverse_complement());
@@ -893,7 +959,11 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, NextGapmer, (gapmer_data_ <0, 0, 0> const gd, nucleotide const nt)) {
+	RC_GTEST_PROP(
+		gapmer_arbitrary,
+		NextGapmer,
+		(gapmer_data_ <gapmer_max_suffix_length_constraint{0}> const gd, nucleotide const nt)
+	) {
 		SF_RC_TAG(gd.length, gd.gap_length);
 
 		typedef gapmer_data::gapmer_type gapmer_type;
@@ -907,7 +977,11 @@ namespace sf {
 	}
 
 
-	RC_GTEST_PROP(gapmer_arbitrary, NextGappedGapmer, (gapmer_data_ <2, 1> const gd, nucleotide const nt1, nucleotide const nt2)) {
+	RC_GTEST_PROP(
+		gapmer_arbitrary,
+		NextGappedGapmer,
+		(gapmer_data_ <gapmer_min_length_constraint{2}, gapmer_min_suffix_length_constraint{1}> const gd, nucleotide const nt1, nucleotide const nt2)
+	) {
 		SF_RC_TAG(gd.length, gd.gap_length);
 
 		typedef gapmer_data::gapmer_type gapmer_type;
@@ -923,7 +997,14 @@ namespace sf {
 	}
 
 
-	SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, AlignEmptyGapmer, gapmer_data, gapmer_data_ <1>, gapmer_data const gd, (gd.length, gd.gap_length)) {
+	SF_RC_TEST_WITH_BASE_CASE(
+		gapmer_arbitrary,
+		AlignEmptyGapmer,
+		gapmer_data,
+		gapmer_data_ <gapmer_min_length_constraint{1}>,
+		gapmer_data const gd,
+		(gd.length, gd.gap_length)
+	) {
 		typedef gapmer_data::gapmer_type gapmer_type;
 		gapmer_type const source{};
 		gapmer_type const target(gd);
@@ -976,7 +1057,7 @@ namespace sf {
 	SF_RC_TEST_PROP(
 		gapmer_arbitrary,
 		GenerateHuddingeNeighbourhood,
-		huddinge_neighbourhood_ <gapmer_data_ <5>>,
+		huddinge_neighbourhood_ <gapmer_data_ <gapmer_min_length_constraint{5}>>,
 		huddinge_neighbourhood <> const &hn,
 		(hn.gd.length, hn.gd.gap_length)
 	)
