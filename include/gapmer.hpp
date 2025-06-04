@@ -101,8 +101,8 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
   void middle_gap_neighbours(auto&& callback) const {
     const uint64_t val = value();
     const uint8_t len = length();
-    assert(len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
-    assert(5 <= len);
+    assert(no_larger || len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
+    assert(no_smaller || 5 <= len);
     const uint8_t gap_s = gap_start();
     const uint8_t prefix_len = gap_s;
     const uint8_t suffix_len = len - gap_s;
@@ -396,8 +396,8 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
   void all_gap_neighbours(auto&& callback) const {
     const uint64_t val = value();
     const uint8_t len = length();
-    assert(len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
-    assert(5 <= len);
+    assert(no_larger || len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
+    assert(no_smaller || 5 <= len);
     const uint8_t gap_s = gap_start();
     const uint8_t prefix_len = gap_s;
     const uint8_t suffix_len = len - gap_s;
