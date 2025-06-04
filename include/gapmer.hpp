@@ -48,7 +48,7 @@ class gapmer {
   // +--------------------+------------+------------+------------+-----------+
   // | value              | length     | gap_start  | gap_length | padding   |
   // +--------------------+------------+------------+------------+-----------+
-  uint64_t data_;
+  uint64_t data_{};
 
   gapmer(uint64_t data) : data_(data) {}
 
@@ -84,7 +84,7 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
   requires((2U * (max_k + max_gap) + 7U) / 8U <= t_n);
 
  public:
-  gapmer() : data_(0) {} //< Construct an empty value.
+  gapmer() = default; //< Construct an empty value.
 
   /// Construct from the given character data ([ACGT.]*) aligned to 8 bytes.
   gapmer(const uint64_t* d_ptr, uint8_t k) : data_(0) {
