@@ -50,7 +50,7 @@ class gapmer {
   // +--------------------+------------+------------+------------+-----------+
   uint64_t data_{};
 
-  gapmer(uint64_t data) : data_(data) {}
+  explicit gapmer(uint64_t data) : data_(data) {} //< Construct from given data.
 
   uint64_t prefix() const;
   uint64_t suffix() const;
@@ -1279,7 +1279,7 @@ auto gapmer<middle_gap_only, t_max_gap>::next(char c) const -> gapmer {
   uint64_t v = data_ << 2;
   v |= nuc_to_v[c];
   v &= (ONE << (length() * 2)) - 1;
-  return (data_ & ~value_mask) | v;
+  return gapmer{(data_ & ~value_mask) | v};
 }
 
 
@@ -1294,7 +1294,7 @@ auto gapmer<middle_gap_only, t_max_gap>::next(char c1, char c2) const -> gapmer 
   v |= uint64_t(nuc_to_v[c1]) << suf_len;
   v |= nuc_to_v[c2];
   v &= (ONE << (length() * 2)) - 1;
-  return (data_ & ~value_mask) | v;
+  return gapmer{(data_ & ~value_mask) | v};
 }
 
 
