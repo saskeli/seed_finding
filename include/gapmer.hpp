@@ -39,6 +39,10 @@ class gapmer {
   const static constexpr uint64_t xor_mask = 0b0101010101010101;
   const static constexpr uint64_t pext_mask = 0x0606060606060606;
   const static constexpr uint64_t meta_mask = 0b11111;
+  const static constexpr uint8_t meta_length = 5;
+
+  static_assert(meta_length);
+  static_assert(max_gap <= (1 << meta_length) - 1);
 
   // data_ formatted as follows. We denote M = max_k. The length does not include the gap length.
   // The value is stored such that the rightmost character is at position zero, the next one at
@@ -50,23 +54,21 @@ class gapmer {
   // +--------------------+------------+------------+------------+-----------+
   uint64_t data_{};
 
-  explicit gapmer(uint64_t data) : data_(data) {} //< Construct from given data.
+  static inline uint64_t read_multiple_characters(uint64_t word);
+
+  template <bool t_has_gap>
+  static inline uint64_t read_word_aligned_characters(uint64_t const *d_ptr, uint8_t kk, uint8_t gap_start = 0, uint8_t gap_length = 0);
+
+  static inline uint64_t from_packed_characters(uint64_t data, uint8_t kk); //< Returns the packed representation including the length.
+  static inline uint64_t from_packed_characters(uint64_t data, uint8_t kk, uint8_t gap_start, uint8_t gap_length); //< Returns the packed representation including the lengths and the gap position.
+
+  explicit gapmer(uint64_t data) : data_(data) {} //< Construct from the given data.
+  gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len, uint8_t gap_s, uint8_t gap_l); //< Construct from the given prefix, suffix, gap position and lengths.
 
   uint64_t prefix() const;
   uint64_t suffix() const;
   uint64_t prefix(uint64_t i) const;
   uint64_t suffix(uint64_t i) const;
-
-  /// Construct from the given prefix, suffix and lengths.
-  gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len,
-         uint8_t gap_s, uint8_t gap_l) {
-    data_ = prefix << (2 * s_len);
-    data_ |= suffix;
-    data_ |= uint64_t(p_len + s_len) << (max_k * 2);
-    data_ |= uint64_t(gap_s) << (max_k * 2 + 5);
-    data_ |= uint64_t(gap_l) << (max_k * 2 + 10);
-  }
-
   gapmer hamming(uint64_t v, auto& callback) const;
 
 public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. For now they are public so that unit tests can access them.
@@ -85,90 +87,22 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
 
  public:
   gapmer() = default; //< Construct an empty value.
+  gapmer(uint64_t v, uint8_t k): data_(from_packed_characters(v, k)) {} //< Construct from the given packed data and lengths.
+  gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length): data_(from_packed_characters(v, k, gap_start, gap_length)) {} //< Construct from the given packed data, gap position and lengths.
 
   /// Construct from the given character data ([ACGT.]*) aligned to 8 bytes.
-  gapmer(const uint64_t* d_ptr, uint8_t k) : data_(0) {
-#ifdef DEBUG
-    assert(k > 0);
-    assert(k <= 24);
-#endif
-    uint64_t iv;
-    for (uint16_t i = 0; i < max_k / 8; ++i) {
-      iv = bits::byteswap(d_ptr[i]);
-      iv = bits::pext(iv, pext_mask);
-      iv ^= (iv >> 1) & xor_mask;
-      data_ |= iv;
-      if (k <= (1 + i) * 8) {
-        break;
-      }
-      data_ <<= 16;
-    }
-    uint16_t shr = k % 8;
-    data_ >>= shr ? (16 - 2 * shr) : 0;
-    data_ |= uint64_t(k) << (max_k * 2);
-  }
-
-  /// Construct from the given packed data and lengths.
-  gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length)
-      : data_(v) {
-    data_ |= uint64_t(k) << (max_k * 2);
-    data_ |= uint64_t(gap_start) << (max_k * 2 + 5);
-    data_ |= uint64_t(gap_length) << (max_k * 2 + 10);
-  }
-
-  /// Construct from the given packed data and k.
-  gapmer(uint64_t v, uint8_t k) : data_(v) {
-    data_ |= uint64_t(k) << (max_k * 2);
-  }
+  gapmer(uint64_t const *d_ptr, uint8_t kk):
+  	gapmer(read_word_aligned_characters <false>(d_ptr, kk), kk) {}
 
   /// Construct from the given character data ([ACGT.]*) aligned to 8 bytes.
-  gapmer(const uint64_t* d_ptr, uint8_t k, uint8_t gap_start, uint8_t gap_length)
-      : data_(0) {
-    if (gap_start == 0) {
-      *this = gapmer(d_ptr, k);
-      return;
-    }
-#ifdef DEBUG
-    assert(k > 0);
-    assert(k <= 24);
-    assert(gap_start < k);
-    assert(gap_length > 0);
-    assert(gap_length < 32);
-#endif
-
-    uint64_t iv;
-    const char* s = reinterpret_cast<const char*>(d_ptr);
-    for (uint16_t i = 0; i < max_k / 8; ++i) {
-      iv = bits::byteswap(d_ptr[i]);
-      iv = bits::pext(iv, pext_mask);
-      iv ^= (iv >> 1) & xor_mask;
-      data_ |= iv;
-      if (gap_start <= (1 + i) * 8) {
-        break;
-      }
-      data_ <<= 16;
-    }
-    uint16_t shr = gap_start % 8;
-    data_ >>= shr ? (16 - 2 * shr) : 0;
-
-    uint8_t k_suf = k - gap_start;
-    d_ptr = reinterpret_cast<const uint64_t*>(s + gap_start + gap_length);
-    for (uint16_t i = 0; i < max_k / 8; ++i) {
-      data_ <<= 16;
-      iv = bits::byteswap(d_ptr[i]);
-      iv = bits::pext(iv, pext_mask);
-      iv ^= (iv >> 1) & xor_mask;
-      data_ |= iv;
-      if (k_suf <= (1 + i) * 8) {
-        break;
-      }
-    }
-    shr = k_suf % 8;
-    data_ >>= shr ? (16 - 2 * shr) : 0;
-    data_ |= uint64_t(k) << (max_k * 2);
-    data_ |= uint64_t(gap_start) << (max_k * 2 + 5);
-    data_ |= uint64_t(gap_length) << (max_k * 2 + 10);
-  }
+  gapmer(uint64_t const *d_ptr, uint8_t kk, uint8_t gap_start, uint8_t gap_length):
+    gapmer(
+      (
+        0 == gap_length
+        ? read_word_aligned_characters <false>(d_ptr, kk)
+        : read_word_aligned_characters <true>(d_ptr, kk, gap_start, gap_length)
+      ), kk, gap_start, gap_length
+    ) {}
 
   uint64_t data() const { return data_; } //< Get the packed data.
   operator uint64_t() const { return data(); } //< Get the packed data.
@@ -210,6 +144,145 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
   bool is_valid() const;
   std::bitset<64> bits() const { return data_; }
 };
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+gapmer<middle_gap_only, t_max_gap>::gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len, uint8_t gap_s, uint8_t gap_l) {
+  data_ = prefix << (2 * s_len);
+  data_ |= suffix;
+  data_ |= uint64_t(p_len + s_len) << (max_k * 2);
+  data_ |= uint64_t(gap_s) << (max_k * 2 + 5);
+  data_ |= uint64_t(gap_l) << (max_k * 2 + 10);
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+uint64_t gapmer<middle_gap_only, t_max_gap>::read_multiple_characters(uint64_t const word)
+{
+	uint64_t retval{bits::byteswap(word)};
+	retval = bits::pext(retval, pext_mask); // FIXME: Mask needed only here.
+	retval ^= (retval >> 1) & xor_mask; // FIXME: Mask needed only here.
+	return retval;
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(uint64_t data, uint8_t kk)
+{
+	assert(kk <= max_k);
+	uint64_t meta{kk};
+	meta <<= 2 * max_k;
+	return meta | data;
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(uint64_t data, uint8_t kk, uint8_t gap_start, uint8_t gap_length)
+{
+	assert(kk <= max_k);
+	assert((0 == gap_start && 0 == gap_length) || (gap_start < kk && gap_length <= max_gap));
+
+	uint64_t meta{gap_length};
+	meta <<= meta_length;
+	meta |= gap_start;
+	meta <<= meta_length;
+	meta |= kk;
+	meta <<= 2 * max_k;
+	return meta | data;
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+template <bool t_has_gap>
+uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(uint64_t const *d_ptr, uint8_t const kk, uint8_t const gap_start, uint8_t const gap_length)
+{
+	assert(kk <= max_k);
+	assert(gap_start < kk);
+	assert(gap_length <= max_gap);
+
+	uint64_t retval{};
+	uint8_t ii{};
+	uint8_t const limit((kk + gap_length + 7) / 8); // Since d_ptr is uint64_t const *, we are bound to have a multiple of 8 bytes.
+	if constexpr (t_has_gap)
+	{
+		assert(gap_start);
+		assert(gap_length);
+		uint64_t iv{};
+		while (true)
+		{
+			iv = read_multiple_characters(d_ptr[ii]);
+			if (gap_start < 8 * (ii + 1))
+				break;
+			retval |= iv;
+			retval <<= 16;
+			++ii;
+		}
+
+		{
+			// Remove the gap characters if needed.
+			// Higher bits.
+			{
+				uint64_t const count(gap_start - 8 * ii);
+				uint64_t const mask{0xffff & (UINT64_C(0xffff) << (2 * (8 - count)))};
+				retval |= iv & mask;
+				retval <<= 2 * count;
+			}
+
+			// Lower bits.
+			if (8 * (ii + 1) <= gap_start + gap_length)
+			{
+				ii = (gap_start + gap_length) / 8;
+				iv = read_multiple_characters(d_ptr[ii]);
+			}
+
+			{
+				uint64_t const count(8 * (ii + 1) - gap_start - gap_length);
+				uint64_t mask{UINT64_C(0xffff) >> (2 * (8 - count))};
+				iv &= mask;
+
+				++ii;
+				if (ii == limit)
+				{
+					iv <<= 2 * (8 - count);
+					retval |= iv;
+					retval >>= 2 * (8 - (kk - gap_start));
+					return retval;
+				}
+
+				iv <<= 16 - 2 * count;
+				retval |= iv;
+				retval <<= 2 * count;
+			}
+		}
+	}
+	else
+	{
+		assert(0 == gap_start);
+		assert(0 == gap_length);
+		if (ii == limit)
+			return retval;
+	}
+
+	// ii < limit (checked before).
+	while (true)
+	{
+		auto iv(read_multiple_characters(d_ptr[ii]));
+		retval |= iv;
+		++ii;
+		if (ii == limit)
+			break;
+		retval <<= 16;
+	}
+
+	{
+		auto const remaining_count((kk + gap_length) % 8);
+		if (remaining_count)
+			retval >>= 2 * (8 - remaining_count);
+	}
+
+	// Metadata not encoded.
+	return retval;
+}
 
 
 template <bool middle_gap_only, uint16_t t_max_gap>
@@ -1502,7 +1575,7 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(gapmer const othe
 		auto const p2{bits::pext(cm, pm2)};
 		auto const cm_{p1 | p2}; // Get the non-matching character mask.
 
-		// Get the relevant characters.
+		// Get the relevant (aligned) characters.
 		auto const mm(m1 & m2s.front());
 		auto const cm__((~cm_) & mm);
 
