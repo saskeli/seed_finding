@@ -334,8 +334,8 @@ template <bool no_smaller, bool no_same, bool no_larger>
 void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(auto&& callback) const {
   const uint64_t val = value();
   const uint8_t len = length();
-  assert(len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
-  assert(5 <= len);
+  assert(no_larger || len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
+  assert(no_smaller || 5 <= len);
   const uint8_t gap_s = gap_start();
   const uint8_t prefix_len = gap_s;
   const uint8_t suffix_len = len - gap_s;
@@ -631,8 +631,8 @@ template <bool no_smaller, bool no_same, bool no_larger>
 void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(auto&& callback) const {
   const uint64_t val = value();
   const uint8_t len = length();
-  assert(len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
-  assert(5 <= len);
+  assert(no_larger || len < max_k); // It is the user’s responsibility to check the length before listing the neighbours.
+  assert(no_smaller || 5 <= len);
   const uint8_t gap_s = gap_start();
   const uint8_t prefix_len = gap_s;
   const uint8_t suffix_len = len - gap_s;
