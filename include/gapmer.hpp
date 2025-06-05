@@ -153,8 +153,8 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_multiple_characters(uint64_t c
 	constexpr uint64_t const pext_mask{UINT64_C(0x0606060606060606)};
 
 	uint64_t retval{bits::byteswap(word)};
-	retval = bits::pext(retval, pext_mask); // FIXME: Mask needed only here.
-	retval ^= (retval >> 1) & xor_mask; // FIXME: Mask needed only here.
+	retval = bits::pext(retval, pext_mask);
+	retval ^= (retval >> 1) & xor_mask;
 	return retval;
 }
 
