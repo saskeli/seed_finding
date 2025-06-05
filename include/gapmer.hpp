@@ -36,8 +36,6 @@ class gapmer {
  private:
   const static constexpr uint64_t ONE = 1;
   const static constexpr uint64_t value_mask = (ONE << (max_k * 2)) - 1;
-  const static constexpr uint64_t xor_mask = 0b0101010101010101;
-  const static constexpr uint64_t pext_mask = 0x0606060606060606;
   const static constexpr uint64_t meta_mask = 0b11111;
   const static constexpr uint8_t meta_length = 5;
 
@@ -159,6 +157,9 @@ gapmer<middle_gap_only, t_max_gap>::gapmer(uint64_t prefix, uint64_t suffix, uin
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::read_multiple_characters(uint64_t const word)
 {
+	constexpr uint64_t const xor_mask{UINT64_C(0b0101010101010101)};
+	constexpr uint64_t const pext_mask{UINT64_C(0x0606060606060606)};
+
 	uint64_t retval{bits::byteswap(word)};
 	retval = bits::pext(retval, pext_mask); // FIXME: Mask needed only here.
 	retval ^= (retval >> 1) & xor_mask; // FIXME: Mask needed only here.
