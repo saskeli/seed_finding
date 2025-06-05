@@ -20,7 +20,7 @@
 #endif
 
 namespace sf {
-template <bool middle_gap_only = false, uint16_t t_max_gap = 5>
+template <bool middle_gap_only = false, uint16_t t_max_gap = 10>
 class gapmer {
 
   // Public constructor synopsis:
