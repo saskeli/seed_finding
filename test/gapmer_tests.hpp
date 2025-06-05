@@ -301,10 +301,10 @@ TEST(gapmer, Neighbour17) {
 TEST(gapmer, Neighbour18) {
   std::string s = "AA.....AAA";
   auto vec = vec_from_string(s);
-  gapmer g(vec.data(), 5, 2, 5);
+  gapmer<false, 6> g(vec.data(), 5, 2, 5);
   std::string t = "AA......AAG";
   vec = vec_from_string(t);
-  gapmer h(vec.data(), 5, 2, 6);
+  gapmer<false, 6> h(vec.data(), 5, 2, 6);
   ASSERT_TRUE(g.is_neighbour(h)) << g.to_string() << " <-> " << h.to_string();
   ASSERT_TRUE(h.is_neighbour(g));
 }
