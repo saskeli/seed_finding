@@ -301,10 +301,10 @@ TEST(gapmer, Neighbour17) {
 TEST(gapmer, Neighbour18) {
   std::string s = "AA.....AAA";
   auto vec = vec_from_string(s);
-  gapmer<false, 6> g(vec.data(), 5, 2, 5);
+  gapmer<> g(vec.data(), 5, 2, 5);
   std::string t = "AA......AAG";
   vec = vec_from_string(t);
-  gapmer<false, 6> h(vec.data(), 5, 2, 6);
+  gapmer<> h(vec.data(), 5, 2, 6);
   ASSERT_TRUE(g.is_neighbour(h)) << g.to_string() << " <-> " << h.to_string();
   ASSERT_TRUE(h.is_neighbour(g));
 }
@@ -710,7 +710,7 @@ TEST(gapmer, HuddingeDistance9) {
 
 TEST(gapmer, HuddingeNeighbourhood1) {
 	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
+	typedef sf::gapmer<true, 5> gapmer_type;
 	string_buffer_type const ss("AAAAAAAAAAAAAAAAAAAAAAA");
 	gapmer_type gg(ss.data(), 23, 0, 0);
 	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
@@ -720,7 +720,7 @@ TEST(gapmer, HuddingeNeighbourhood1) {
 
 TEST(gapmer, HuddingeNeighbourhood2) {
 	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
+	typedef sf::gapmer<true, 5> gapmer_type;
 	string_buffer_type const ss("CCCCCCCCCCCCCCCCCCCCCCC");
 	gapmer_type gg(ss.data(), 23, 0, 0);
 	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
@@ -730,7 +730,7 @@ TEST(gapmer, HuddingeNeighbourhood2) {
 
 TEST(gapmer, HuddingeNeighbourhood3) {
 	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
+	typedef sf::gapmer<true, 5> gapmer_type;
 	string_buffer_type const ss("TGCTCAT..TAGGAAGCCGCCTTGA");
 	gapmer_type gg(ss.data(), 23, 7, 2);
 	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
