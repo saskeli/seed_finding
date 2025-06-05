@@ -86,7 +86,7 @@ public: // FIXME: all_gap_neighbours, middle_gap_neighbours should be private. F
   requires((2U * (max_k + max_gap) + 7U) / 8U <= t_n);
 
  public:
-  gapmer() = default; //< Construct an empty value.
+  constexpr gapmer() = default; //< Construct an empty value.
   gapmer(uint64_t v, uint8_t k): data_(from_packed_characters(v, k)) {} //< Construct from the given packed data and lengths.
   gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length): data_(from_packed_characters(v, k, gap_start, gap_length)) {} //< Construct from the given packed data, gap position and lengths.
 
