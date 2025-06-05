@@ -21,7 +21,7 @@
 #include "../include/util.hpp"
 
 
-// FIXME: Some of the types used in the tests need to have typedefs since the preprocessor has difficulties with commas as part of the type names. Some of the typedefs have very long names in order to encode the name of the test they have to do with. Separating the tests into multiple translation units could help with this.
+// FIXME: Some of the types used in the tests need to have typedefs for the associated types since the preprocessor has difficulties with commas as part of the type names. Some of the typedefs have very long names in order to encode the name of the test they have to do with. Separating the tests into multiple translation units could help with this.
 
 namespace {
 
