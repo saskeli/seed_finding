@@ -22,14 +22,6 @@
 namespace sf {
 template <bool middle_gap_only = false, uint16_t t_max_gap = 10>
 class gapmer {
-
-  // Public constructor synopsis:
-  // gapmer();
-  // gapmer(const uint64_t * s, uint8_t k);
-  // gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length);
-  // gapmer(uint64_t v, uint8_t k);
-  // gapmer(const uint64_t *s, uint8_t k, uint8_t gap_start, uint8_t gap_length);
-
  public:
   const static constexpr uint64_t max_k = 24;
   const static constexpr uint16_t max_gap = t_max_gap;
