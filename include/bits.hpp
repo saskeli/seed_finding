@@ -167,3 +167,58 @@ namespace sf::bits {
 		}
 	}
 }
+
+
+namespace sf::bits::detail {
+
+	constexpr inline uint64_t const read_multiple_dna_characters_xor_mask{UINT64_C(0b0101010101010101)};
+
+
+	inline uint64_t read_multiple_dna_characters_generic(uint64_t word)
+	{
+		// Both Clang and GCC generate some 11 instructions for 64-bit ARM for this function (excluding ret).
+		word = byteswap(word);											// Change the order to what gapmer expects.
+		word >>= 1;														// Shift s.t. the relevant bits are in the beginning of each byte.
+		word &= UINT64_C(0x303030303030303);							// Clear everything else.
+		word |= word >> 6;												// Group pairs of characters.
+		word |= word >> 12;												// Group quads of characters.
+		word &= UINT64_C(0xFF000000FF);									// Clear everything else.
+		word |= word >> 24;												// Group the eight characters.
+		word ^= (word >> 1) & read_multiple_dna_characters_xor_mask;	// Fix the bit representation.
+		word &= 0xFFFF;													// Clear everything else.
+		return word;
+	}
+
+
+	inline uint64_t read_multiple_dna_characters_pext(uint64_t const word)
+	{
+		constexpr uint64_t const pext_mask{UINT64_C(0x0606060606060606)};
+
+		uint64_t retval{bits::byteswap(word)};
+		retval = bits::pext(retval, pext_mask);
+		retval ^= (retval >> 1) & read_multiple_dna_characters_xor_mask;
+		return retval;
+	}
+}
+
+
+namespace sf::bits {
+
+	/// Reads eight characters of our extended DNA alphabet ([ACGT.]) from
+	/// the given word and places them in reverse order and 2-bit encoded
+	/// to the return value.
+	inline uint64_t read_multiple_dna_characters(uint64_t const word)
+	{
+		if consteval
+		{
+			return detail::read_multiple_dna_characters_generic(word);
+		}
+		else
+		{
+			if constexpr (detail::pext_intrinsic_available)
+				return detail::read_multiple_dna_characters_pext(word);
+			else
+				return detail::read_multiple_dna_characters_generic(word);
+		}
+	}
+}

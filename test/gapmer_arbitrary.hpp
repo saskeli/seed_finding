@@ -15,6 +15,7 @@
 #include <stdexcept>
 #include <set>
 #include <vector>
+#include "nucleotide.hpp"
 #include "test.hpp"
 #include "../include/gapmer.hpp"
 #include "../include/string_buffer.hpp"
@@ -24,14 +25,6 @@
 // FIXME: Some of the types used in the tests need to have typedefs for the associated types since the preprocessor has difficulties with commas as part of the type names. Some of the typedefs have very long names in order to encode the name of the test they have to do with. Separating the tests into multiple translation units could help with this.
 
 namespace {
-
-	struct nucleotide
-	{
-		char value{};
-
-		/* implicit */ operator char() const { return value; }
-	};
-
 
 	constexpr static inline uint8_t const GAPMER_MAX_SUFFIX_LENGTH_DEFAULT{UINT8_MAX - 1};
 	typedef sf::gapmer <> default_gapmer_type;
@@ -231,38 +224,10 @@ namespace {
 		os << "source: '" << hn.gd << "' values.size(): " << hn.values.size();
 		return os;
 	}
-
-
-	char complement_nt(char const cc)
-	{
-		switch (cc)
-		{
-			case 'A': return 'T';
-			case 'C': return 'G';
-			case 'G': return 'C';
-			case 'T': return 'A';
-			case '.': return '.';
-			default:
-				throw std::runtime_error("Unexpected character");
-		}
-	}
 }
 
 
 namespace rc {
-
-	template <>
-	struct Arbitrary <nucleotide>
-	{
-		static Gen <nucleotide> arbitrary()
-		{
-			constexpr static std::array const values{'A', 'C', 'G', 'T'};
-			return gen::map(gen::elementOf(values), [](auto const cc) -> nucleotide {
-				return {cc};
-			});
-		}
-	};
-
 
 	template <typename t_gapmer>
 	struct Arbitrary <gapmer_data <t_gapmer>>
