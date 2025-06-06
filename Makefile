@@ -1,7 +1,7 @@
 -include local.mk
 
 ifndef MAX_GAP
-MAX_GAP = 10
+MAX_GAP = 15
 endif
 
 CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)

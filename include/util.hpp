@@ -4,6 +4,10 @@
 #include <unordered_set>
 #include <string>
 
+#include <gsl/gsl_cdf.h>
+#include <gsl/gsl_sf_gamma.h>
+#include <gsl/gsl_sf_result.h>
+
 #include "gapmer.hpp"
 
 namespace sf {
@@ -150,6 +154,12 @@ bool compare_generation(G g) {
   std::unordered_set<std::string> a;
   std::unordered_set<std::string> b;
   return compare_generation<G, middle_gap_only, max_gap>(g, a, b);
+}
+
+double error_suppressed_beta_inc(double a, double b, double x) {
+  gsl_sf_result res;
+  int err = gsl_sf_beta_inc_e(a, b, x, &res);
+  return err ? 0 : res.val;
 }
 
 }  // namespace sf

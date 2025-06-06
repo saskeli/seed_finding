@@ -1,18 +1,17 @@
 #pragma once
 
-#include <gsl/gsl_cdf.h>
-#include <gsl/gsl_sf_gamma.h>
-
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <gsl/gsl_errno.h>
 
 #include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
 #include "partial_count.hpp"
+#include "util.hpp"
 
 namespace sf {
 
@@ -89,14 +88,14 @@ class seed_finder {
     if (a_bg == 1 && b_bg == 1) {
       if (b_sig > a_sig) {
         if constexpr (calc_b_r) {
-          b_r = gsl_sf_beta_inc(b_sig, b_bg, x_);
+          b_r = error_suppressed_beta_inc(b_sig, b_bg, x_);
         }
         return true;
       }
       return false;
     }
     if constexpr (calc_b_r) {
-      b_r = gsl_sf_beta_inc(b_sig, b_bg, x_);
+      b_r = error_suppressed_beta_inc(b_sig, b_bg, x_);
     }
     return b_r < a_r;
   }
@@ -127,7 +126,7 @@ class seed_finder {
 #pragma omp critical(a_bv)
       sig_bg_a.discarded[offset + v] = true;
     }
-    double r = gsl_sf_beta_inc(a, b, x_);
+    double r = error_suppressed_beta_inc(a, b, x_);
     if (r > p_) {
 #pragma omp critical(a_bv)
       sig_bg_a.discarded[offset + v] = true;
@@ -163,7 +162,7 @@ class seed_finder {
         sig_bg_b.discarded[o_offset + o_v] = true;
         return;
       }
-      double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
+      double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
       if (do_extend(g, o, a, b, o_a, o_b, r, o_r)) {
 #pragma omp critical(a_bv)
         sig_bg_a.discarded[offset + v] = true;
@@ -205,7 +204,7 @@ class seed_finder {
 #pragma omp critical(d_bv)
       sig_bg_c.discarded[offset + v] = true;
     }
-    double r = gsl_sf_beta_inc(a, b, x_);
+    double r = error_suppressed_beta_inc(a, b, x_);
     if (r > p_) {
 #pragma omp critical(d_bv)
       sig_bg_c.discarded[offset + v] = true;
@@ -335,7 +334,7 @@ class seed_finder {
           if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
             return;
           }
-          double o_r = gsl_sf_beta_inc(o_a, o_b, x_);
+          double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
           if (do_extend<false>(p.first, o, p.second.sig_count,
                                p.second.bg_count, o_a, o_b, p.second.p, o_r)) {
             b[o] = {o, o_r, uint64_t(o_a), uint64_t(o_b)};
@@ -398,6 +397,7 @@ class seed_finder {
         fold_lim_(std::pow(2, log_fold)),
         memory_limit_(memory_limit),
         k_lim_(max_k) {
+    gsl_set_error_handler_off();
     seq_io::Reader sr(sig_path_);
     sr.enable_reverse_complements();
     while (true) {
@@ -418,7 +418,7 @@ class seed_finder {
     }
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
     std::cerr << "Background " << bg_path_ << " with length " << bg_size_ << std::endl;
-    std::cerr << "Background " << sig_path_ << " with length " << sig_size_ << std::endl;
+    std::cerr << "Signal " << sig_path_ << " with length " << sig_size_ << std::endl;
     std::cerr << "X = " << x_ << std::endl;
   }
 
