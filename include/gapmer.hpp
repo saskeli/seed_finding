@@ -44,8 +44,6 @@ class gapmer {
   // +--------------------+------------+------------+------------+-----------+
   uint64_t data_{};
 
-  static inline uint64_t read_multiple_characters(uint64_t word);
-
   template <bool t_has_gap>
   static inline uint64_t read_word_aligned_characters(uint64_t const *d_ptr, uint8_t kk, uint8_t gap_start = 0, uint8_t gap_length = 0);
 
@@ -147,19 +145,6 @@ gapmer<middle_gap_only, t_max_gap>::gapmer(uint64_t prefix, uint64_t suffix, uin
 
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-uint64_t gapmer<middle_gap_only, t_max_gap>::read_multiple_characters(uint64_t const word)
-{
-	constexpr uint64_t const xor_mask{UINT64_C(0b0101010101010101)};
-	constexpr uint64_t const pext_mask{UINT64_C(0x0606060606060606)};
-
-	uint64_t retval{bits::byteswap(word)};
-	retval = bits::pext(retval, pext_mask);
-	retval ^= (retval >> 1) & xor_mask;
-	return retval;
-}
-
-
-template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(uint64_t data, uint8_t kk)
 {
 	assert(kk <= max_k);
@@ -203,7 +188,7 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(uint64
 		uint64_t iv{};
 		while (true)
 		{
-			iv = read_multiple_characters(d_ptr[ii]);
+			iv = bits::read_multiple_dna_characters(d_ptr[ii]);
 			if (gap_start < 8 * (ii + 1))
 				break;
 			retval |= iv;
@@ -225,7 +210,7 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(uint64
 			if (8 * (ii + 1) <= gap_start + gap_length)
 			{
 				ii = (gap_start + gap_length) / 8;
-				iv = read_multiple_characters(d_ptr[ii]);
+				iv = bits::read_multiple_dna_characters(d_ptr[ii]);
 			}
 
 			{
@@ -259,7 +244,7 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(uint64
 	// ii < limit (checked before).
 	while (true)
 	{
-		auto iv(read_multiple_characters(d_ptr[ii]));
+		auto iv(bits::read_multiple_dna_characters(d_ptr[ii]));
 		retval |= iv;
 		++ii;
 		if (ii == limit)
