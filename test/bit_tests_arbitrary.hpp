@@ -59,9 +59,9 @@ namespace rc {
 namespace sf {
 
 	SF_RC_TEMPLATE_TEST(bit_arbitrary, PEXTWorksAsExpected, (TypeParam const value, TypeParam const mask), uint32_t, uint64_t) {
-		if constexpr (sf::bits::detail::pext_intrinsic_available)
+		if constexpr (sf::bits::detail::pext_intrinsic_available_for_type_v <TypeParam>)
 		{
-			auto const res(sf::bits::detail::pext(value, mask));
+			auto const res(sf::bits::detail::pext_generic(value, mask));
 			auto const expected(sf::bits::detail::pext_intrinsic(value, mask));
 			RC_ASSERT(res == expected);
 		}
