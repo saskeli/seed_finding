@@ -4,6 +4,8 @@ ifndef MAX_GAP
 MAX_GAP = 15
 endif
 
+GCOV ?= gcov
+
 CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)
 
 PERF_FLAGS = -Ofast -DNDEBUG -fopenmp
@@ -95,6 +97,6 @@ test/cover: $(GTEST_DIR)/build/lib/libgtest_main.a $(TEST_HPP) $(HEADERS) test/t
 cover: test/cover
 	rm -f *.gcov test/*.gcda coverage.info
 	test/cover
-	lcov -c --ignore-errors inconsistent,unused --directory test --output-file coverage.info --gcov-tool gcov
+	lcov -c --ignore-errors inconsistent,unused --directory test --output-file coverage.info --gcov-tool $(GCOV)
 	lcov --remove coverage.info "/usr*" --output-file coverage.info
 	genhtml coverage.info -o target
