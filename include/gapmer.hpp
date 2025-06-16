@@ -210,112 +210,6 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool t_has_gap>
-<<<<<<< HEAD
-uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(uint64_t const *d_ptr, uint8_t const kk, uint8_t const gap_start, uint8_t const gap_length)
-{
-	// Reads word aligned characters from d_ptr and returns them 2-bit encoded.
-	// Gap characters are taken into account (i.e. skipped) iff. t_has_gap is true.
-	// Overall the function works as follows:
-	//
-	// 1. Read eight characters at a time from d_ptr up to the first
-	//    word that has a gap character,
-	// 2. Process the defined (non-gap) characters in said word,
-	// 3. Skip to the word that has the next defined character,
-	// 4. Process the defined characters in said word,
-	// 5. Continue reading word-aligned characters.
-	//
-	// In case t_has_gap is false, only step 5 is done.
-
-	assert(kk <= max_k);
-	assert(gap_start < kk);
-	assert(gap_length <= max_gap);
-
-	uint64_t retval{};
-	uint8_t ii{};
-	uint8_t const limit((kk + gap_length + 7) / 8); // Since d_ptr is uint64_t const *, we are bound to have a multiple of 8 bytes.
-	if constexpr (t_has_gap)
-	{
-		assert(gap_start);
-		assert(gap_length);
-		uint64_t iv{};
-		// Read the characters eight at a time until the first gap character.
-		while (true)
-		{
-			iv = bits::read_multiple_dna_characters(d_ptr[ii]);
-			if (gap_start < 8 * (ii + 1)) // Check if we reached the gap run.
-				break;
-			retval |= iv;
-			retval <<= 16;
-			++ii;
-		}
-
-		{
-			// Handle the defined characters in the higher bits of the word in case there are any.
-			{
-				uint64_t const count(gap_start - 8 * ii);
-				uint64_t const mask{0xffff & (UINT64_C(0xffff) << (2 * (8 - count)))}; // Shift by at most 16 so no UB.
-				retval |= iv & mask;
-				retval <<= 2 * count;
-			}
-
-			// Skip to the word that has the next defined character.
-			if (8 * (ii + 1) <= gap_start + gap_length)
-			{
-				ii = (gap_start + gap_length) / 8;
-				iv = bits::read_multiple_dna_characters(d_ptr[ii]);
-			}
-
-			// Defined characters in the lower bits of the word.
-			{
-				uint64_t const count(8 * (ii + 1) - gap_start - gap_length);
-				uint64_t mask{UINT64_C(0xffff) >> (2 * (8 - count))}; // Again shift by at most 16.
-				iv &= mask;
-
-				++ii;
-				if (ii == limit)
-				{
-					// This was the last word in the input; shift the encoded characters s.t.
-					// the last one is placed at index zero.
-					iv <<= 2 * (8 - count);
-					retval |= iv;
-					retval >>= 2 * (8 - (kk - gap_start));
-					return retval;
-				}
-
-				// Append to retval.
-				iv <<= 16 - 2 * count;
-				retval |= iv;
-				retval <<= 2 * count;
-			}
-		}
-	}
-	else
-	{
-		assert(0 == gap_start);
-		assert(0 == gap_length);
-		if (ii == limit)
-			return retval;
-	}
-
-	// Handle the remaining characters (i.e. after the gap run).
-	// ii < limit (checked before).
-	while (true)
-	{
-		auto iv(bits::read_multiple_dna_characters(d_ptr[ii]));
-		retval |= iv;
-		++ii;
-		if (ii == limit)
-			break;
-		retval <<= 16;
-	}
-
-	// Shift the encoded characters s.t. the last one is placed at index zero.
-	{
-		auto const remaining_count((kk + gap_length) % 8);
-		if (remaining_count)
-			retval >>= 2 * (8 - remaining_count);
-	}
-=======
 uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(
     uint64_t const* d_ptr, uint8_t const kk, uint8_t const gap_start,
     uint8_t const gap_length) {
@@ -393,7 +287,6 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(
     auto const remaining_count((kk + gap_length) % 8);
     if (remaining_count) retval >>= 2 * (8 - remaining_count);
   }
->>>>>>> 7bfeece (upated to support gzipped fast(a|q))
 
   // Metadata not encoded.
   return retval;
