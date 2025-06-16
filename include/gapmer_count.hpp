@@ -2,13 +2,13 @@
 
 #include <stdlib.h>
 
+#include <SeqIO/SeqIO.hh>
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <sdsl/bit_vectors.hpp>
-#include <SeqIO/SeqIO.hh>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -111,7 +111,8 @@ class gapmer_count {
   }
 
  public:
-  gapmer_count(std::string& sig_fasta_path, std::string& bg_fasta_path, uint8_t k)
+  gapmer_count(std::string& sig_fasta_path, std::string& bg_fasta_path,
+               uint8_t k)
       : sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         bg_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         discarded(lookup_elems(k)),
@@ -143,8 +144,8 @@ class gapmer_count {
   gapmer_count& operator=(const gapmer_count&) = delete;
 
  private:
-  void smooth(double* arr, double* brr, double* sig_scratch,
-              double* bg_scratch, uint64_t v_lim) {
+  void smooth(double* arr, double* brr, double* sig_scratch, double* bg_scratch,
+              uint64_t v_lim) {
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
       sig_scratch[v] = arr[v];

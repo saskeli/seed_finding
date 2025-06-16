@@ -139,7 +139,8 @@ int main(int argc, char const* argv[]) {
     exit(1);
   }
   if (max_k < 6 || max_k > 24) {
-    std::cerr << "invalide value for maximum k: " << max_k << ", shoudl be in [6, 24] range." << std::endl;
+    std::cerr << "invalide value for maximum k: " << max_k
+              << ", should be in [6, 24] range." << std::endl;
     help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
     exit(1);
   }
@@ -156,29 +157,27 @@ int main(int argc, char const* argv[]) {
   };
   if (enable_smoothing) {
     if (middle_gap_only) {
-      sf::seed_finder<true, max_gap> sf(sig_path, bg_path, p,
-                                        log_fold, max_k, mem_limit, p_ext);
+      sf::seed_finder<true, max_gap> sf(sig_path, bg_path, p, log_fold, max_k,
+                                        mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();
       filter_seeds(seeds, cb);
     } else {
-      sf::seed_finder<false, max_gap> sf(sig_path, bg_path, p,
-                                         log_fold, max_k, mem_limit, p_ext);
+      sf::seed_finder<false, max_gap> sf(sig_path, bg_path, p, log_fold, max_k,
+                                         mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();
       filter_seeds(seeds, cb);
     }
   } else {
     if (middle_gap_only) {
-      sf::seed_finder<true, max_gap, false> sf(sig_path,
-                                               bg_path, p, log_fold,
+      sf::seed_finder<true, max_gap, false> sf(sig_path, bg_path, p, log_fold,
                                                max_k, mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();
       filter_seeds(seeds, cb);
     } else {
-      sf::seed_finder<false, max_gap, false> sf(sig_path,
-                                                bg_path, p, log_fold,
+      sf::seed_finder<false, max_gap, false> sf(sig_path, bg_path, p, log_fold,
                                                 max_k, mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();

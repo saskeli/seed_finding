@@ -59,13 +59,13 @@ class gapmer {
   static inline uint64_t from_packed_characters(
       uint64_t data, uint8_t kk, uint8_t gap_start,
       uint8_t gap_length);  //< Returns the packed representation including the
-                            //lengths and the gap position.
+                            // lengths and the gap position.
 
   explicit gapmer(uint64_t data)
       : data_(data) {}  //< Construct from the given data.
   gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len,
          uint8_t gap_s, uint8_t gap_l);  //< Construct from the given prefix,
-                                         //suffix, gap position and lengths.
+                                         // suffix, gap position and lengths.
 
   uint64_t prefix() const;
   uint64_t suffix() const;
@@ -135,13 +135,13 @@ class gapmer {
 
   uint16_t length() const {
     return (data_ >> (max_k * 2)) & meta_mask;
-  }                            //< Get the count of the defined bases.
+  }  //< Get the count of the defined bases.
   uint16_t gap_start() const;  //< Get the starting position of the gap.
   uint16_t gap_length() const {
     return data_ >> (max_k * 2 + 10);
-  }                              //< Get the gap length.
+  }  //< Get the gap length.
   uint8_t nuc(uint8_t i) const;  //< Get the i-th 2-bit encoded nucleotide (gap
-                                 //not taken into account).
+                                 // not taken into account).
   uint8_t get_c(uint64_t i)
       const;  //< Get the unpacked character or gap at the i-th position.
   uint64_t value() const {
@@ -149,12 +149,12 @@ class gapmer {
   }  //< Get the encoded value.
   gapmer next(
       char c) const;  //< For a non-gapped gapmer, returns a copy of it with c
-                      //appended and the leftmost character removed. If this is
-                      //empty, returns an empty gapmer.
+                      // appended and the leftmost character removed. If this is
+                      // empty, returns an empty gapmer.
   gapmer next(char c1, char c2)
       const;  //< For a gapped gapmer, returns a copy of it with c1 and c2
-              //appended respectively to the prefix and to the suffix, with the
-              //leftmost characters removed.
+              // appended respectively to the prefix and to the suffix, with the
+              // leftmost characters removed.
   void hamming_neighbours(auto& callback) const;
 
   template <bool no_smaller = false, bool no_same = false,
@@ -166,7 +166,7 @@ class gapmer {
   std::string to_string() const;  //< Returns the sequence as std::string.
   bool is_canonical()
       const;  //< Returns true iff. this is lexicographically equal or smaller
-              //than its reverse complement. // FIXME: is the statement true?
+              // than its reverse complement. // FIXME: is the statement true?
   gapmer reverse_complement() const;  //< Get this’s reverse complement.
   bool is_valid() const;
   std::bitset<64> bits() const { return data_; }

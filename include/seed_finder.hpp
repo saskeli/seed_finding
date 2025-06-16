@@ -1,11 +1,12 @@
 #pragma once
 
+#include <gsl/gsl_errno.h>
+
 #include <cmath>
 #include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <gsl/gsl_errno.h>
 
 #include "fm_index.hpp"
 #include "gapmer.hpp"
@@ -417,8 +418,10 @@ class seed_finder {
       bg_size_ += len;
     }
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
-    std::cerr << "Background " << bg_path_ << " with length " << bg_size_ << std::endl;
-    std::cerr << "Signal " << sig_path_ << " with length " << sig_size_ << std::endl;
+    std::cerr << "Background " << bg_path_ << " with length " << bg_size_
+              << std::endl;
+    std::cerr << "Signal " << sig_path_ << " with length " << sig_size_
+              << std::endl;
     std::cerr << "X = " << x_ << std::endl;
   }
 
