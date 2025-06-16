@@ -226,7 +226,11 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(
     assert(gap_start);
     assert(gap_length);
     uint64_t iv{};
-    while (true) {
+    // The loop condition is an unrolling hint for the compiler.
+    // (Checked the output from Compiler Explorer. GCC unrolls the
+    // loop and the one later when using -O3. Clang unrolls the loops
+    // even with -O2.)
+    while (ii < (max_k + max_gap + 7) / 8) {
       iv = bits::read_multiple_dna_characters(d_ptr[ii]);
       if (gap_start < 8 * (ii + 1)) break;
       retval |= iv;
@@ -275,7 +279,8 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(
   }
 
   // ii < limit (checked before).
-  while (true) {
+  // The loop condition is an unrolling hint for the compiler.
+  while (ii < (max_k + max_gap + 7) / 8) {
     auto iv(bits::read_multiple_dna_characters(d_ptr[ii]));
     retval |= iv;
     ++ii;
