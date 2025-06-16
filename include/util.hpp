@@ -156,7 +156,7 @@ bool compare_generation(G g) {
   return compare_generation<G, middle_gap_only, max_gap>(g, a, b);
 }
 
-double error_suppressed_beta_inc(double a, double b, double x) {
+inline double error_suppressed_beta_inc(double a, double b, double x) {
   gsl_sf_result res;
   int err = gsl_sf_beta_inc_e(a, b, x, &res);
   return err ? 0 : res.val;
