@@ -27,8 +27,8 @@ class seed_finder {
     uint64_t bg_count;
   };
 
-  const std::string sig_path_;
-  const std::string bg_path_;
+  std::string sig_path_;
+  std::string bg_path_;
   std::vector<Res> seeds_;
   uint64_t sig_size_;
   uint64_t bg_size_;
@@ -384,7 +384,7 @@ class seed_finder {
   }
 
  public:
-  seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
+  seed_finder(std::string& sig_path, std::string& bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01)
       : sig_path_(sig_path),
