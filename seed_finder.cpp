@@ -156,13 +156,13 @@ int main(int argc, char const* argv[]) {
   };
   if (enable_smoothing) {
     if (middle_gap_only) {
-      sf::seed_finder<true, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
+      sf::seed_finder<true, max_gap> sf(sig_path, bg_path, p,
                                         log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();
       filter_seeds(seeds, cb);
     } else {
-      sf::seed_finder<false, max_gap> sf(sig_path.c_str(), bg_path.c_str(), p,
+      sf::seed_finder<false, max_gap> sf(sig_path, bg_path, p,
                                          log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();
@@ -170,15 +170,15 @@ int main(int argc, char const* argv[]) {
     }
   } else {
     if (middle_gap_only) {
-      sf::seed_finder<true, max_gap, false> sf(sig_path.c_str(),
-                                               bg_path.c_str(), p, log_fold,
+      sf::seed_finder<true, max_gap, false> sf(sig_path,
+                                               bg_path, p, log_fold,
                                                max_k, mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();
       filter_seeds(seeds, cb);
     } else {
-      sf::seed_finder<false, max_gap, false> sf(sig_path.c_str(),
-                                                bg_path.c_str(), p, log_fold,
+      sf::seed_finder<false, max_gap, false> sf(sig_path,
+                                                bg_path, p, log_fold,
                                                 max_k, mem_limit, p_ext);
       sf.find_seeds();
       auto seeds = sf.get_seeds();

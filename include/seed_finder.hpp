@@ -242,13 +242,13 @@ class seed_finder {
       ++k_lim;
     }
     std::cerr << "Lookup tables up to " << int(k_lim - 1) << std::endl;
-    G_C sig_bg_a(sig_path_.c_str(), bg_path_.c_str(), 5);
+    G_C sig_bg_a(sig_path_, bg_path_, 5);
     if constexpr (enable_smootihing) {
       sig_bg_a.smooth();
     }
 
     for (uint8_t k = 6; k < k_lim; ++k) {
-      G_C sig_bg_b(sig_path_.c_str(), bg_path_.c_str(), k);
+      G_C sig_bg_b(sig_path_, bg_path_, k);
       if constexpr (enable_smootihing) {
         sig_bg_b.smooth();
       }
@@ -384,7 +384,7 @@ class seed_finder {
   }
 
  public:
-  seed_finder(const char* sig_path, const char* bg_path, double p,
+  seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01)
       : sig_path_(sig_path),
@@ -398,7 +398,7 @@ class seed_finder {
         memory_limit_(memory_limit),
         k_lim_(max_k) {
     gsl_set_error_handler_off();
-    seq_io::Reader sr(sig_path_);
+    seq_io::Reader_x sr(sig_path_);
     sr.enable_reverse_complements();
     while (true) {
       uint64_t len = sr.get_next_read_to_buffer();
@@ -407,7 +407,7 @@ class seed_finder {
       }
       sig_size_ += len;
     }
-    seq_io::Reader br(bg_path_);
+    seq_io::Reader_x br(bg_path_);
     br.enable_reverse_complements();
     while (true) {
       uint64_t len = br.get_next_read_to_buffer();

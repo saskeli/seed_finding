@@ -79,7 +79,7 @@ class partial_count {
   template <bool middle_gap_only, uint16_t max_gap>
   void count_mers(const std::string& sig_path, const std::string& bg_path,
                   uint16_t k) {
-    seq_io::Reader sr(sig_path);
+    seq_io::Reader_x sr(sig_path);
     sr.enable_reverse_complements();
 #pragma omp parallel
     while (true) {
@@ -92,6 +92,9 @@ class partial_count {
       }
       if (len == 0) {
         break;
+      }
+      if (len < k) {
+        continue;
       }
       std::string_view const ss{buffer};
       gapmer_t g(buffer.data(), k);
@@ -117,7 +120,7 @@ class partial_count {
         }
       }
     }
-    seq_io::Reader br(bg_path);
+    seq_io::Reader_x br(bg_path);
     br.enable_reverse_complements();
 #pragma omp parallel
     while (true) {
