@@ -16,7 +16,8 @@
 
 namespace sf {
 
-template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true>
+template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true,
+          bool filter_mers = true>
 class seed_finder {
  private:
   typedef gapmer<middle_gap_only, max_gap> G;
@@ -66,27 +67,31 @@ class seed_finder {
 #endif
       return false;
     }
+    if constexpr (filter_mers) {
 #ifdef DEBUG
-    if (b_r < a_r) {
-      std::cerr << "        " << a.to_string() << " discarded by "
-                << b.to_string() << "\n            (" << a_sig << ", " << a_bg
-                << ") <-> (" << b_sig << ", " << b_bg
-                << ")\n            with p " << b_r << std::endl;
-    } else {
-      std::cerr << "        " << a.to_string() << " discards " << b.to_string()
-                << "\n            (" << a_sig << ", " << a_bg << ") <-> ("
-                << b_sig << ", " << b_bg << ")\n            with p " << b_r
-                << std::endl;
-    }
+      if (b_r < a_r) {
+        std::cerr << "        " << a.to_string() << " discarded by "
+                  << b.to_string() << "\n            (" << a_sig << ", " << a_bg
+                  << ") <-> (" << b_sig << ", " << b_bg
+                  << ")\n            with p " << b_r << std::endl;
+      } else {
+        std::cerr << "        " << a.to_string() << " discards "
+                  << b.to_string() << "\n            (" << a_sig << ", " << a_bg
+                  << ") <-> (" << b_sig << ", " << b_bg
+                  << ")\n            with p " << b_r << std::endl;
+      }
 #endif
-    return b_r <= a_r;
+      return b_r <= a_r;
+    } else {
+      return b_r <= p_;
+    }
   }
 
   template <bool calc_b_r>
   bool do_filter([[maybe_unused]] G a, [[maybe_unused]] G b, double a_sig,
                  double a_bg, double b_sig, double b_bg, double a_r,
                  double& b_r) {
-    if (a_bg == 1 && b_bg == 1) {
+    if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (b_sig > a_sig) {
         if constexpr (calc_b_r) {
           b_r = error_suppressed_beta_inc(b_sig, b_bg, x_);
@@ -112,69 +117,83 @@ class seed_finder {
       exit(1);
     }
 #endif
-    if (sig_bg_a.discarded[offset + v]) {
-      return;
+    if constexpr (filter_mers) {
+      if (sig_bg_a.discarded[offset + v]) {
+        return;
+      }
     }
     G g(v, k, gap_s, gap_l);
     if (not g.is_canonical()) {
+      if constexpr (filter_mers) {
 #pragma omp critical(a_bv)
-      sig_bg_a.discarded[offset + v] = true;
+        sig_bg_a.discarded[offset + v] = true;
+      }
       return;
     }
     uint64_t a = sig_bg_a.sig_counts[offset + v] + 1;
     uint64_t b = sig_bg_a.bg_counts[offset + v] + 1;
     if (a * bg_size_ <= fold_lim_ * b * sig_size_) {
+      if constexpr (filter_mers) {
 #pragma omp critical(a_bv)
-      sig_bg_a.discarded[offset + v] = true;
+        sig_bg_a.discarded[offset + v] = true;
+      }
+      return;
     }
     double r = error_suppressed_beta_inc(a, b, x_);
     if (r > p_) {
+      if constexpr (filter_mers) {
 #pragma omp critical(a_bv)
-      sig_bg_a.discarded[offset + v] = true;
+        sig_bg_a.discarded[offset + v] = true;
+      }
       return;
     }
-    auto callback_a = [&](G o) {
-      uint64_t o_offset = sig_bg_a.offset(o.gap_start(), o.gap_length());
-      uint64_t o_v = o.value();
-      double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
-      double o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1;
-      if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
+    if constexpr (filter_mers) {
+      auto callback_a = [&](G o) {
+        uint64_t o_offset = sig_bg_a.offset(o.gap_start(), o.gap_length());
+        uint64_t o_v = o.value();
+        double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
+        double o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1;
+        if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(a_bv)
-        sig_bg_a.discarded[o_offset + o_v] = true;
-        return;
-      }
-      double o_r;
-      if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+          sig_bg_a.discarded[o_offset + o_v] = true;
+          return;
+        }
+        double o_r;
+        if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
 #pragma omp critical(a_bv)
-        sig_bg_a.discarded[offset + v] = true;
-      } else {
+          sig_bg_a.discarded[offset + v] = true;
+        } else {
 #pragma omp critical(a_bv)
-        sig_bg_a.discarded[o_offset + o_v] = true;
-      }
-    };
-    g.template huddinge_neighbours<true, false, true>(callback_a);
-    auto callback_b = [&](G o) {
-      uint64_t o_offset = sig_bg_b.offset(o.gap_start(), o.gap_length());
-      uint64_t o_v = o.value();
-      double o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
-      double o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
-      if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
+          sig_bg_a.discarded[o_offset + o_v] = true;
+        }
+      };
+
+      g.template huddinge_neighbours<true, false, true>(callback_a);
+      auto callback_b = [&](G o) {
+        uint64_t o_offset = sig_bg_b.offset(o.gap_start(), o.gap_length());
+        uint64_t o_v = o.value();
+        double o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
+        double o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
+        if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(o_bv)
-        sig_bg_b.discarded[o_offset + o_v] = true;
-        return;
-      }
-      double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
-      if (do_extend(g, o, a, b, o_a, o_b, r, o_r)) {
+          sig_bg_b.discarded[o_offset + o_v] = true;
+          return;
+        }
+        double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
+        if (do_extend(g, o, a, b, o_a, o_b, r, o_r)) {
 #pragma omp critical(a_bv)
-        sig_bg_a.discarded[offset + v] = true;
-      } else {
+          sig_bg_a.discarded[offset + v] = true;
+        } else {
 #pragma omp critical(o_bv)
-        sig_bg_b.discarded[o_offset + o_v] = true;
-      }
-    };
-    g.template huddinge_neighbours<true, true, false>(callback_b);
-    if (sig_bg_a.discarded[offset + v] == false) {
+          sig_bg_b.discarded[o_offset + o_v] = true;
+        }
+      };
+      g.template huddinge_neighbours<true, true, false>(callback_b);
+      if (sig_bg_a.discarded[offset + v] == false) {
 #pragma omp critical
+        seeds_.push_back({g, r, a, b});
+      }
+    } else {
       seeds_.push_back({g, r, a, b});
     }
   }
@@ -191,47 +210,62 @@ class seed_finder {
       exit(1);
     }
 #endif
-    if (sig_bg_c.discarded[offset + v]) {
-      return;
+    if constexpr (filter_mers) {
+      if (sig_bg_c.discarded[offset + v]) {
+        return;
+      }
     }
     G g(v, k, gap_s, gap_l);
     if (not g.is_canonical()) {
-      sig_bg_c.discarded[offset + v] = true;
+      if constexpr (filter_mers) {
+#pragma omp critical(d_bv)
+        sig_bg_c.discarded[offset + v] = true;
+      }
       return;
     }
     uint64_t a = sig_bg_c.sig_counts[offset + v] + 1;
     uint64_t b = sig_bg_c.bg_counts[offset + v] + 1;
     if (a * sig_size_ <= fold_lim_ * b * bg_size_) {
+      if constexpr (filter_mers) {
 #pragma omp critical(d_bv)
-      sig_bg_c.discarded[offset + v] = true;
+        sig_bg_c.discarded[offset + v] = true;
+      }
+      return;
     }
     double r = error_suppressed_beta_inc(a, b, x_);
     if (r > p_) {
-#pragma omp critical(d_bv)
-      sig_bg_c.discarded[offset + v] = true;
-      return;
-    }
-    auto callback = [&](G o) {
-      uint64_t o_offset = sig_bg_c.offset(o.gap_start(), o.gap_length());
-      uint64_t o_v = o.value();
-      double o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
-      double o_b = sig_bg_c.bg_counts[o_offset + v] + 1;
-      if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
-#pragma omp critical(d_bv)
-        sig_bg_c.discarded[o_offset + o_v] = true;
-        return;
-      }
-      double o_r;
-      if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+      if constexpr (filter_mers) {
 #pragma omp critical(d_bv)
         sig_bg_c.discarded[offset + v] = true;
-      } else {
-#pragma omp critical(d_bv)
-        sig_bg_c.discarded[o_offset + o_v] = true;
       }
-    };
-    g.template huddinge_neighbours<true, false, true>(callback);
-    if (sig_bg_c.discarded[offset + v] == false) {
+      return;
+    }
+    if constexpr (filter_mers) {
+      auto callback = [&](G o) {
+        uint64_t o_offset = sig_bg_c.offset(o.gap_start(), o.gap_length());
+        uint64_t o_v = o.value();
+        double o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
+        double o_b = sig_bg_c.bg_counts[o_offset + v] + 1;
+        if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
+#pragma omp critical(d_bv)
+          sig_bg_c.discarded[o_offset + o_v] = true;
+          return;
+        }
+        double o_r;
+        if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+#pragma omp critical(d_bv)
+          sig_bg_c.discarded[offset + v] = true;
+        } else {
+#pragma omp critical(d_bv)
+          sig_bg_c.discarded[o_offset + o_v] = true;
+        }
+      };
+      g.template huddinge_neighbours<true, false, true>(callback);
+      if (sig_bg_c.discarded[offset + v] == false) {
+#pragma omp critical
+        m[g] = {g, r, a, b};
+      }
+    } else {
 #pragma omp critical
       m[g] = {g, r, a, b};
     }
@@ -315,7 +349,9 @@ class seed_finder {
         if (b.contains(o)) {
           if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
                         b[o].sig_count, b[o].bg_count, p.second.p, b[o].p)) {
-            keep = false;
+            if constexpr (filter_mers) {
+              keep = false;
+            }
           } else {
             b[o] = {p.first, 1.0, 1, 1};
           }
@@ -339,17 +375,25 @@ class seed_finder {
           if (do_extend<false>(p.first, o, p.second.sig_count,
                                p.second.bg_count, o_a, o_b, p.second.p, o_r)) {
             b[o] = {o, o_r, uint64_t(o_a), uint64_t(o_b)};
-            keep = false;
+            if constexpr (filter_mers) {
+              keep = false;
+            }
+          } else {
+            b[o] = {o, 1.0, 1, 1};
           }
         }
       };
       p.first.template huddinge_neighbours<true, true, false>(callback);
-      if (not keep) {
-        del_set.insert(p.first);
+      if constexpr (filter_mers) {
+        if (not keep) {
+          del_set.insert(p.first);
+        }
       }
     }
-    for (auto d : del_set) {
-      a.erase(d);
+    if constexpr (filter_mers) {
+      for (auto d : del_set) {
+        a.erase(d);
+      }
     }
     p_counter.clear();
   }
@@ -462,7 +506,9 @@ class seed_finder {
         seeds_.push_back(p.second);
       }
       a.clear();
-      filter(b);
+      if constexpr (filter_mers) {
+        filter(b);
+      }
       a.swap(b);
       std::cerr << int(k) - 1 << " -> " << seeds_.size() << " seeds."
                 << std::endl;

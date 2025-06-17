@@ -1,4 +1,5 @@
 #include "include/seed_finder.hpp"
+#include "include/seed_clusterer.hpp"
 
 #ifndef MAX_GAP
 #define MAX_GAP 5
@@ -151,37 +152,53 @@ int main(int argc, char const* argv[]) {
   mem_limit *= 1000;
   mem_limit *= 1000;
   mem_limit *= 1000;
-  auto cb = [](auto s) {
-    std::cout << s.g.to_string() << "\t" << s.p << "\t(" << s.sig_count - 1
-              << ", " << s.bg_count - 1 << ")" << std::endl;
-  };
   if (enable_smoothing) {
     if (middle_gap_only) {
-      sf::seed_finder<true, max_gap> sf(sig_path, bg_path, p, log_fold, max_k,
-                                        mem_limit, p_ext);
+      sf::seed_finder<true, max_gap, true, false> sf(
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+      sf::seed_clusterer<true, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path);
+      for (size_t i = 0; i < 4; ++i) {
+        if (sc.size() < 10) {
+          break;
+        }
+        sc.output_cluster();
+      }
     } else {
-      sf::seed_finder<false, max_gap> sf(sig_path, bg_path, p, log_fold, max_k,
-                                         mem_limit, p_ext);
+      sf::seed_finder<false, max_gap, true, false> sf(
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+      sf::seed_clusterer<false, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path);
+      for (size_t i = 0; i < 4; ++i) {
+        if (sc.size() < 10) {
+          break;
+        }
+        sc.output_cluster();
+      }
     }
   } else {
     if (middle_gap_only) {
-      sf::seed_finder<true, max_gap, false> sf(sig_path, bg_path, p, log_fold,
-                                               max_k, mem_limit, p_ext);
+      sf::seed_finder<true, max_gap, false, false> sf(
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+      sf::seed_clusterer<true, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path);
+      for (size_t i = 0; i < 4; ++i) {
+        if (sc.size() < 10) {
+          break;
+        }
+        sc.output_cluster();
+      }
     } else {
-      sf::seed_finder<false, max_gap, false> sf(sig_path, bg_path, p, log_fold,
-                                                max_k, mem_limit, p_ext);
+      sf::seed_finder<false, max_gap, false, false> sf(
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      auto seeds = sf.get_seeds();
-      filter_seeds(seeds, cb);
+      sf::seed_clusterer<false, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path);
+      for (size_t i = 0; i < 4; ++i) {
+        if (sc.size() < 10) {
+          break;
+        }
+        sc.output_cluster();
+      }
     }
   }
 
