@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -28,8 +29,8 @@ class seed_finder {
     uint64_t bg_count;
   };
 
-  const std::string sig_path_;
-  const std::string bg_path_;
+  std::string sig_path_;
+  std::string bg_path_;
   std::vector<Res> seeds_;
   uint64_t sig_size_;
   uint64_t bg_size_;
