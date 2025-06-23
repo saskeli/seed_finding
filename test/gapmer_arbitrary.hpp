@@ -549,8 +549,6 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
             RC_ASSERT(expected == actual);
             RC_ASSERT(gg_.is_valid());
 
-            if (expected == "GACGCAAC") std::cerr << "test\n"; // FIXME: Remove this.
-
             retval.values.insert(gg_);
           });
 
