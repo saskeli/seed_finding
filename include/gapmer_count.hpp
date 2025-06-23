@@ -57,7 +57,8 @@ class gapmer_count {
   uint8_t k_;
 
  private:
-  static void count_mers(std::string& fasta_path, double* counts, uint8_t k) {
+  static void count_mers(const std::string& fasta_path, double* counts,
+                         uint8_t k) {
     seq_io::Reader_x r(fasta_path);
     r.enable_reverse_complements();
 #pragma omp parallel
@@ -111,8 +112,8 @@ class gapmer_count {
   }
 
  public:
-  gapmer_count(std::string& sig_fasta_path, std::string& bg_fasta_path,
-               uint8_t k)
+  gapmer_count(const std::string& sig_fasta_path,
+               const std::string& bg_fasta_path, uint8_t k)
       : sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         bg_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         discarded(lookup_elems(k)),
