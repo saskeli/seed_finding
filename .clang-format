@@ -4,5 +4,4 @@ MaxEmptyLinesToKeep: 2
 AlignTrailingComments:
   Kind: Leave
   OverEmptyLines: 2
-  MaxEmptyLinesToKeep: 2
 ...
