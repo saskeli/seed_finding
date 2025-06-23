@@ -72,6 +72,9 @@ constexpr inline t_unsigned pext_generic(t_unsigned src, t_unsigned mask) {
 
   clear_mask = ~clear_mask;
 
+  // As of clang-format 20, the tool breaks the formatting below unless
+  // AlignTrailingComments's Kind is set to Always.
+  // clang-format off
   while (mask) {
     t_unsigned const trailing_zeros(  // Find the next set bit in the mask.
         std::countr_zero(mask));      //
@@ -80,14 +83,15 @@ constexpr inline t_unsigned pext_generic(t_unsigned src, t_unsigned mask) {
     mask >>= trailing_zeros;          //
     retval |= src << dst_idx;         // Extract.
 
-    t_unsigned const trailing_ones(  // Find the next unset bit in the mask.
-        std::countr_one(mask));      //
-    src >>= trailing_ones;           // Skip to the end of the current run.
-    mask >>= trailing_ones;          //
-    dst_idx += trailing_ones;        // Set up the next target position.
-    clear_mask <<= trailing_ones;    // Clear the bits outside the current run.
+    t_unsigned const trailing_ones(   // Find the next unset bit in the mask.
+        std::countr_one(mask));       //
+    src >>= trailing_ones;            // Skip to the end of the current run.
+    mask >>= trailing_ones;           //
+    dst_idx += trailing_ones;         // Set up the next target position.
+    clear_mask <<= trailing_ones;     // Clear the bits outside the current run.
     retval &= ~clear_mask;
   }
+  // clang-format on
 
   return retval;
 }
@@ -194,20 +198,25 @@ constexpr inline uint64_t const read_multiple_dna_characters_xor_mask{
 inline uint64_t read_multiple_dna_characters_generic(uint64_t word) {
   // Both Clang and GCC generate some 11 instructions for 64-bit ARM for this
   // function (excluding ret).
-  word = byteswap(word);                          // Change the order to what
-                                                  // gapmer expects.
-  word >>= 1;                                     // Shift s.t. the relevant
-                                                  // bits are in the beginning
-                                                  // of each byte.
-  word &= UINT64_C(0x303030303030303);            // Clear everything else.
-  word |= word >> 6;                              // Group pairs of characters.
-  word |= word >> 12;                             // Group quads of characters.
-  word &= UINT64_C(0xFF000000FF);                 // Clear everything else.
-  word |= word >> 24;                             // Group the eight characters.
-  word ^= (word >> 1) &                           // Fix the bit representation.
-          read_multiple_dna_characters_xor_mask;  //
-  word &= 0xFFFF;                                 // Clear everything else.
+
+  // As of clang-format 20, the tool breaks the formatting below unless
+  // AlignTrailingComments's Kind is set to Always.
+  // clang-format off
+  word = byteswap(word);                // Change the order to what
+                                        // gapmer expects.
+  word >>= 1;                           // Shift s.t. the relevant
+                                        // bits are in the beginning
+                                        // of each byte.
+  word &= UINT64_C(0x303030303030303);  // Clear everything else.
+  word |= word >> 6;                    // Group pairs of characters.
+  word |= word >> 12;                   // Group quads of characters.
+  word &= UINT64_C(0xFF000000FF);       // Clear everything else.
+  word |= word >> 24;                   // Group the eight characters.
+  word ^= (word >> 1) &                 // Fix the bit representation.
+          read_multiple_dna_characters_xor_mask;
+  word &= 0xFFFF;                       // Clear everything else.
   return word;
+  // clang-format on
 }
 
 
