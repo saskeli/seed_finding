@@ -21,7 +21,7 @@ INCLUDE += -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
 LIBS += -lz -lgsl -lgslcblas -lm
 
-HEADERS = include/gapmer.hpp include/fm_index.hpp include/gapmer_count.hpp include/seed_finder.hpp include/partial_count.hpp
+HEADERS = include/gapmer.hpp include/fm_index.hpp include/gapmer_count.hpp include/seed_finder.hpp include/partial_count.hpp include/seed_clusterer.hpp
 
 SDSL_DIR = deps/sdsl-lite/lib
 

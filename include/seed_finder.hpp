@@ -194,6 +194,7 @@ class seed_finder {
         seeds_.push_back({g, r, a, b});
       }
     } else {
+#pragma omp critical
       seeds_.push_back({g, r, a, b});
     }
   }
@@ -321,41 +322,18 @@ class seed_finder {
   }
 
   template <class M, class P>
-  void extend(M& a, M& b, P& p_counter, uint16_t k) {
-    std::cerr << "    Extend " << a.size() << " mers." << std::endl;
-    for (auto p : a) {
-      auto callback = [&](G o) {
-        p_counter.init(p.first);
-        auto ccb = [&](G h_n) { p_counter.init(h_n); };
-        o.hamming_neighbours(ccb);
-      };
-      p.first.template huddinge_neighbours<true, true, false>(callback);
-    }
-    p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_, bg_path_,
-                                                            k);
-    auto hash = [](const G g) { return uint64_t(g); };
-    std::unordered_set<G, decltype(hash)> del_set;
+  void extend_counted(M& a, M& b, P& p_counter) {
     for (auto p : a) {
 #ifdef DEBUG
       std::cerr << "        " << p.first.to_string() << ": "
                 << p.second.sig_count << ", " << p.second.bg_count << ", "
                 << p.second.p << std::endl;
 #endif
-      bool keep = true;
       auto callback = [&](G o) {
         if (not o.is_canonical()) {
           o = o.reverse_complement();
         }
-        if (b.contains(o)) {
-          if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
-                        b[o].sig_count, b[o].bg_count, p.second.p, b[o].p)) {
-            if constexpr (filter_mers) {
-              keep = false;
-            }
-          } else {
-            b[o] = {p.first, 1.0, 1, 1};
-          }
-        } else {
+        if (not b.contains(o)) {
           double o_a, o_b;
           if constexpr (enable_smootihing) {
             auto sig_bg = p_counter.smooth_count(o);
@@ -375,27 +353,76 @@ class seed_finder {
           if (do_extend<false>(p.first, o, p.second.sig_count,
                                p.second.bg_count, o_a, o_b, p.second.p, o_r)) {
             b[o] = {o, o_r, uint64_t(o_a), uint64_t(o_b)};
-            if constexpr (filter_mers) {
-              keep = false;
-            }
-          } else {
-            b[o] = {o, 1.0, 1, 1};
           }
         }
       };
       p.first.template huddinge_neighbours<true, true, false>(callback);
-      if constexpr (filter_mers) {
-        if (not keep) {
-          del_set.insert(p.first);
-        }
+    }
+  }
+
+  template <class M, class P>
+  void extend(M& a, M& b, P& p_counter, uint16_t k) {
+    const constexpr double fill_limit = 0.4;
+    std::cerr << "    Extend " << a.size() << " mers." << std::endl;
+    auto hash = [](const G g) { return uint64_t(g); };
+    std::unordered_set<G, decltype(hash)> del_set;
+    for (auto p : a) {
+      auto callback = [&](G o) {
+        p_counter.init(o);
+        auto ccb = [&](G h_n) { p_counter.init(h_n); };
+        o.hamming_neighbours(ccb);
+      };
+      p.first.template huddinge_neighbours<true, true, false>(callback);
+      if (p_counter.fill_rate() >= fill_limit) {
+        std::cerr << "\tLoad factor >= " << fill_limit << " ("
+                  << p_counter.fill_rate() << ") counting.." << std::endl;
+        p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_,
+                                                                bg_path_, k);
+        std::cerr << "\tFiltering extension..." << std::endl;
+        extend_counted(a, b, p_counter);
+        p_counter.clear();
       }
     }
+    std::cerr << "\tFinal load factor " << p_counter.fill_rate()
+              << " counting.." << std::endl;
+    p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_, bg_path_,
+                                                            k);
+    std::cerr << "\tFiltering extension..." << std::endl;
+    extend_counted(a, b, p_counter);
+    p_counter.clear();
     if constexpr (filter_mers) {
+      std::cerr << "\tFiltering sources..." << std::endl;
+      for (auto p : a) {
+#ifdef DEBUG
+        std::cerr << "        " << p.first.to_string() << ": "
+                  << p.second.sig_count << ", " << p.second.bg_count << ", "
+                  << p.second.p << std::endl;
+#endif
+        bool keep = true;
+        auto callback = [&](G o) {
+          if (not o.is_canonical()) {
+            o = o.reverse_complement();
+          }
+          if (b.contains(o)) {
+            if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
+                          b[o].sig_count, b[o].bg_count, p.second.p, b[o].p)) {
+              if constexpr (filter_mers) {
+                keep = false;
+              }
+            }
+          }
+        };
+        p.first.template huddinge_neighbours<true, true, false>(callback);
+        if constexpr (filter_mers) {
+          if (not keep) {
+            del_set.insert(p.first);
+          }
+        }
+      }
       for (auto d : del_set) {
         a.erase(d);
       }
     }
-    p_counter.clear();
   }
 
   template <class M>
