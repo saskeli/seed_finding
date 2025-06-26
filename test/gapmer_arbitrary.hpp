@@ -1062,9 +1062,10 @@ namespace sf {
 
 		std::set <gapmer_type, gapmer_arbitrary_huddinge_neighbourhood_result_type::cmp> actual; // FIXME: Use a type parameter here.
 		gg.all_gap_neighbours <false, false, false>([&](gapmer_type const gg_) {
+			int out = 0;
 			SF_EXPECT(gg_.is_valid());
-			SF_EXPECT(1 == gg.huddinge_distance(gg_));
-			SF_EXPECT(1 == gg_.huddinge_distance(gg));
+			SF_EXPECT(1 == gg.huddinge_distance(gg_, out));
+			SF_EXPECT(1 == gg_.huddinge_distance(gg, out));
 			actual.insert(gg_);
 		});
 
@@ -1076,9 +1077,9 @@ namespace sf {
 			std::vector <gapmer_type> not_found_in_actual, extra_elements_in_actual;
 			std::set_difference(hn.values.begin(), hn.values.end(), actual.begin(), actual.end(), std::back_inserter(not_found_in_actual));
 			std::set_difference(actual.begin(), actual.end(), hn.values.begin(), hn.values.end(), std::back_inserter(extra_elements_in_actual));
-
-			auto const output([gg](auto const gg_){
-				std::cerr << gg_.to_string() << " (H: " << gg.huddinge_distance(gg_) << ", length: " << gg_.length() << ")\n";
+			int out = 0;
+			auto const output([gg, &out](auto const gg_){
+				std::cerr << gg_.to_string() << " (H: " << gg.huddinge_distance(gg_, out) << ", length: " << gg_.length() << ")\n";
 			});
 
 			if (!not_found_in_actual.empty())
