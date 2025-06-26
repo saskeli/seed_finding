@@ -36,8 +36,9 @@ class seed_clusterer {
     for (size_t i = 0; i < seeds_.size(); ++i) {
       auto mer = seeds_[i].g;
       auto callback = [&](const auto& o) {
-        if (seed_map.contains(uint64_t(o))) {
-          size_t idx = seed_map[uint64_t(o)];
+        auto o_mer = o.is_canonical() ? o : o.reverse_complement();
+        if (seed_map.contains(uint64_t(o_mer))) {
+          size_t idx = seed_map[uint64_t(o_mer)];
 #pragma omp critical
           {
             edges_[i].push_back(idx);
@@ -99,7 +100,17 @@ class seed_clusterer {
         }
       }
       if (is_opt) {
-        val += double(g_len) / (1 + edges_[i].size());
+        size_t in_h = 0;
+        size_t ne_s = 0;
+        auto cb = [&](const auto &o) {
+          auto o_mer = o.is_canonical() ? o : o.reverse_complement();
+          if (seed_map.contains(uint64_t(o_mer))) {
+            ++in_h;
+          }
+          ++ne_s;
+        };
+        g.huddinge_neighbours(cb);
+        val = 1 - double(in_h) / ne_s;
 #pragma omp critical
         local_optima_.push_back({i, val});
       }

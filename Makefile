@@ -46,6 +46,9 @@ fast: huddinge
 
 debug: huddinge_deb
 
+motivating: motivating.cpp
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) -isystem deps/seqio/include motivating.cpp -o motivating
+
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
