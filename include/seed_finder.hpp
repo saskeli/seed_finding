@@ -1,9 +1,12 @@
 #pragma once
 
+#include <gsl/gsl_cdf.h>
 #include <gsl/gsl_errno.h>
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>

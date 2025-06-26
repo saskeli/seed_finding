@@ -1,10 +1,12 @@
 #pragma once
 
-#include <stdlib.h>
-
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <SeqIO/SeqIO.hh>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "string_buffer.hpp"

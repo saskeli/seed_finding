@@ -1,16 +1,18 @@
-#include "include/seed_finder.hpp"
-
-#ifndef MAX_GAP
-#define MAX_GAP 5
-#endif
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 
 #ifdef _OPENMP
 #include <omp.h>
 #endif
 #include <unistd.h>
 
-#include <iostream>
-#include <string>
+#include "include/seed_finder.hpp"
+
+#ifndef MAX_GAP
+#define MAX_GAP 5
+#endif
 
 uint64_t available_gigs() {
   uint64_t mem = sysconf(_SC_PHYS_PAGES);
