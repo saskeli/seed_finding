@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <bit>
 #include <cassert>
 #include <climits>
@@ -63,9 +65,9 @@ inline uint64_t byteswap_linux(uint64_t source) { return bswap_64(source); }
 
 template <typename t_type>
 constexpr inline t_type byteswap_generic(t_type val) {
-  auto val_(std::bit_cast <std::array <std::byte, sizeof(t_type)>>(val));
+  auto val_(std::bit_cast<std::array<std::byte, sizeof(t_type)>>(val));
   std::reverse(val_.begin(), val_.end());
-  return std::bit_cast <t_type>(val_);
+  return std::bit_cast<t_type>(val_);
 }
 
 
@@ -115,17 +117,17 @@ constexpr inline t_unsigned byteswap(t_unsigned source) {
     return std::byteswap(source);
 #else
     return detail::byteswap_generic(source);
-#endif
+#endif // defined(__cpp_lib_byteswap)
   } else {
 #if defined(__cpp_lib_byteswap)
     return std::byteswap(source);
 #else
-#  if defined(__linux__)
+#if defined(__linux__)
     if constexpr (2 <= sizeof(t_unsigned) && sizeof(t_unsigned) <= 8)
       return detail::byteswap_linux(source);
-#  endif
+#endif // defined(__linux__)
     return detail::byteswap_generic(source);
-#endif
+#endif // defined(__cpp_lib_byteswap)
   }
 }
 
