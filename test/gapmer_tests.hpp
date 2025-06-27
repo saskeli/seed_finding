@@ -618,7 +618,9 @@ TEST(gapmer, HuddingeDistance1) {
 	gapmer_type const rhs_(sb.data(), sb.size(), 0, 0);
   int out = 0;
 	ASSERT_EQ(0, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(0, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance2) {
@@ -630,7 +632,9 @@ TEST(gapmer, HuddingeDistance2) {
 	gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 1, 1);
   int out = 0;
 	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance3) {
@@ -642,7 +646,9 @@ TEST(gapmer, HuddingeDistance3) {
 	gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 2, 1);
   int out = 0;
 	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance4) {
@@ -654,7 +660,9 @@ TEST(gapmer, HuddingeDistance4) {
 	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
   int out = 0;
 	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance5) {
@@ -666,7 +674,9 @@ TEST(gapmer, HuddingeDistance5) {
 	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
   int out = 0;
 	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance6) {
@@ -678,7 +688,9 @@ TEST(gapmer, HuddingeDistance6) {
 	gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
   int out = 0;
 	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance7) {
@@ -690,7 +702,9 @@ TEST(gapmer, HuddingeDistance7) {
 	gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
   int out = 0;
 	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance8) {
@@ -702,7 +716,9 @@ TEST(gapmer, HuddingeDistance8) {
 	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
   int out = 0;
 	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, out);
 	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance9) {
@@ -714,7 +730,9 @@ TEST(gapmer, HuddingeDistance9) {
 	gapmer_type const rhs_(rhs.data(), rhs.size() - 3, 18, 3);
   int out = 0;
 	ASSERT_EQ(5, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(-3, out);
 	ASSERT_EQ(5, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(3, out);
 }
 
 TEST(gapmer, HuddingeNeighbourhood1) {

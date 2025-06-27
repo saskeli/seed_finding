@@ -12,6 +12,7 @@
 
 #include <iostream>
 #include <string>
+#include <filesystem>
 
 uint64_t available_gigs() {
   uint64_t mem = sysconf(_SC_PHYS_PAGES);
@@ -53,6 +54,9 @@ sig_fasta    Signal fasta file.
             << threads << R"()
 -max_s <val> Maximum number of "best" seeds to output (0 -> all seeds)
 -s           Disable smoothing of counted mers.
+-pref <path> Optional prefix to output alignments.
+-max_a <val> Maximum number of alignemts to output.
+             May not be greater than max_s.
 -mem <val>   Memory limit for lookup tables (ish). ()"
             << gigs << " GB).\n\n"
             << std::endl;
@@ -89,11 +93,13 @@ void filter_seeds(auto& seeds, auto callback) {
 int main(int argc, char const* argv[]) {
   std::string bg_path = "";
   std::string sig_path = "";
+  std::string prefix = "";
   bool middle_gap_only = true;
   double p = 0.01;
   double p_ext = 0.01;
   double log_fold = 0.5;
   size_t print_lim = 20;
+  size_t max_aligns = print_lim;
 #ifdef _OPENMP
   uint64_t threads = omp_get_max_threads();
 #else
@@ -127,6 +133,10 @@ int main(int argc, char const* argv[]) {
       enable_smoothing = false;
     } else if (arg == "-max_s") {
       print_lim = std::stoi(argv[++i]);
+    } else if (arg == "-pref") {
+      prefix = argv[++i];
+    } else if (arg == "-max_a") {
+      max_aligns = std::stoull(argv[++i]);
     } else if (arg.starts_with("-")) {
       std::cerr << "Invalid parameter \"" << arg << "\"." << std::endl;
       print_help = true;
@@ -156,6 +166,8 @@ int main(int argc, char const* argv[]) {
   omp_set_num_threads(threads);
 #endif
 
+  std::filesystem::create_directory(prefix);
+
   mem_limit *= 1000;
   mem_limit *= 1000;
   mem_limit *= 1000;
@@ -170,7 +182,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix);
       }
     } else {
       sf::seed_finder<false, max_gap, true, false> sf(
@@ -182,7 +197,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix);
       }
     }
   } else {
@@ -196,7 +214,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix);
       }
     } else {
       sf::seed_finder<false, max_gap, false, false> sf(
@@ -208,7 +229,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix);
       }
     }
   }

@@ -1548,7 +1548,7 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
 
   // The longer one goes to buf1.
   auto const m1([&]() {
-    if (llen <= rlen) {
+    if (llen + lglen <= rlen + rglen) {
       write_2bit_coded_to_buffer(b2s);
       other.write_2bit_coded_to_buffer(b1s);
       m2s.front() = lmask;
@@ -1582,11 +1582,20 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
 
     // Update the score if needed.
     uint16_t const score(std::popcount(cm__));
-    max_score = std::max(max_score, score);
+    if (score > max_score) {
+      max_score = score;
+      out = i;
+    }
 
     // Shift the buffers.
     bits::shift_right(b2s, 2U);
     bits::shift_right(m2s, 1U);
+  }
+  if (llen + lglen <= rlen + rglen) {
+    out -= llen + lglen - 1;
+    out *= -1;
+  } else {
+    out -= rlen + rglen - 1;
   }
 
   return std::max(llen, rlen) - max_score;
