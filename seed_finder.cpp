@@ -1,3 +1,14 @@
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <string>
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+#include <unistd.h>
+
 #include "include/seed_finder.hpp"
 #include "include/seed_clusterer.hpp"
 
@@ -5,13 +16,6 @@
 #define MAX_GAP 5
 #endif
 
-#ifdef _OPENMP
-#include <omp.h>
-#endif
-#include <unistd.h>
-
-#include <iostream>
-#include <string>
 
 uint64_t available_gigs() {
   uint64_t mem = sysconf(_SC_PHYS_PAGES);
@@ -37,23 +41,24 @@ With max gap size = )"
 Usage: )" << call
             << R"( [OPTION]... [-b bg_fasta] <sig_fasta>
 
--b bg_fasta  Background fasta file. Required for now.
-sig_fasta    Signal fasta file.
--a           Gap any location, not just middle.
--p <val>     p value to use for signal to background count comparison. ()"
+-b bg_fasta         Background fasta file. Required for now.
+sig_fasta           Signal fasta file.
+-a                  Gap any location, not just middle.
+-p <val>            p value to use for signal to background count comparison. ()"
             << p << R"().
--pext <val>  p value to use for extension when background counts are 0. ()"
+-pext <val>         p value to use for extension when background counts are 0. ()"
             << p_ext << R"().
--lf <val>    Discard all mers with log fold change smaller than this ()"
+-lf <val>           Discard all mers with log fold change smaller than this ()"
             << log_fold << R"().
--h           Print this and terminate. Overrides all other options.
--mk <val>    Maximum mer length in [6, 24] range. ()"
+-h                  Print this and terminate. Overrides all other options.
+-mk <val>           Maximum mer length in [6, 24] range. ()"
             << max_k << R"().
--t <val>     Total number of threads to use. ()"
+-t <val>            Total number of threads to use. ()"
             << threads << R"()
--max_s <val> Maximum number of "best" seeds to output (0 -> all seeds)
--s           Disable smoothing of counted mers.
--mem <val>   Memory limit for lookup tables (ish). ()"
+-max_s <val>        Maximum number of "best" seeds to output (0 -> all seeds)
+-output-all-matches Output also matches that are substrings of other matches.
+-s                  Disable smoothing of counted mers.
+-mem <val>          Memory limit for lookup tables (ish). ()"
             << gigs << " GB).\n\n"
             << std::endl;
   exit(0);
@@ -90,6 +95,7 @@ int main(int argc, char const* argv[]) {
   std::string bg_path = "";
   std::string sig_path = "";
   bool middle_gap_only = true;
+  bool should_output_all_matches = false;
   double p = 0.01;
   double p_ext = 0.01;
   double log_fold = 0.5;
@@ -127,6 +133,8 @@ int main(int argc, char const* argv[]) {
       enable_smoothing = false;
     } else if (arg == "-max_s") {
       print_lim = std::stoi(argv[++i]);
+    } else if (arg == "-output-all-matches") {
+      should_output_all_matches = true;
     } else if (arg.starts_with("-")) {
       std::cerr << "Invalid parameter \"" << arg << "\"." << std::endl;
       print_help = true;
@@ -164,25 +172,27 @@ int main(int argc, char const* argv[]) {
       sf::seed_finder<true, max_gap, true, false> sf(
           sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      sf::seed_clusterer<true, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path, p_ext);
+      sf::seed_clusterer<true, max_gap, decltype(sf.get_seeds())> sc(
+          sf.get_seeds(), sig_path, bg_path, p_ext);
       std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
       for (size_t i = 0; i < print_lim; ++i) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        sc.output_cluster(should_output_all_matches);
       }
     } else {
       sf::seed_finder<false, max_gap, true, false> sf(
           sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      sf::seed_clusterer<false, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path, p_ext);
+      sf::seed_clusterer<false, max_gap, decltype(sf.get_seeds())> sc(
+          sf.get_seeds(), sig_path, bg_path, p_ext);
       std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
       for (size_t i = 0; i < print_lim; ++i) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        sc.output_cluster(should_output_all_matches);
       }
     }
   } else {
@@ -190,25 +200,27 @@ int main(int argc, char const* argv[]) {
       sf::seed_finder<true, max_gap, false, false> sf(
           sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      sf::seed_clusterer<true, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path, p_ext);
+      sf::seed_clusterer<true, max_gap, decltype(sf.get_seeds())> sc(
+          sf.get_seeds(), sig_path, bg_path, p_ext);
       std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
       for (size_t i = 0; i < print_lim; ++i) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        sc.output_cluster(should_output_all_matches);
       }
     } else {
       sf::seed_finder<false, max_gap, false, false> sf(
           sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext);
       sf.find_seeds();
-      sf::seed_clusterer<false, max_gap, decltype(sf.get_seeds())> sc(sf.get_seeds(), sig_path, bg_path, p_ext);
+      sf::seed_clusterer<false, max_gap, decltype(sf.get_seeds())> sc(
+          sf.get_seeds(), sig_path, bg_path, p_ext);
       std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
       for (size_t i = 0; i < print_lim; ++i) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster();
+        sc.output_cluster(should_output_all_matches);
       }
     }
   }

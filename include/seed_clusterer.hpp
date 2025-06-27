@@ -1,8 +1,11 @@
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <string>
 #include <unordered_map>
-#include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace sf {
 
@@ -121,15 +124,20 @@ class seed_clusterer {
 
   bool has_next() const { return opt_idx_ < local_optima_.size(); }
 
-  void output_cluster() {
+  // “All matches” refers to matches that are substrings of other matches.
+  void output_cluster(bool should_output_all_matches) {
     auto res = seeds_[local_optima_[opt_idx_].first];
     std::cout << res.g.to_string() << "\t(" << res.sig_count << ","
               << res.bg_count << ")\t" << res.p << "\t"
               << local_optima_[opt_idx_].second << std::endl;
-    for (size_t i = ++opt_idx_; i < local_optima_.size(); ++i) {
-      auto o_s = seeds_[local_optima_[i].first].g;
-      if (o_s.aligns_to(res.g)) {
-        local_optima_[i].second = 1;
+    if (should_output_all_matches)
+      ++opt_idx_;
+    else {
+      for (size_t i = ++opt_idx_; i < local_optima_.size(); ++i) {
+        auto o_s = seeds_[local_optima_[i].first].g;
+        if (o_s.aligns_to(res.g)) {
+          local_optima_[i].second = 1;
+        }
       }
     }
     for (; opt_idx_ < local_optima_.size(); ++opt_idx_) {
