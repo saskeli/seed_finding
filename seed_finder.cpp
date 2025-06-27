@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -56,6 +57,9 @@ sig_fasta           Signal fasta file.
 -t <val>            Total number of threads to use. ()"
             << threads << R"()
 -max_s <val>        Maximum number of "best" seeds to output (0 -> all seeds)
+-pref <path>        Optional prefix to output alignments.
+-max_a <val>        Maximum number of alignemts to output.
+                    May not be greater than max_s.
 -output-all-matches Output also matches that are substrings of other matches.
 -s                  Disable smoothing of counted mers.
 -mem <val>          Memory limit for lookup tables (ish). ()"
@@ -94,12 +98,14 @@ void filter_seeds(auto& seeds, auto callback) {
 int main(int argc, char const* argv[]) {
   std::string bg_path = "";
   std::string sig_path = "";
+  std::string prefix = "";
   bool middle_gap_only = true;
   bool should_output_all_matches = false;
   double p = 0.01;
   double p_ext = 0.01;
   double log_fold = 0.5;
   size_t print_lim = 20;
+  size_t max_aligns = print_lim;
 #ifdef _OPENMP
   uint64_t threads = omp_get_max_threads();
 #else
@@ -135,6 +141,10 @@ int main(int argc, char const* argv[]) {
       print_lim = std::stoi(argv[++i]);
     } else if (arg == "-output-all-matches") {
       should_output_all_matches = true;
+    } else if (arg == "-pref") {
+      prefix = argv[++i];
+    } else if (arg == "-max_a") {
+      max_aligns = std::stoull(argv[++i]);
     } else if (arg.starts_with("-")) {
       std::cerr << "Invalid parameter \"" << arg << "\"." << std::endl;
       print_help = true;
@@ -164,6 +174,8 @@ int main(int argc, char const* argv[]) {
   omp_set_num_threads(threads);
 #endif
 
+  std::filesystem::create_directory(prefix);
+
   mem_limit *= 1000;
   mem_limit *= 1000;
   mem_limit *= 1000;
@@ -179,7 +191,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster(should_output_all_matches);
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix, should_output_all_matches);
       }
     } else {
       sf::seed_finder<false, max_gap, true, false> sf(
@@ -192,7 +207,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster(should_output_all_matches);
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix, should_output_all_matches);
       }
     }
   } else {
@@ -207,7 +225,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster(should_output_all_matches);
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix, should_output_all_matches);
       }
     } else {
       sf::seed_finder<false, max_gap, false, false> sf(
@@ -220,7 +241,10 @@ int main(int argc, char const* argv[]) {
         if (not sc.has_next()) {
           break;
         }
-        sc.output_cluster(should_output_all_matches);
+        if (max_aligns == i) {
+          prefix = "";
+        }
+        sc.output_cluster(prefix, should_output_all_matches);
       }
     }
   }
