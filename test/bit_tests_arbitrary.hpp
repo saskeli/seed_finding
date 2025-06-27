@@ -53,7 +53,29 @@ struct Arbitrary<short_dna_string> {
 
 namespace sf {
 
-SF_RC_TEMPLATE_TEST(bit_arbitrary, PEXTWorksAsExpected,
+SF_RC_TEMPLATE_TEST(bit_arbitrary_byteswap, ByteswapWorksAsExpected,
+                    (TypeParam const value), uint16_t, uint32_t, uint64_t, int16_t, int32_t, int64_t) {
+  constexpr static bool const stdlib_byteswap_available{
+#if defined(__cpp_lib_byteswap)
+      true
+#else
+      false
+#endif
+  };
+
+  if constexpr (stdlib_byteswap_available) {
+    auto const expected(std::byteswap(value));
+    auto const res(sf::bits::detail::byteswap_generic(value));
+    RC_ASSERT(res == expected);
+  } else {
+    GTEST_SKIP()
+        << "Test skipped: Unable to test the byteswap implementation when "
+           "the stdlib implementation is not available.";
+  }
+}
+
+
+SF_RC_TEMPLATE_TEST(bit_arbitrary_pext, PEXTWorksAsExpected,
                     (TypeParam const value, TypeParam const mask), uint32_t,
                     uint64_t) {
   if constexpr (sf::bits::detail::pext_intrinsic_available_for_type_v<
