@@ -1081,9 +1081,10 @@ SF_RC_TEST_PROP(gapmer_arbitrary, GenerateHuddingeNeighbourhood,
            gapmer_arbitrary_huddinge_neighbourhood_result_type::cmp>
       actual;  // FIXME: Use a type parameter here.
   gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_) {
+    int out{};
     SF_EXPECT(gg_.is_valid());
-    SF_EXPECT(1 == gg.huddinge_distance(gg_));
-    SF_EXPECT(1 == gg_.huddinge_distance(gg));
+    SF_EXPECT(1 == gg.huddinge_distance(gg_, out));
+    SF_EXPECT(1 == gg_.huddinge_distance(gg, out));
     actual.insert(gg_);
   });
 
@@ -1100,7 +1101,8 @@ SF_RC_TEST_PROP(gapmer_arbitrary, GenerateHuddingeNeighbourhood,
                         std::back_inserter(extra_elements_in_actual));
 
     auto const output([gg](auto const gg_) {
-      std::cerr << gg_.to_string() << " (H: " << gg.huddinge_distance(gg_)
+      int out{};
+      std::cerr << gg_.to_string() << " (H: " << gg.huddinge_distance(gg_, out)
                 << ", length: " << gg_.length() << ")\n";
     });
 

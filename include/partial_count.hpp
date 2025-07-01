@@ -60,6 +60,7 @@ class partial_count {
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
     std::memset(data_, 0, MOD * sizeof(elem));
 #pragma GCC diagnostic pop
+    size_ = 0;
   }
 
   void inc_sig(gapmer_t g) {
@@ -195,6 +196,10 @@ class partial_count {
       bg_val += bddables[i];
     }
     return {sig_val / 11, bg_val / 11};
+  }
+
+  double fill_rate() const {
+    return double(size_) / MOD;
   }
 };
 

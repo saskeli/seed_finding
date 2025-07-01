@@ -21,7 +21,7 @@ INCLUDE += -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
 LIBS += -lz -lgsl -lgslcblas -lm
 
-HEADERS = include/gapmer.hpp include/fm_index.hpp include/gapmer_count.hpp include/seed_finder.hpp include/partial_count.hpp
+HEADERS = include/gapmer.hpp include/fm_index.hpp include/gapmer_count.hpp include/seed_finder.hpp include/partial_count.hpp include/seed_clusterer.hpp
 
 SDSL_DIR = deps/sdsl-lite/lib
 
@@ -45,6 +45,9 @@ all_: huddinge seed_finder comp huddinge_deb seed_finder_deb
 fast: huddinge
 
 debug: huddinge_deb
+
+motivating: motivating.cpp
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) -isystem deps/seqio/include motivating.cpp -o motivating
 
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge

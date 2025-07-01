@@ -133,6 +133,8 @@ class gapmer {
   template <bool compare_rc = true, bool debug = false>
   bool aligns_to(gapmer other) const;
 
+  size_t compute_offset(const gapmer& other, int& out) const;
+
   uint16_t length() const {
     return (data_ >> (max_k * 2)) & meta_mask;
   }  //< Get the count of the defined bases.
@@ -162,7 +164,7 @@ class gapmer {
   void huddinge_neighbours(auto&& callback) const;
 
   uint16_t huddinge_distance(
-      gapmer const other) const;  //< Calculate the Huddinge distance.
+      gapmer const other, int& out) const;  //< Calculate the Huddinge distance.
   std::string to_string() const;  //< Returns the sequence as std::string.
   bool is_canonical()
       const;  //< Returns true iff. this is lexicographically equal or smaller
@@ -1515,7 +1517,8 @@ void gapmer<middle_gap_only, t_max_gap>::write_2bit_coded_to_buffer(
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
-    gapmer const other) const {
+    gapmer const other, int& out) const {
+  out = 0;
   // Given this's and other's (gapped) lengths l_1 and l_2, we iterate over the
   // l_1 + l_2 - 1 alignments, check for matching characters with XOR and count
   // them with PEXT and POPCOUNT. This could possibly be made faster by using
@@ -1545,7 +1548,7 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
 
   // The longer one goes to buf1.
   auto const m1([&]() {
-    if (llen <= rlen) {
+    if (llen + lglen <= rlen + rglen) {
       write_2bit_coded_to_buffer(b2s);
       other.write_2bit_coded_to_buffer(b1s);
       m2s.front() = lmask;
@@ -1579,11 +1582,20 @@ uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
 
     // Update the score if needed.
     uint16_t const score(std::popcount(cm__));
-    max_score = std::max(max_score, score);
+    if (score > max_score) {
+      max_score = score;
+      out = i;
+    }
 
     // Shift the buffers.
     bits::shift_right(b2s, 2U);
     bits::shift_right(m2s, 1U);
+  }
+  if (llen + lglen <= rlen + rglen) {
+    out -= llen + lglen - 1;
+    out *= -1;
+  } else {
+    out -= rlen + rglen - 1;
   }
 
   return std::max(llen, rlen) - max_score;
