@@ -1,0 +1,7 @@
+---
+BasedOnStyle: Google
+MaxEmptyLinesToKeep: 2
+AlignTrailingComments:
+  Kind: Leave
+  OverEmptyLines: 2
+...

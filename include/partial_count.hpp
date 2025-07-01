@@ -1,10 +1,12 @@
 #pragma once
 
-#include <stdlib.h>
-
 #include <array>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
+#include <SeqIO/SeqIO.hh>
+#include <string>
+#include <string_view>
 #include <utility>
 
 #include "string_buffer.hpp"
@@ -78,7 +80,7 @@ class partial_count {
   }
 
   template <bool middle_gap_only, uint16_t max_gap>
-  void count_mers(std::string& sig_path, std::string& bg_path,
+  void count_mers(const std::string& sig_path, const std::string& bg_path,
                   uint16_t k) {
     seq_io::Reader_x sr(sig_path);
     sr.enable_reverse_complements();

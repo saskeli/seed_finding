@@ -1,9 +1,13 @@
 #pragma once
 
+#include <gsl/gsl_cdf.h>
 #include <gsl/gsl_errno.h>
 
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <iostream>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -456,7 +460,7 @@ class seed_finder {
   }
 
  public:
-  seed_finder(std::string& sig_path, std::string& bg_path, double p,
+  seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01)
       : sig_path_(sig_path),

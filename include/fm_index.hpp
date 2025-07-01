@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <array>
+#include <cassert>
 #include <cstdint>
+#include <cstdlib>
 #include <SeqIO/SeqIO.hh>
 #include <sdsl/bit_vectors.hpp>
 #include <sdsl/hyb_vector.hpp>
@@ -16,6 +18,7 @@
 
 #include "gapmer.hpp"
 #include "string_buffer.hpp"
+#include "util.hpp"
 
 
 namespace sf::detail {
