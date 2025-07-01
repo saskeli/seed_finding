@@ -174,7 +174,9 @@ int main(int argc, char const* argv[]) {
   omp_set_num_threads(threads);
 #endif
 
-  std::filesystem::create_directory(prefix);
+  if (prefix.length() > 0) {
+    std::filesystem::create_directory(prefix);
+  }
 
   mem_limit *= 1000;
   mem_limit *= 1000;
