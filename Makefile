@@ -32,6 +32,7 @@ HEADERS =	include/bits.hpp \
 			include/util.hpp \
 			include/version.hpp
 
+ARGS_DIR = deps/args
 SDSL_DIR = deps/sdsl-lite/lib
 
 GTEST_DIR = deps/googletest
@@ -70,7 +71,7 @@ comp: comp.cpp include/util.hpp
 huddinge_deb: huddinge.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
-seed_finder_deb: seed_finder.cpp $(HEADERS) | $(SDSL_DIR)
+seed_finder_deb: seed_finder.cpp $(HEADERS) | $(SDSL_DIR) $(ARGS_DIR)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
 
 clean:
