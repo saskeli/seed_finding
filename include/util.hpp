@@ -8,8 +8,6 @@
 #include <gsl/gsl_sf_gamma.h>
 #include <gsl/gsl_sf_result.h>
 
-#include "gapmer.hpp"
-
 namespace sf {
 const static constexpr std::array<char, 4> v_to_nuc = {'A', 'C', 'G', 'T'};
 const static constexpr std::array<uint8_t, 256> nuc_to_v = {
