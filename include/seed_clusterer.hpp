@@ -25,14 +25,23 @@ class seed_clusterer {
   size_t opt_idx_;
   double p_ext_;
 
+  /**
+   * Looks for reads that confrom to the Huddinge 1 neighbourhood
+   * of `seeds_[idx]`, and outputs the multiple alignment of these
+   * as fasta to `prefix + seeds_[idx].g.to_string() + '.fa'`.
+   *
+   * @param prefix  Folder to write to
+   * @param idx     Center mer index in seeds_
+   */
   void output_alignment(std::string& prefix, size_t idx) {
     auto center = seeds_[idx].g;
     std::vector<std::pair<std::string, int>> mers;
     mers.push_back({center.to_string(), 0});
-    prefix.append(mers.back().first).append(".txt");
+    prefix.append(mers.back().first).append(".fa");
     int a_offset = 0;
     int b_offset = 0;
     int min_offset = 0;
+    /* Collects all H1 neighbours and aligns them relative to the center */
     for (auto e : edges_[idx]) {
       auto g = seeds_[e].g;
       auto g_r = g.reverse_complement();
@@ -46,6 +55,7 @@ class seed_clusterer {
         mers.push_back({g_r.to_string(), b_offset});
       }
     }
+    /* Build a regex from all the seeds. */
     std::string reg = "(";
     for (auto p : mers) {
       if (reg.size() > 2) {
@@ -59,6 +69,7 @@ class seed_clusterer {
     reg.push_back(')');
     std::regex rex(reg);
 
+    /* Collect all reads that match the regex */
     std::ofstream out_file(prefix);
     seq_io::Reader_x sr(sig_path_);
     sr.enable_reverse_complements();
@@ -75,6 +86,7 @@ class seed_clusterer {
         hits.push_back({read, m->position()});
       }
     }
+    /* Compute MSA for the reads */
     size_t max_pos = 0;
     for (auto p : hits) {
       max_pos = std::max(max_pos, p.second);
@@ -85,6 +97,7 @@ class seed_clusterer {
       max_len = std::max(n_count + p.first.size(), max_len);
     }
     size_t c = 1;
+    /* Output MSA to file */
     for (auto p : hits) {
       out_file << "> " << c++ << "\n";
       size_t n_count = max_pos - p.second;
@@ -101,6 +114,15 @@ class seed_clusterer {
   }
 
  public:
+  /**
+   * Compute most likely seeds in Huddinge graph implied by the input seeds
+   *
+   * @param seeds    Vector of seeds, with counts and p-value computed by
+   *                 sf::seed_finder
+   * @param sig_path Path to signal `.fast(a|q)(.gz)?`.
+   * @param bg_path  Path to backgroud `.fast(a|q)(.gz)?`.
+   * @param pext     P-value to filter extensions with binomial tests.
+   */
   seed_clusterer(const Res_vec_T& seeds, const std::string sig_path,
                  const std::string bg_path, double pext)
       : seeds_(seeds),
@@ -114,17 +136,24 @@ class seed_clusterer {
     for (size_t i = 0; i < seeds_.size(); ++i) {
       seed_map[uint64_t(seeds_[i].g)] = i;
     }
+    /* Compute the Huddinge graph and priorities for all potential seeds */
 #pragma omp parallel for
     for (size_t i = 0; i < seeds_.size(); ++i) {
       auto mer = seeds_[i].g;
       size_t len = mer.length();
       double val = 0;
       size_t neigbour_count = 0;
+      /*
+       * Priority is based on enrichment of seed and H1 neighbourhood.
+       *
+       * Adds `bg_count / seed_count` for neighbours in graph, `1` for others.
+       */
       auto cb = [&](const auto& o) {
         uint64_t o_mer =
             o.is_canonical() ? uint64_t(o) : uint64_t(o.reverse_complement());
         if (seed_map.contains(o_mer)) {
           size_t idx = seed_map[o_mer];
+          edges_[i].push_back(idx);
           val += double(seeds_[idx].bg_count) / seeds_[idx].sig_count;
         } else {
           val += 1;
@@ -149,9 +178,20 @@ class seed_clusterer {
               << std::endl;
   }
 
+  /**
+   * `true` if `this` has local optima to left to output.
+   */
   bool has_next() const { return opt_idx_ < local_optima_.size(); }
 
-  // “All matches” refers to matches that are substrings of other matches.
+  /**
+   * Outputs the 'best' seed that has not yet been output to `std::cout`
+   *
+   * Optionally also outputs MSA based on the seed.
+   *
+   * @param prefix  Folder for outputting fasta (needs to exist).
+   * @param should_output_all_matches “All matches” refers to matches that are
+   *                                  substrings of other matches.
+   */
   void output_cluster(std::string prefix, bool should_output_all_matches) {
     auto res = seeds_[local_optima_[opt_idx_].first];
     std::cout << res.g.to_string() << "\t(" << res.sig_count << ","
@@ -166,22 +206,34 @@ class seed_clusterer {
       output_alignment(prefix, local_optima_[opt_idx_].first);
     }
 
+    /* Get index of next seed */
     if (should_output_all_matches)
       ++opt_idx_;
     else {
+      /* Skip seeds that are too close to something already output.
+       *
+       * Seeds that are too close include seeds that are
+       * * within H1 of a previous seed,
+       * * substring of a previous seed,
+       * * supersting of a previous seed.
+       *
+       * Seeds to be skipped get priority 3, which is impossibly high for a true
+       * seed
+       */
       for (size_t i = ++opt_idx_; i < local_optima_.size(); ++i) {
         auto o_s = seeds_[local_optima_[i].first].g;
         int out = 0;
         if (o_s.aligns_to(res.g) or res.g.aligns_to(o_s) or
             o_s.huddinge_distance(res.g, out) <= 1 or
             o_s.reverse_complement().huddinge_distance(res.g, out) <= 1) {
-          local_optima_[i].second = 1;
+          local_optima_[i].second = 3;
         }
       }
     }
 
+    /* Skip over impossible seeds */
     for (; opt_idx_ < local_optima_.size(); ++opt_idx_) {
-      if (local_optima_[opt_idx_].second < 1) {
+      if (local_optima_[opt_idx_].second < 3) {
         break;
       }
     }
