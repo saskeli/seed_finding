@@ -13,10 +13,10 @@
 
 #include <args.hxx>
 
+#include "include/args.hpp"
 #include "include/seed_clusterer.hpp"
 #include "include/seed_finder.hpp"
 #include "include/version.hpp"
-#include "include/version_flag.hpp"
 
 #ifndef MAX_GAP
 #define MAX_GAP 5
@@ -39,6 +39,8 @@ uint64_t available_gigs() {
   return gigs;
 }
 
+// We use uint16_t since it is easier to output correctly than uint8_t (i.e. not
+// as a character).
 const constexpr uint16_t max_gap = MAX_GAP;
 
 void filter_seeds(auto &seeds, auto callback) {
@@ -82,7 +84,7 @@ int main(int argc, char const *argv[]) {
 #else
   uint64_t threads = 1;
 #endif
-  uint8_t max_k = 20;
+  uint16_t max_k = 20;
   double mem_limit = available_gigs();
   bool enable_smoothing = true;
 
@@ -108,39 +110,42 @@ int main(int argc, char const *argv[]) {
                                     "Output the version number and exit.",
                                     {'V', "version"});
     args::CompletionFlag completion_(parser, {"complete"});
-    args::ValueFlag<std::string> bg_path_(
+    sf::args::value_flag<std::string> bg_path_(
         parser, "background_path", "Background FASTA file, required for now.",
-        {'b', "background"}, args::Options::Required);
-    args::Positional<std::string> sig_path_(
-        parser, "signal_path", "Signal FASTA file.", args::Options::Required);
+        {'b', "background"}, bg_path, args::Options::Required);
+    args::Positional<std::string> sig_path_(parser, "signal_path",
+                                            "Signal FASTA file.", sig_path,
+                                            args::Options::Required);
     args::Flag gap_any_(parser, "gap_any",
                         "Allow gaps at any location, not just in the middle.",
                         {'a', "gap-at-any-location"});
-    args::ValueFlag<double> p_sig_(
+    sf::args::value_flag<double> p_sig_(
         parser, "p_signal",
-        "p value to use for signal to background comparison.", {'p', "p-signal"},
-        p);
-    args::ValueFlag<double> p_ext_(
+        "p value to use for signal to background comparison.",
+        {'p', "p-signal"}, p);
+    sf::args::value_flag<double> p_ext_(
         parser, "p_extension",
         "p value to use for extension when background counts are zero.",
         {"p-ext"}, p_ext);
-    args::ValueFlag<double> log_fold_(
-        parser, "lf", "Discard all mers with log fold change smaller than this.",
-        {"lf"}, log_fold);
-    args::ValueFlag<uint16_t> max_k_(
+    sf::args::value_flag<double> log_fold_(
+        parser, "lf",
+        "Discard all mers with log fold change smaller than this.", {"lf"},
+        log_fold);
+    sf::args::value_flag<uint16_t> max_k_(
         parser, "mk", "Maximum mer length in [6, 24] range.", {"mk"}, max_k);
-    args::ValueFlag<uint64_t> threads_(parser, "threads",
-                                       "Number of threads to use.",
-                                       {'t', "threads"}, threads);
-    args::ValueFlag<std::string> prefix_(parser, "output_prefix",
-                                         "Optional prefix for alignment output.",
-                                         {"pref"});
-    args::ValueFlag<size_t> print_lim_(
+    sf::args::value_flag<uint64_t> threads_(parser, "threads",
+                                            "Number of threads to use.",
+                                            {'t', "threads"}, threads);
+    sf::args::value_flag<std::string> prefix_(
+        parser, "output_prefix", "Optional prefix for alignment output.",
+        {"pref"}, prefix);
+    sf::args::value_flag<size_t> print_lim_(
         parser, "max_s",
         "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
         print_lim);
-    args::ValueFlag<uint64_t> max_aligns_(
-        parser, "max_a", "Maximum number of alignments to output.", {"max-a"});
+    sf::args::value_flag<uint64_t> max_aligns_(
+        parser, "max_a", "Maximum number of alignments to output.", {"max-a"},
+        max_aligns);
     args::Flag should_output_all_matches_(
         parser, "output_all_matches",
         "Output also matches that are substrings of other matches.",
@@ -148,7 +153,7 @@ int main(int argc, char const *argv[]) {
     args::Flag disable_smoothing_(parser, "disable_smoothing",
                                   "Disable smoothing of counted mers.",
                                   {'s', "no-smoothing"});
-    args::ValueFlag<double> mem_limit_(
+    sf::args::value_flag<double> mem_limit_(
         parser, "memory_limit",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
         mem_limit);
@@ -170,20 +175,10 @@ int main(int argc, char const *argv[]) {
       std::exit(1);
     }
 
-    bg_path = args::get(bg_path_);
     sig_path = args::get(sig_path_);
     if (gap_any_) middle_gap_only = true;
-    if (p_sig_) p = args::get(p_sig_);
-    if (p_ext_) p_ext = args::get(p_ext_);
-    if (log_fold_) log_fold = args::get(log_fold_);
-    if (max_k_) max_k = args::get(max_k_);
-    if (threads_) threads = args::get(threads_);
-    if (prefix_) prefix = args::get(prefix_);
-    if (print_lim_) print_lim = args::get(print_lim_);
-    if (max_aligns_) max_aligns = args::get(max_aligns_);
     if (should_output_all_matches_) should_output_all_matches = true;
     if (disable_smoothing_) enable_smoothing = false;
-    if (mem_limit_) mem_limit = args::get(mem_limit_);
 
     if (print_lim == 0) {
       print_lim = ~print_lim;
@@ -195,6 +190,27 @@ int main(int argc, char const *argv[]) {
               << ", should be in [6, 24] range." << std::endl;
     exit(1);
   }
+
+#ifdef DEBUG
+  {
+    std::cerr << "bg_path:                   " << bg_path << '\n';
+    std::cerr << "sig_path:                  " << sig_path << '\n';
+    std::cerr << "prefix:                    " << prefix << '\n';
+    std::cerr << "middle_gap_only:           " << middle_gap_only << '\n';
+    std::cerr << "should_output_all_matches: " << should_output_all_matches
+              << '\n';
+    std::cerr << "p:                         " << p << '\n';
+    std::cerr << "p_ext:                     " << p_ext << '\n';
+    std::cerr << "log_fold:                  " << log_fold << '\n';
+    std::cerr << "print_lim:                 " << print_lim << '\n';
+    std::cerr << "max_aligns:                " << max_aligns << "\n";
+    std::cerr << "threads:                   " << threads << '\n';
+    std::cerr << "max_k:                     " << max_k << '\n';
+    std::cerr << "mem_limit:                 " << mem_limit << '\n';
+    std::cerr << "enable_smoothing:          " << enable_smoothing << '\n';
+  }
+#endif
+
 #ifdef _OPENMP
   omp_set_num_threads(threads);
 #endif
