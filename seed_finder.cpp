@@ -143,7 +143,7 @@ int main(int argc, char const *argv[]) {
         parser, "max_s",
         "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
         print_lim);
-    sf::args::value_flag<uint64_t> max_aligns_(
+    sf::args::value_flag<size_t> max_aligns_(
         parser, "max_a", "Maximum number of alignments to output.", {"max-a"},
         max_aligns);
     args::Flag should_output_all_matches_(
