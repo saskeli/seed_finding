@@ -90,8 +90,8 @@ class value_flag : public ::args::ValueFlagBase {
 
 template <typename t_value, typename t_reader>
 void value_flag<t_value, t_reader>::Reset() noexcept {
-	ValueFlagBase::Reset();
-	value = default_value;
+  ValueFlagBase::Reset();
+  value = default_value;
 }
 
 
