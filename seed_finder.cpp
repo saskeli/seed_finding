@@ -110,7 +110,7 @@ int main(int argc, char const *argv[]) {
                                     "Output the version number and exit.",
                                     {'V', "version"});
     args::CompletionFlag completion_(parser, {"complete"});
-    sf::args::value_flag<std::string> bg_path_(
+    sf::args::value_flag bg_path_(
         parser, "background_path", "Background FASTA file, required for now.",
         {'b', "background"}, bg_path, args::Options::Required);
     args::Positional<std::string> sig_path_(parser, "signal_path",
@@ -119,33 +119,33 @@ int main(int argc, char const *argv[]) {
     args::Flag gap_any_(parser, "gap_any",
                         "Allow gaps at any location, not just in the middle.",
                         {'a', "gap-at-any-location"});
-    sf::args::value_flag<double> p_sig_(
+    sf::args::value_flag p_sig_(
         parser, "p_signal",
         "p value to use for signal to background comparison.",
         {'p', "p-signal"}, p);
-    sf::args::value_flag<double> p_ext_(
+    sf::args::value_flag p_ext_(
         parser, "p_extension",
         "p value to use for extension when background counts are zero.",
         {"p-ext"}, p_ext);
-    sf::args::value_flag<double> log_fold_(
+    sf::args::value_flag log_fold_(
         parser, "lf",
         "Discard all mers with log fold change smaller than this.", {"lf"},
         log_fold);
-    sf::args::value_flag<uint16_t> max_k_(
+    sf::args::value_flag max_k_(
         parser, "mk", "Maximum mer length in [6, 24] range.", {"mk"}, max_k);
-    sf::args::value_flag<uint64_t> threads_(parser, "threads",
-                                            "Number of threads to use.",
-                                            {'t', "threads"}, threads);
-    sf::args::value_flag<std::string> prefix_(
-        parser, "output_prefix", "Optional prefix for alignment output.",
-        {"pref"}, prefix);
-    sf::args::value_flag<size_t> print_lim_(
+    sf::args::value_flag threads_(parser, "threads",
+                                  "Number of threads to use.", {'t', "threads"},
+                                  threads);
+    sf::args::value_flag prefix_(parser, "output_prefix",
+                                 "Optional prefix for alignment output.",
+                                 {"pref"}, prefix);
+    sf::args::value_flag print_lim_(
         parser, "max_s",
         "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
         print_lim);
-    sf::args::value_flag<size_t> max_aligns_(
-        parser, "max_a", "Maximum number of alignments to output.", {"max-a"},
-        max_aligns);
+    sf::args::value_flag max_aligns_(parser, "max_a",
+                                     "Maximum number of alignments to output.",
+                                     {"max-a"}, max_aligns);
     args::Flag should_output_all_matches_(
         parser, "output_all_matches",
         "Output also matches that are substrings of other matches.",
@@ -153,7 +153,7 @@ int main(int argc, char const *argv[]) {
     args::Flag disable_smoothing_(parser, "disable_smoothing",
                                   "Disable smoothing of counted mers.",
                                   {'s', "no-smoothing"});
-    sf::args::value_flag<double> mem_limit_(
+    sf::args::value_flag mem_limit_(
         parser, "memory_limit",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
         mem_limit);
