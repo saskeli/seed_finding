@@ -1,3 +1,6 @@
+# Generated files
+/include/version.hpp
+
 # IDE settings
 .vscode
 
