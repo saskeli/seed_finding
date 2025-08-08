@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 
 #ifdef _OPENMP
@@ -10,12 +11,19 @@
 #endif
 #include <unistd.h>
 
-#include "include/seed_finder.hpp"
+#include <args.hxx>
+
+#include "include/args.hpp"
 #include "include/seed_clusterer.hpp"
+#include "include/seed_finder.hpp"
+#include "include/version.hpp"
 
 #ifndef MAX_GAP
 #define MAX_GAP 5
 #endif
+
+#define SF_STRINGIFY_(X) #X
+#define SF_STRINGIFY(X) SF_STRINGIFY_(X)
 
 
 uint64_t available_gigs() {
@@ -31,46 +39,11 @@ uint64_t available_gigs() {
   return gigs;
 }
 
-void help(const char* call, uint64_t gigs, uint64_t max_k, double p,
-          double log_fold, double p_ext, uint64_t threads) {
-  std::cerr << R"(
-Attempt seed extraction from read data.
-
-With max gap size = )"
-            << MAX_GAP << R"(
-
-Usage: )" << call
-            << R"( [OPTION]... [-b bg_fasta] <sig_fasta>
-
--b bg_fasta         Background fasta file. Required for now.
-sig_fasta           Signal fasta file.
--a                  Gap any location, not just middle.
--p <val>            p value to use for signal to background count comparison. ()"
-            << p << R"().
--pext <val>         p value to use for extension when background counts are 0. ()"
-            << p_ext << R"().
--lf <val>           Discard all mers with log fold change smaller than this ()"
-            << log_fold << R"().
--h                  Print this and terminate. Overrides all other options.
--mk <val>           Maximum mer length in [6, 24] range. ()"
-            << max_k << R"().
--t <val>            Total number of threads to use. ()"
-            << threads << R"()
--max_s <val>        Maximum number of "best" seeds to output (0 -> all seeds)
--pref <path>        Optional prefix to output alignments.
--max_a <val>        Maximum number of alignemts to output.
-                    May not be greater than max_s.
--output-all-matches Output also matches that are substrings of other matches.
--s                  Disable smoothing of counted mers.
--mem <val>          Memory limit for lookup tables (ish). ()"
-            << gigs << " GB).\n\n"
-            << std::endl;
-  exit(0);
-}
-
+// We use uint16_t since it is easier to output correctly than uint8_t (i.e. not
+// as a character).
 const constexpr uint16_t max_gap = MAX_GAP;
 
-void filter_seeds(auto& seeds, auto callback) {
+void filter_seeds(auto &seeds, auto callback) {
   std::cerr << "Filtering.." << std::endl;
   uint64_t discarded_seeds = 0;
   auto it = seeds.begin();
@@ -95,7 +68,7 @@ void filter_seeds(auto& seeds, auto callback) {
   std::cerr << discarded_seeds << " seeds discarded in filtering" << std::endl;
 }
 
-int main(int argc, char const* argv[]) {
+int main(int argc, char const *argv[]) {
   std::string bg_path = "";
   std::string sig_path = "";
   std::string prefix = "";
@@ -111,65 +84,133 @@ int main(int argc, char const* argv[]) {
 #else
   uint64_t threads = 1;
 #endif
-  uint8_t max_k = 20;
+  uint16_t max_k = 20;
   double mem_limit = available_gigs();
-  bool print_help = false;
   bool enable_smoothing = true;
-  for (int i = 1; i < argc; ++i) {
-    std::string arg(argv[i]);
-    if (arg == "-h") {
-      print_help = true;
-    } else if (arg == "-a") {
-      middle_gap_only = false;
-    } else if (arg == "-b") {
-      bg_path = argv[++i];
-    } else if (arg == "-p") {
-      p = std::stod(argv[++i]);
-    } else if (arg == "-pext") {
-      p_ext = std::stod(argv[++i]);
-    } else if (arg == "-lf") {
-      log_fold = std::stod(argv[++i]);
-    } else if (arg == "-mk") {
-      max_k = std::stoi(argv[++i]);
-    } else if (arg == "-mem") {
-      mem_limit = std::stod(argv[++i]);
-    } else if (arg == "-t") {
-      threads = std::stoull(argv[++i]);
-    } else if (arg == "-s") {
-      enable_smoothing = false;
-    } else if (arg == "-max_s") {
-      print_lim = std::stoi(argv[++i]);
-    } else if (arg == "-output-all-matches") {
-      should_output_all_matches = true;
-    } else if (arg == "-pref") {
-      prefix = argv[++i];
-    } else if (arg == "-max_a") {
-      max_aligns = std::stoull(argv[++i]);
-    } else if (arg.starts_with("-")) {
-      std::cerr << "Invalid parameter \"" << arg << "\"." << std::endl;
-      print_help = true;
-    } else {
-      sig_path = arg;
+
+  {
+    args::ArgumentParser parser(
+        "Attempt seed extraction from read data.\n\nWith max gap size "
+        "= " SF_STRINGIFY(MAX_GAP) ".");
+    parser.SetArgumentSeparations(true, true, true, true);
+
+    {
+      args::HelpParams help_params{};
+      help_params.addDefault = true;
+      help_params.shortPrefix = "-";
+      help_params.longPrefix = "--";
+      help_params.shortSeparator = " ";
+      help_params.longSeparator = " ";
+      help_params.defaultString = " Default: ";
+      parser.helpParams = help_params;
+    }
+
+    args::HelpFlag help_(parser, "help", "Display this help.", {'h', "help"});
+    sf::args::version_flag version_(parser, "version",
+                                    "Output the version number and exit.",
+                                    {'V', "version"});
+    args::CompletionFlag completion_(parser, {"complete"});
+    sf::args::value_flag bg_path_(
+        parser, "background_path", "Background FASTA file, required for now.",
+        {'b', "background"}, bg_path, args::Options::Required);
+    args::Positional<std::string> sig_path_(parser, "signal_path",
+                                            "Signal FASTA file.", sig_path,
+                                            args::Options::Required);
+    args::Flag gap_any_(parser, "gap_any",
+                        "Allow gaps at any location, not just in the middle.",
+                        {'a', "gap-at-any-location"});
+    sf::args::value_flag p_sig_(
+        parser, "p_signal",
+        "p value to use for signal to background comparison.",
+        {'p', "p-signal"}, p);
+    sf::args::value_flag p_ext_(
+        parser, "p_extension",
+        "p value to use for extension when background counts are zero.",
+        {"p-ext"}, p_ext);
+    sf::args::value_flag log_fold_(
+        parser, "lf",
+        "Discard all mers with log fold change smaller than this.", {"lf"},
+        log_fold);
+    sf::args::value_flag max_k_(
+        parser, "mk", "Maximum mer length in [6, 24] range.", {"mk"}, max_k);
+    sf::args::value_flag threads_(parser, "threads",
+                                  "Number of threads to use.", {'t', "threads"},
+                                  threads);
+    sf::args::value_flag prefix_(parser, "output_prefix",
+                                 "Optional prefix for alignment output.",
+                                 {"pref"}, prefix);
+    sf::args::value_flag print_lim_(
+        parser, "max_s",
+        "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
+        print_lim);
+    sf::args::value_flag max_aligns_(parser, "max_a",
+                                     "Maximum number of alignments to output.",
+                                     {"max-a"}, max_aligns);
+    args::Flag should_output_all_matches_(
+        parser, "output_all_matches",
+        "Output also matches that are substrings of other matches.",
+        {"output-all-matches"});
+    args::Flag disable_smoothing_(parser, "disable_smoothing",
+                                  "Disable smoothing of counted mers.",
+                                  {'s', "no-smoothing"});
+    sf::args::value_flag mem_limit_(
+        parser, "memory_limit",
+        "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
+        mem_limit);
+
+    // Parse and check.
+    try {
+      parser.ParseCLI(argc, argv);
+    } catch (args::Help const &) {
+      std::cerr << parser;
+      std::exit(0);
+    } catch (args::Completion const &) {
+      std::cerr << parser;
+      std::exit(0);
+    } catch (sf::args::output_version const &) {
+      std::cout << "seed_finder " << sf::version << '\n';
+      std::exit(0);
+    } catch (std::runtime_error const &err) {
+      std::cerr << err.what() << '\n';
+      std::exit(1);
+    }
+
+    sig_path = args::get(sig_path_);
+    if (gap_any_) middle_gap_only = true;
+    if (should_output_all_matches_) should_output_all_matches = true;
+    if (disable_smoothing_) enable_smoothing = false;
+
+    if (print_lim == 0) {
+      print_lim = ~print_lim;
     }
   }
-  if (print_lim == 0) {
-    print_lim = ~print_lim;
-  }
-  if (print_help) {
-    help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
-    exit(0);
-  }
-  if (bg_path.size() == 0 || sig_path.size() == 0) {
-    std::cerr << "Input fasta files are required." << std::endl;
-    help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
-    exit(1);
-  }
+
   if (max_k < 6 || max_k > 24) {
     std::cerr << "invalide value for maximum k: " << max_k
               << ", should be in [6, 24] range." << std::endl;
-    help(argv[0], mem_limit, max_k, p, log_fold, p_ext, threads);
     exit(1);
   }
+
+#ifdef DEBUG
+  {
+    std::cerr << "bg_path:                   " << bg_path << '\n';
+    std::cerr << "sig_path:                  " << sig_path << '\n';
+    std::cerr << "prefix:                    " << prefix << '\n';
+    std::cerr << "middle_gap_only:           " << middle_gap_only << '\n';
+    std::cerr << "should_output_all_matches: " << should_output_all_matches
+              << '\n';
+    std::cerr << "p:                         " << p << '\n';
+    std::cerr << "p_ext:                     " << p_ext << '\n';
+    std::cerr << "log_fold:                  " << log_fold << '\n';
+    std::cerr << "print_lim:                 " << print_lim << '\n';
+    std::cerr << "max_aligns:                " << max_aligns << "\n";
+    std::cerr << "threads:                   " << threads << '\n';
+    std::cerr << "max_k:                     " << max_k << '\n';
+    std::cerr << "mem_limit:                 " << mem_limit << '\n';
+    std::cerr << "enable_smoothing:          " << enable_smoothing << '\n';
+  }
+#endif
+
 #ifdef _OPENMP
   omp_set_num_threads(threads);
 #endif
