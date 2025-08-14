@@ -43,7 +43,7 @@ def make_iupac_equality_list():
 IUPAC_EQUALITIES: typing.Final[[typing.Tuple[str, str]]] = make_iupac_equality_list()
 
 
-COUNT_PARSER: typing.Final[parse.Parser] = parse.compile(r'({:d}, {:d})')
+COUNT_PARSER: typing.Final[parse.Parser] = parse.compile(r'({:d},{:d})')
 
 
 def reverse_complement_expected_seed(expected_seed):
@@ -225,8 +225,12 @@ class DistanceAlignmentTask(Task):
 	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool, counts: typing.Tuple[int, int], p_val: float, priority: float):
 		res = edlib.align(seed, expected_seed, additionalEqualities = IUPAC_EQUALITIES, mode = "NW", task = "distance")
 		ed = res['editDistance']
-		ned = normalised_edit_similarity(ed, len(seed))
-		self.results.append(self.Result(is_reverse_complement, seed, ed, ned, counts, p_val, priority))
+		try:
+			# Use the maximum of the lengths to avoid division by zero.
+			nes = normalised_edit_similarity(ed, max(len(seed), len(expected_seed)))
+		except ZeroDivisionError:
+			raise Error(f"Division by zero when calculating normalised edit similarity. Edit distance: {ed} seed length: {len(seed)} expected seed length: {len(expected_seed)}")
+		self.results.append(self.Result(is_reverse_complement, seed, ed, nes, counts, p_val, priority))
 
 	def output(self):
 		def format_bool(value: bool):
