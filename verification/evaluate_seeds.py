@@ -28,7 +28,7 @@ def make_iupac_equality_list():
 		("D", "AGT"),
 		("H", "ACT"),
 		("V", "ACG"),
-		("N", "ACGT."),
+		("N", "ACGT"), # "." on the following line.
 		("ACGTRYSWKMBDHVN", ".")
 	]
 
@@ -74,6 +74,10 @@ class Warning(Exception):
 	pass
 
 
+class Error(Exception):
+	pass
+
+
 def log(message: str):
 	current_time = datetime.datetime.now()
 	current_time_ = current_time.strftime("%H:%M:%S")
@@ -84,12 +88,17 @@ def log_warning(message: str):
 	log(f"WARNING: {message}")
 
 
+def log_error(message: str):
+	log(f"ERROR: {message}")
+
+
 @dataclass
 class Task(ABC):
 	identifier: str
 	expected_seed: str
 	should_test_reverse_complement: bool
 	input_limit: int
+	should_read_tail: bool
 
 	@abstractmethod
 	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool):
@@ -113,15 +122,31 @@ class Task(ABC):
 				if -1 == self.input_limit:
 					yield from read_from_file()
 				else:
-					for lineno, line in enumerate(read_from_file()):
-						if self.input_limit <= lineno:
-							return
-						yield line
+					if self.should_read_tail:
+						# Create a circular buffer for the lines.
+						lines = [""] * self.input_limit
+						count = 0
+						current_idx = 0
+						for lineno, line in enumerate(read_from_file(), start = 1):
+							lines[current_idx] = line
+							current_idx = lineno % self.input_limit
+							count = lineno
+						if self.input_limit < count:
+							yield from iter(lines[current_idx:])
+						yield from iter(lines[:current_idx])
+					else:
+						for lineno, line in enumerate(read_from_file()):
+							if self.input_limit <= lineno:
+								return
+							yield line
 
 			expected_seed_rc = reverse_complement_expected_seed(self.expected_seed) if self.should_test_reverse_complement else ""
 			for line_ in input_lines():
 				line = line_.rstrip("\n")
-				seed, counts, p_val, priority = line.split("\t")
+				try:
+					seed, counts, p_val, priority = line.split("\t")
+				except ValueError:
+					raise Error(f'Unexpected line format: "{line}"')
 				self.align(seed = seed, expected_seed = self.expected_seed, is_reverse_complement = False)
 				if self.should_test_reverse_complement:
 					self.align(seed = seed, expected_seed = expected_seed_rc, is_reverse_complement = True)
@@ -201,12 +226,12 @@ def read_motif_input(fp: typing.TextIO) -> typing.Iterable[typing.Tuple[str, str
 		yield identifier, expected_seed
 
 
-def prepare_tasks(it: typing.Iterable[typing.Tuple[str, str]], *, should_output_alignment = False, should_test_reverse_complement = False, input_limit = -1):
+def prepare_tasks(it: typing.Iterable[typing.Tuple[str, str]], *, should_output_alignment = False, should_test_reverse_complement = False, input_limit = -1, should_read_tail = False):
 	for identifier, expected_seed in it:
 		if should_output_alignment:
-			task = PathAlignmentTask(identifier, expected_seed, should_test_reverse_complement, input_limit)
+			task = PathAlignmentTask(identifier, expected_seed, should_test_reverse_complement, input_limit, should_read_tail)
 		else:
-			task = DistanceAlignmentTask(identifier, expected_seed, should_test_reverse_complement, input_limit)
+			task = DistanceAlignmentTask(identifier, expected_seed, should_test_reverse_complement, input_limit, should_read_tail)
 		assert task
 		yield task
 
@@ -221,11 +246,14 @@ def handle_results(done: typing.Set[concurrent.futures.Future]):
 		res: typing.Optional[Task] = None
 		try:
 			res = ff.result()
+		except Error as exc:
+			log_error(f"{exc}")
+			continue
 		except Warning as exc:
 			log_warning(f"{exc}")
 			continue
 		except Exception as exc:
-			log(f"Got an exception: {exc}")
+			log_error(f"Got an exception: {type(exc)}: {exc}")
 			continue
 		assert res
 		res.output()
@@ -236,6 +264,7 @@ def main():
 	parser.add_argument("--output-alignment", action = "store_true", help = "Output the alignments instead of alignment scores")
 	parser.add_argument("--test-reverse-complement", action = "store_true", help = "Test also the reverse complement of the expected seed")
 	parser.add_argument("--input-limit", type = int, default = -1, metavar = "COUNT", help = "Check only the first COUNT found seeds, -1 for no limit")
+	parser.add_argument("--tail", action = "store_true", help = "Read the last lines of the input instead of the first ones")
 	args = parser.parse_args()
 
 	log(f"Using seed_finder outputs at {INPUT_PREFIX}…")
@@ -252,7 +281,8 @@ def main():
 			read_motif_input(sys.stdin),
 			should_output_alignment = args.output_alignment,
 			should_test_reverse_complement = args.test_reverse_complement,
-			input_limit = args.input_limit
+			input_limit = args.input_limit,
+			should_read_tail = args.tail
 		):
 			while max_tasks <= len(running_tasks):
 				done, not_done = concurrent.futures.wait(running_tasks, return_when = concurrent.futures.FIRST_COMPLETED)
