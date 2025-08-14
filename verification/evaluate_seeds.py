@@ -104,7 +104,7 @@ def normalised_edit_similarity(distance, mm):
 	return 1.0 / math.exp(distance / (mm - distance))
 
 
-@dataclass
+@dataclass(slots = True)
 class Task(ABC):
 	identifier: str
 	expected_seed: str
@@ -189,7 +189,7 @@ class Task(ABC):
 			raise Warning(f"Skipping {seed_finder_output_path}: {exc}")
 
 
-@dataclass
+@dataclass(slots = True)
 class PathAlignmentTask(Task):
 	results: typing.List[typing.Tuple[bool, str, str, str, str]] = field(default_factory = list)
 
@@ -210,10 +210,10 @@ class PathAlignmentTask(Task):
 			print(query_aligned)
 
 
-@dataclass
+@dataclass(slots = True)
 class DistanceAlignmentTask(Task):
 
-	@dataclass
+	@dataclass(slots = True, frozen = True)
 	class Result:
 		is_reverse_complement: bool
 		seed: str
