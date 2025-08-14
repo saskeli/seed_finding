@@ -98,6 +98,9 @@ def log_error(message: str):
 
 def normalised_edit_similarity(distance, mm):
 	# From Lopresti, Zhou: Retrieval Strategies for Noisy Text, eq. 6.
+	if distance == mm:
+		return 0.0
+	assert distance < mm
 	return 1.0 / math.exp(distance / (mm - distance))
 
 
@@ -226,10 +229,9 @@ class DistanceAlignmentTask(Task):
 		res = edlib.align(seed, expected_seed, additionalEqualities = IUPAC_EQUALITIES, mode = "NW", task = "distance")
 		ed = res['editDistance']
 		try:
-			# Use the maximum of the lengths to avoid division by zero.
 			nes = normalised_edit_similarity(ed, max(len(seed), len(expected_seed)))
 		except ZeroDivisionError:
-			raise Error(f"Division by zero when calculating normalised edit similarity. Edit distance: {ed} seed length: {len(seed)} expected seed length: {len(expected_seed)}")
+			raise Error(f"Division by zero when calculating normalised edit similarity. Edit distance: {ed} seed length: {len(seed)} expected seed length: {len(expected_seed)} seed: “{seed}” expected seed: “{expected_seed}”")
 		self.results.append(self.Result(is_reverse_complement, seed, ed, nes, counts, p_val, priority))
 
 	def output(self):
