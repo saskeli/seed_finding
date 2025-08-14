@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 import argparse
-import collections
 import concurrent.futures
 from dataclasses import dataclass, field
 import datetime
 import edlib
 import gzip
+import math
+import parse
 import os
 import sys
 import typing
@@ -28,7 +29,7 @@ def make_iupac_equality_list():
 		("D", "AGT"),
 		("H", "ACT"),
 		("V", "ACG"),
-		("N", "ACGT"), # "." on the following line.
+		("N", "ACGT"), # “.” on the following line.
 		("ACGTRYSWKMBDHVN", ".")
 	]
 
@@ -40,6 +41,9 @@ def make_iupac_equality_list():
 	return list(helper())
 
 IUPAC_EQUALITIES: typing.Final[[typing.Tuple[str, str]]] = make_iupac_equality_list()
+
+
+COUNT_PARSER: typing.Final[parse.Parser] = parse.compile(r'({:d}, {:d})')
 
 
 def reverse_complement_expected_seed(expected_seed):
@@ -92,6 +96,11 @@ def log_error(message: str):
 	log(f"ERROR: {message}")
 
 
+def normalised_edit_similarity(distance, mm):
+	# From Lopresti, Zhou: Retrieval Strategies for Noisy Text, eq. 6.
+	return 1.0 / math.exp(distance / (mm - distance))
+
+
 @dataclass
 class Task(ABC):
 	identifier: str
@@ -101,55 +110,78 @@ class Task(ABC):
 	should_read_tail: bool
 
 	@abstractmethod
-	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool):
+	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool, counts: typing.Tuple[int, int], p_val: float, priority: float):
 		pass
 
 	@abstractmethod
 	def output(self):
 		pass
 
+	def read_from_file(self, path: str):
+		with open_(path) as fp:
+			for line in fp:
+				if line.startswith("#"):
+					continue
+				yield line
+
+	def read_head(self, path: str):
+		for lineno, line in enumerate(self.read_from_file(path)):
+			if self.input_limit <= lineno:
+				return
+			yield line
+
+	def read_tail(self, path: str):
+		# Create a circular buffer for the lines.
+		lines = [""] * self.input_limit
+		count = 0
+		current_idx = 0
+		for lineno, line in enumerate(self.read_from_file(path), start = 1):
+			lines[current_idx] = line
+			current_idx = lineno % self.input_limit
+			count = lineno
+		if self.input_limit < count:
+			yield from iter(lines[current_idx:])
+		yield from iter(lines[:current_idx])
+
+	def input_lines(self, path: str):
+		if -1 == self.input_limit:
+			yield from self.read_from_file(path)
+		else:
+			if self.should_read_tail:
+				yield from self.read_tail(path)
+			else:
+				yield from self.read_head(path)
+
 	def run(self):
 		seed_finder_output_path = f"{INPUT_PREFIX}/{self.identifier}.tsv.gz"
+
 		try:
-			def read_from_file():
-				with open_(seed_finder_output_path) as fp:
-					for line in fp:
-						if line.startswith("#"):
-							continue
-						yield line
-
-			def input_lines():
-				if -1 == self.input_limit:
-					yield from read_from_file()
-				else:
-					if self.should_read_tail:
-						# Create a circular buffer for the lines.
-						lines = [""] * self.input_limit
-						count = 0
-						current_idx = 0
-						for lineno, line in enumerate(read_from_file(), start = 1):
-							lines[current_idx] = line
-							current_idx = lineno % self.input_limit
-							count = lineno
-						if self.input_limit < count:
-							yield from iter(lines[current_idx:])
-						yield from iter(lines[:current_idx])
-					else:
-						for lineno, line in enumerate(read_from_file()):
-							if self.input_limit <= lineno:
-								return
-							yield line
-
 			expected_seed_rc = reverse_complement_expected_seed(self.expected_seed) if self.should_test_reverse_complement else ""
-			for line_ in input_lines():
+			for line_ in self.input_lines(seed_finder_output_path):
 				line = line_.rstrip("\n")
 				try:
-					seed, counts, p_val, priority = line.split("\t")
+					seed, counts_, p_val, priority = line.split("\t")
+					res = COUNT_PARSER.parse(counts_)
+					if res is None:
+						raise Error(f'Unexpected line format: "{line}"')
+					assert isinstance(res, parse.Result)
+					counts = res.fixed
 				except ValueError:
 					raise Error(f'Unexpected line format: "{line}"')
-				self.align(seed = seed, expected_seed = self.expected_seed, is_reverse_complement = False)
+
+				def align_(seed: str, expected_seed: str, is_reverse_complement: bool):
+					self.align(
+						seed = seed,
+						expected_seed = expected_seed,
+						is_reverse_complement = is_reverse_complement,
+						counts = counts,
+						p_val = float(p_val),
+						priority = float(priority)
+					)
+
+				align_(seed, self.expected_seed, False)
 				if self.should_test_reverse_complement:
-					self.align(seed = seed, expected_seed = expected_seed_rc, is_reverse_complement = True)
+					align_(seed, expected_seed_rc, True)
 		except OSError as exc:
 			raise Warning(f"Skipping {seed_finder_output_path}: {exc}")
 
@@ -158,7 +190,7 @@ class Task(ABC):
 class PathAlignmentTask(Task):
 	results: typing.List[typing.Tuple[bool, str, str, str, str]] = field(default_factory = list)
 
-	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool):
+	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool, counts: typing.Tuple[int, int], p_val: float, priority: float):
 		res = edlib.align(seed, expected_seed, additionalEqualities = IUPAC_EQUALITIES, mode = "NW", task = "path")
 		aa = edlib.getNiceAlignment(res, seed, expected_seed)
 		self.results.append((is_reverse_complement, seed, aa["target_aligned"], aa["matched_aligned"], aa["query_aligned"]))
@@ -177,19 +209,32 @@ class PathAlignmentTask(Task):
 
 @dataclass
 class DistanceAlignmentTask(Task):
-	results: typing.List[typing.Tuple[bool, str, int]] = field(default_factory = list)
 
-	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool):
+	@dataclass
+	class Result:
+		is_reverse_complement: bool
+		seed: str
+		edit_distance: int
+		normalised_edit_similarity: float
+		counts: typing.Tuple[int, int]
+		p_val: float
+		priority: float
+
+	results: typing.List[Result] = field(default_factory = list)
+
+	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool, counts: typing.Tuple[int, int], p_val: float, priority: float):
 		res = edlib.align(seed, expected_seed, additionalEqualities = IUPAC_EQUALITIES, mode = "NW", task = "distance")
-		self.results.append((is_reverse_complement, seed, res['editDistance']))
+		ed = res['editDistance']
+		ned = normalised_edit_similarity(ed, len(seed))
+		self.results.append(self.Result(is_reverse_complement, seed, ed, ned, counts, p_val, priority))
 
 	def output(self):
 		def format_bool(value: bool):
 			return 1 if value else 0
 
-		for (is_reverse_complement, seed, edit_distance) in self.results:
-			expected_seed = reverse_complement_expected_seed(self.expected_seed) if is_reverse_complement else self.expected_seed
-			print(f"{self.identifier}\t{expected_seed}\t{format_bool(is_reverse_complement)}\t{seed}\t{edit_distance}")
+		for rr in self.results:
+			expected_seed = reverse_complement_expected_seed(self.expected_seed) if rr.is_reverse_complement else self.expected_seed
+			print(f"{self.identifier}\t{expected_seed}\t{format_bool(rr.is_reverse_complement)}\t{rr.seed}\t{rr.edit_distance}\t{rr.normalised_edit_similarity}\t{rr.counts}\t{rr.p_val}\t{rr.priority}")
 
 
 def open_(path: str) -> typing.TextIO:
@@ -200,7 +245,7 @@ def open_(path: str) -> typing.TextIO:
 
 
 def read_motif_input(fp: typing.TextIO) -> typing.Iterable[typing.Tuple[str, str]]:
-	log(f"Reading motifs from stdin…")
+	log("Reading motifs from stdin…")
 	is_first = True
 
 	for motif_lineno, motif_line_ in enumerate(sys.stdin, start = 1):
@@ -212,6 +257,9 @@ def read_motif_input(fp: typing.TextIO) -> typing.Iterable[typing.Tuple[str, str
 
 		if is_first:
 			is_first = False
+
+			# Sanity check.
+			# FIXME: Since the check is input-dependent, assertions should not be used.
 			assert fields[0] == "ID"
 			assert fields[7] == "cycle"
 			assert fields[8] == "cycle_background"
@@ -270,7 +318,7 @@ def main():
 	log(f"Using seed_finder outputs at {INPUT_PREFIX}…")
 
 	if not(args.output_alignment):
-		print("#IDENTIFIER\tEXPECTED_SEED\tIS_REVERSE_COMPLEMENT\tSEED\tALIGNMENT_SCORE")
+		print("#IDENTIFIER\tEXPECTED_SEED\tIS_REVERSE_COMPLEMENT\tSEED\tEDIT_DISTANCE\tNORMALISED_EDIT_SIMILARITY\tCOUNTS\tP_VAL\tPRIORITY")
 
 	max_workers = os.cpu_count() or 1 # FIXME: Change to process_cpu_count().
 	# FIXME: I’m not sure what causes the memory usage of the worker processes to increase over time. Apparently there is a leak (or something similar) since limiting the number of tasks per child helps.
