@@ -5,8 +5,10 @@ from dataclasses import dataclass, field
 import datetime
 import edlib
 import gzip
+import io
 import math
 import parse
+import pickle
 import os
 import sys
 import typing
@@ -102,6 +104,37 @@ def normalised_edit_similarity(distance, mm):
 		return 0.0
 	assert distance < mm
 	return 1.0 / math.exp(distance / (mm - distance))
+
+
+class CompressedList:
+	compression_threshold = 0
+	compressed_blocks = []
+	items = []
+
+	def __init__(self, compression_threshold):
+		self.compression_threshold = compression_threshold
+
+	def append(self, value):
+		self.items.append(value)
+		if self.compression_threshold <= len(self.items):
+			self.compress()
+
+	def decompress(self):
+		for block in self.compressed_blocks:
+			yield from self.decompress_block(block)
+		yield from iter(self.items)
+
+	def compress(self):
+		with io.BytesIO() as fp:
+			with gzip.GzipFile(fileobj = fp, mode = 'wb') as gzip_handle:
+				pickle.dump(self.items, gzip_handle, protocol = pickle.HIGHEST_PROTOCOL)
+				self.items.clear()
+			self.compressed_blocks.append(fp.getvalue())
+
+	def decompress_block(self, block):
+		with io.BytesIO(block) as fp:
+			with gzip.GzipFile(fileobj = fp, mode = 'rb') as gzip_handle:
+				yield from pickle.load(gzip_handle)
 
 
 @dataclass(slots = True)
@@ -223,7 +256,7 @@ class DistanceAlignmentTask(Task):
 		p_val: float
 		priority: float
 
-	results: typing.List[Result] = field(default_factory = list)
+	results = CompressedList(1024)
 
 	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool, counts: typing.Tuple[int, int], p_val: float, priority: float):
 		res = edlib.align(seed, expected_seed, additionalEqualities = IUPAC_EQUALITIES, mode = "NW", task = "distance")
@@ -238,7 +271,7 @@ class DistanceAlignmentTask(Task):
 		def format_bool(value: bool):
 			return 1 if value else 0
 
-		for rr in self.results:
+		for rr in self.results.decompress():
 			expected_seed = reverse_complement_expected_seed(self.expected_seed) if rr.is_reverse_complement else self.expected_seed
 			print(f"{self.identifier}\t{expected_seed}\t{format_bool(rr.is_reverse_complement)}\t{rr.seed}\t{rr.edit_distance}\t{rr.normalised_edit_similarity}\t{rr.counts}\t{rr.p_val}\t{rr.priority}")
 
