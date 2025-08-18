@@ -107,12 +107,13 @@ def normalised_edit_similarity(distance, mm):
 
 
 class CompressedList:
-	compression_threshold = 0
-	compressed_blocks = []
-	items = []
-
 	def __init__(self, compression_threshold):
 		self.compression_threshold = compression_threshold
+		self.compressed_blocks = []
+		self.items = []
+
+	def __len__(self) -> int:
+		return len(self.items) + self.compression_threshold * len(self.compressed_blocks)
 
 	def append(self, value):
 		self.items.append(value)
@@ -219,7 +220,7 @@ class Task(ABC):
 				if self.should_test_reverse_complement:
 					align_(seed, expected_seed_rc, True)
 		except OSError as exc:
-			raise Warning(f"Skipping {seed_finder_output_path}: {exc}")
+			raise Error(f"Skipping {seed_finder_output_path}: {exc}")
 
 
 @dataclass(slots = True)
@@ -256,7 +257,7 @@ class DistanceAlignmentTask(Task):
 		p_val: float
 		priority: float
 
-	results = CompressedList(1024)
+	results: CompressedList = field(default_factory = lambda: CompressedList(8 * 1024))
 
 	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool, counts: typing.Tuple[int, int], p_val: float, priority: float):
 		res = edlib.align(seed, expected_seed, additionalEqualities = IUPAC_EQUALITIES, mode = "NW", task = "distance")
@@ -360,6 +361,7 @@ def main():
 		print("#IDENTIFIER\tEXPECTED_SEED\tIS_REVERSE_COMPLEMENT\tSEED\tEDIT_DISTANCE\tNORMALISED_EDIT_SIMILARITY\tCOUNTS\tP_VAL\tPRIORITY")
 
 	max_workers = os.cpu_count() or 1 # FIXME: Change to process_cpu_count().
+	log(f"Using {max_workers} workers…")
 	# FIXME: I’m not sure what causes the memory usage of the worker processes to increase over time. Apparently there is a leak (or something similar) since limiting the number of tasks per child helps.
 	with concurrent.futures.ProcessPoolExecutor(max_workers = max_workers, max_tasks_per_child = 1) as executor:
 		max_tasks = 2 * max_workers
