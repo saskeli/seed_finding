@@ -98,6 +98,10 @@ def log_error(message: str):
 	log(f"ERROR: {message}")
 
 
+def edit_similarity(distance, max_len):
+	return (max_len - distance) / max_len
+
+
 def normalised_edit_similarity(distance, mm):
 	# From Lopresti, Zhou: Retrieval Strategies for Noisy Text, eq. 6.
 	if distance == mm:
@@ -252,6 +256,7 @@ class DistanceAlignmentTask(Task):
 		is_reverse_complement: bool
 		seed: str
 		edit_distance: int
+		edit_similarity: float
 		normalised_edit_similarity: float
 		counts: typing.Tuple[int, int]
 		p_val: float
@@ -261,12 +266,14 @@ class DistanceAlignmentTask(Task):
 
 	def align(self, *, seed: str, expected_seed: str, is_reverse_complement: bool, counts: typing.Tuple[int, int], p_val: float, priority: float):
 		res = edlib.align(seed, expected_seed, additionalEqualities = IUPAC_EQUALITIES, mode = "NW", task = "distance")
+		max_len = max(len(seed), len(expected_seed))
 		ed = res['editDistance']
 		try:
-			nes = normalised_edit_similarity(ed, max(len(seed), len(expected_seed)))
+			es = edit_similarity(ed, max_len)
+			nes = normalised_edit_similarity(ed, max_len)
 		except ZeroDivisionError:
-			raise Error(f"Division by zero when calculating normalised edit similarity. Edit distance: {ed} seed length: {len(seed)} expected seed length: {len(expected_seed)} seed: “{seed}” expected seed: “{expected_seed}”")
-		self.results.append(self.Result(is_reverse_complement, seed, ed, nes, counts, p_val, priority))
+			raise Error(f"Division by zero when calculating (normalised) edit similarity. Edit distance: {ed} seed length: {len(seed)} expected seed length: {len(expected_seed)} seed: “{seed}” expected seed: “{expected_seed}”")
+		self.results.append(self.Result(is_reverse_complement, seed, ed, es, nes, counts, p_val, priority))
 
 	def output(self):
 		def format_bool(value: bool):
@@ -274,7 +281,7 @@ class DistanceAlignmentTask(Task):
 
 		for rr in self.results.decompress():
 			expected_seed = reverse_complement_expected_seed(self.expected_seed) if rr.is_reverse_complement else self.expected_seed
-			print(f"{self.identifier}\t{expected_seed}\t{format_bool(rr.is_reverse_complement)}\t{rr.seed}\t{rr.edit_distance}\t{rr.normalised_edit_similarity}\t{rr.counts}\t{rr.p_val}\t{rr.priority}")
+			print(f"{self.identifier}\t{expected_seed}\t{format_bool(rr.is_reverse_complement)}\t{rr.seed}\t{rr.edit_distance}\t{rr.edit_similarity}\t{rr.normalised_edit_similarity}\t{rr.counts}\t{rr.p_val}\t{rr.priority}")
 
 
 def open_(path: str) -> typing.TextIO:
@@ -358,7 +365,7 @@ def main():
 	log(f"Using seed_finder outputs at {INPUT_PREFIX}…")
 
 	if not(args.output_alignment):
-		print("#IDENTIFIER\tEXPECTED_SEED\tIS_REVERSE_COMPLEMENT\tSEED\tEDIT_DISTANCE\tNORMALISED_EDIT_SIMILARITY\tCOUNTS\tP_VAL\tPRIORITY")
+		print("#IDENTIFIER\tEXPECTED_SEED\tIS_REVERSE_COMPLEMENT\tSEED\tEDIT_DISTANCE\tEDIT_SIMILARITY\tNORMALISED_EDIT_SIMILARITY\tCOUNTS\tP_VAL\tPRIORITY")
 
 	max_workers = os.cpu_count() or 1 # FIXME: Change to process_cpu_count().
 	log(f"Using {max_workers} workers…")
