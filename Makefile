@@ -32,7 +32,7 @@ HEADERS =	include/bits.hpp \
 			include/util.hpp \
 			include/version.hpp
 
-ARGS_DIR = deps/args
+ARGS = deps/args/args.hxx
 SDSL_DIR = deps/sdsl-lite/lib
 
 GTEST_DIR = deps/googletest
@@ -62,7 +62,7 @@ motivating: motivating.cpp
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
-seed_finder: seed_finder.cpp $(HEADERS) | $(SDSL_DIR) $(ARGS_DIR)
+seed_finder: seed_finder.cpp $(HEADERS) $(ARGS) | $(SDSL_DIR)
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
 
 comp: comp.cpp include/util.hpp
@@ -83,13 +83,13 @@ clean:
 $(SDSL_DIR):
 	git submodule update --init
 
-$(ARGS_DIR):
-	git submodule update --init
-
 $(GTEST_DIR)/googletest:
 	git submodule update --init
 
 $(RAPIDCHECK_DIR):
+	git submodule update --init
+
+$(ARGS):
 	git submodule update --init
 
 $(GTEST_DIR)/build/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
