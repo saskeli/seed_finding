@@ -318,7 +318,7 @@ class seed_finder {
       }
 
       std::swap(sig_bg_a, sig_bg_b);
-      std::cerr << int(k - 1) << " -> " << seeds_.size() << " seeds."
+      std::cerr << int(k - 1) << " -> " << seeds_.size() << " candidates."
                 << std::endl;
     }
     std::swap(sig_bg_a, sig_bg_c);
@@ -530,8 +530,8 @@ class seed_finder {
     for (; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
       extend(a, b, p_counter, k);
-      std::cerr << "    " << a.size() << " " << int(k) - 1 << " seeds\n"
-                << "    " << b.size() << " " << int(k) << " candidates"
+      std::cerr << "    " << a.size() << " " << int(k) - 1 << " candidates\n"
+                << "    " << b.size() << " " << int(k) << " potentials"
                 << std::endl;
       for (auto p : a) {
         seeds_.push_back(p.second);
@@ -541,7 +541,7 @@ class seed_finder {
         filter(b);
       }
       a.swap(b);
-      std::cerr << int(k) - 1 << " -> " << seeds_.size() << " seeds."
+      std::cerr << int(k) - 1 << " -> " << seeds_.size() << " candidates."
                 << std::endl;
       if (a.size() == 0) {
         break;
@@ -551,7 +551,7 @@ class seed_finder {
       for (auto p : a) {
         seeds_.push_back(p.second);
       }
-      std::cerr << int(k_lim_) << " -> " << seeds_.size() << " seeds."
+      std::cerr << int(k_lim_) << " -> " << seeds_.size() << " candidates."
                 << std::endl;
     }
   }

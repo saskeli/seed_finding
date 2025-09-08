@@ -18,7 +18,6 @@ template <bool middle_gap_only, uint16_t max_gap, class Res_vec_T>
 class seed_clusterer {
  private:
   const Res_vec_T& seeds_;
-  std::vector<std::vector<size_t>> edges_;
   std::vector<std::pair<size_t, double>> local_optima_;
   std::string sig_path_;
   std::string bg_path_;
@@ -34,46 +33,29 @@ class seed_clusterer {
    * @param idx     Center mer index in seeds_
    */
   void output_alignment(std::string& prefix, size_t idx) {
-    auto center = seeds_[idx].g;
-    std::vector<std::pair<std::string, int>> mers;
-    mers.push_back({center.to_string(), 0});
-    prefix.append(mers.back().first).append(".fa");
-    int a_offset = 0;
-    int b_offset = 0;
-    int min_offset = 0;
-    /* Collects all H1 neighbours and aligns them relative to the center */
-    for (auto e : edges_[idx]) {
-      auto g = seeds_[e].g;
-      auto g_r = g.reverse_complement();
-      size_t a_d = center.huddinge_distance(g, a_offset);
-      size_t b_d = center.huddinge_distance(g_r, b_offset);
-      if (a_d < b_d) {
-        min_offset = std::min(min_offset, a_offset);
-        mers.push_back({g.to_string(), a_offset});
-      } else {
-        min_offset = std::min(min_offset, b_offset);
-        mers.push_back({g_r.to_string(), b_offset});
-      }
-    }
-    /* Build a regex from all the seeds. */
+    const auto center = seeds_[idx].g;
+    std::string m_string = center.to_string();
+    size_t p_len = m_string.size();
     std::string reg = "(";
-    for (auto p : mers) {
-      if (reg.size() > 2) {
+    for (size_t i = 0; i < p_len; ++i) {
+      if (reg.size() > 1) {
         reg.push_back('|');
       }
-      for (int i = p.second; i > min_offset; --i) {
-        reg.push_back('.');
-      }
-      reg.append(p.first);
+      char c = m_string[i];
+      m_string[i] = '.';
+      reg.append(m_string);
+      m_string[i] = c;
     }
     reg.push_back(')');
     std::regex rex(reg);
+    p_len += 12;
 
     /* Collect all reads that match the regex */
-    std::ofstream out_file(prefix);
+    std::string f_name = prefix + m_string + ".fa";
+    std::ofstream out_file(f_name);
     seq_io::Reader_x sr(sig_path_);
     sr.enable_reverse_complements();
-    std::vector<std::pair<std::string, size_t>> hits;
+    size_t row_num = 0;
     while (true) {
       uint64_t len = sr.get_next_read_to_buffer();
       if (len == 0) {
@@ -83,33 +65,21 @@ class seed_clusterer {
       auto e = std::sregex_iterator();
       auto m = std::sregex_iterator(read.begin(), read.end(), rex);
       for (; m != e; ++m) {
-        hits.push_back({read, m->position()});
+        out_file << "> " << row_num++ << "\n";
+        std::string w = "";
+        for (size_t i = 0; i + m->position() < 6; ++i) {
+          w.push_back('N');
+        }
+        if (m->position() < 6) {
+          w.append(read.substr(0, p_len - w.size()));
+        } else {
+          w.append(read.substr(m->position() - 6, p_len));
+        }
+        while (w.size() < p_len) {
+          w.push_back('N');
+        }
+        out_file << w << std::endl;
       }
-    }
-    /* Compute MSA for the reads */
-    size_t max_pos = 0;
-    for (auto p : hits) {
-      max_pos = std::max(max_pos, p.second);
-    }
-    size_t max_len = 0;
-    for (auto p : hits) {
-      size_t n_count = max_pos - p.second;
-      max_len = std::max(n_count + p.first.size(), max_len);
-    }
-    size_t c = 1;
-    /* Output MSA to file */
-    for (auto p : hits) {
-      out_file << "> " << c++ << "\n";
-      size_t n_count = max_pos - p.second;
-      for (size_t i = 0; i < n_count; ++i) {
-        out_file << "N";
-      }
-      out_file << p.first;
-      n_count = max_len - p.first.size() - n_count;
-      for (size_t i = 0; i < n_count; ++i) {
-        out_file << "N";
-      }
-      out_file << std::endl;
     }
   }
 
@@ -126,7 +96,6 @@ class seed_clusterer {
   seed_clusterer(const Res_vec_T& seeds, const std::string sig_path,
                  const std::string bg_path, double pext)
       : seeds_(seeds),
-        edges_(seeds.size()),
         local_optima_(),
         sig_path_(sig_path),
         bg_path_(bg_path),
@@ -140,25 +109,46 @@ class seed_clusterer {
 #pragma omp parallel for
     for (size_t i = 0; i < seeds_.size(); ++i) {
       auto mer = seeds_[i].g;
-      size_t len = mer.length();
+      // size_t len = mer.length();
+      bool keep = true;
+      //uint32_t bogo_ratio = seeds_[i].sig_count - seeds_[i].bg_count;
+      double enrichment = double(seeds_[i].sig_count) / seeds_[i].bg_count;
+      uint16_t len = seeds_[i].g.length();
       double val = 0;
-      size_t neigbour_count = 0;
-      /*
-       * Priority is based on enrichment of seed and H1 neighbourhood.
-       *
-       * Adds `bg_count / seed_count` for neighbours in graph, `1` for others.
-       */
+      size_t h_n_count = 0;
+      // Priority is based on enrichment of seed and H1 neighbourhood.
+      //
+      // Adds `bg_count / seed_count` for neighbours in graph, `1` for others.
       auto cb = [&](const auto& o) {
         uint64_t o_mer =
             o.is_canonical() ? uint64_t(o) : uint64_t(o.reverse_complement());
         if (seed_map.contains(o_mer)) {
           size_t idx = seed_map[o_mer];
-          edges_[i].push_back(idx);
-          val += double(seeds_[idx].bg_count) / seeds_[idx].sig_count;
+          /*uint16_t o_len = o.length();
+          uint32_t o_bogo = seeds_[idx].sig_count - seeds_[idx].bg_count;
+          if (o_len == len) {
+            if (o_bogo > bogo_ratio) {
+              keep = false;
+            }
+          } else if (o_len < len) {
+            if (o_bogo > 4 * bogo_ratio) {
+              keep = false;
+            }
+          } else {
+            if (o_bogo * 3 > bogo_ratio) {
+              keep = false;
+            }
+          }*/
+          double o_enrichment =
+              double(seeds_[idx].sig_count) / seeds_[idx].bg_count;
+          if (o_enrichment > enrichment * 2) {
+            keep = false;
+          }
+          val += seeds_[idx].sig_count - seeds_[idx].bg_count;
+          ++h_n_count;
         } else {
-          val += 1;
+          ++h_n_count;
         }
-        ++neigbour_count;
       };
       if (len >= 24) {
         mer.template huddinge_neighbours<false, false, true>(cb);
@@ -167,15 +157,21 @@ class seed_clusterer {
       } else {
         mer.huddinge_neighbours(cb);
       }
-      val = val / neigbour_count;
-      val += double(seeds_[i].bg_count) / seeds_[i].sig_count;
+      val /= h_n_count;
+      val += seeds_[i].sig_count - seeds_[i].bg_count;
+      if (keep) {
 #pragma omp critical
-      local_optima_.push_back({i, val});
+        local_optima_.push_back({i, double(1) / val});
+      }
     }
     std::sort(local_optima_.begin(), local_optima_.end(),
               [](const auto& a, const auto& b) { return a.second < b.second; });
     std::cerr << "Computed priorities for " << local_optima_.size()
               << std::endl;
+    /*for (auto e : local_optima_) {
+      std::cout << seeds_[e.first].g.to_string() << "\t" <<
+    seeds_[e.first].sig_count << "\t" << seeds_[e.first].bg_count << std::endl;
+    }*/
   }
 
   /**
