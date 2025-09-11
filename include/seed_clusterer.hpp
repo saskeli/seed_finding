@@ -25,7 +25,7 @@ class seed_clusterer {
   double p_ext_;
 
   /**
-   * Looks for reads that confrom to the Huddinge 1 neighbourhood
+   * Looks for reads that confrom to the Hamming 1 neighbourhood
    * of `seeds_[idx]`, and outputs the multiple alignment of these
    * as fasta to `prefix + seeds_[idx].g.to_string() + '.fa'`.
    *
@@ -64,6 +64,8 @@ class seed_clusterer {
       std::string read(sr.read_buf, len);
       auto e = std::sregex_iterator();
       auto m = std::sregex_iterator(read.begin(), read.end(), rex);
+      /* And output to file with 6 character context */
+      // TODO: Parameterize contex length?
       for (; m != e; ++m) {
         out_file << "> " << row_num++ << "\n";
         std::string w = "";
@@ -105,18 +107,18 @@ class seed_clusterer {
     for (size_t i = 0; i < seeds_.size(); ++i) {
       seed_map[uint64_t(seeds_[i].g)] = i;
     }
-    /* Compute the Huddinge graph and priorities for all potential seeds */
+    /* Compute the Huddinge priorities for all potential seeds */
 #pragma omp parallel for
     for (size_t i = 0; i < seeds_.size(); ++i) {
       auto mer = seeds_[i].g;
-      // size_t len = mer.length();
+      // Value used for attempt to filter false positives
+      // uint32_t bogo_ratio = seeds_[i].sig_count - seeds_[i].bg_count;
       bool keep = true;
-      //uint32_t bogo_ratio = seeds_[i].sig_count - seeds_[i].bg_count;
       double enrichment = double(seeds_[i].sig_count) / seeds_[i].bg_count;
       uint16_t len = seeds_[i].g.length();
       double val = 0;
       size_t h_n_count = 0;
-      // Priority is based on enrichment of seed and H1 neighbourhood.
+      // Priority is based on enrichment of the candidate and its H1 neighbourhood.
       //
       // Adds `bg_count / seed_count` for neighbours in graph, `1` for others.
       auto cb = [&](const auto& o) {
@@ -124,6 +126,9 @@ class seed_clusterer {
             o.is_canonical() ? uint64_t(o) : uint64_t(o.reverse_complement());
         if (seed_map.contains(o_mer)) {
           size_t idx = seed_map[o_mer];
+          // Code that should filter out some false positives...
+          // It typically filters out most true positives...
+          // Either it is broken or the idea does not work.
           /*uint16_t o_len = o.length();
           uint32_t o_bogo = seeds_[idx].sig_count - seeds_[idx].bg_count;
           if (o_len == len) {
@@ -159,6 +164,7 @@ class seed_clusterer {
       }
       val /= h_n_count;
       val += seeds_[i].sig_count - seeds_[i].bg_count;
+      val *= len;
       if (keep) {
 #pragma omp critical
         local_optima_.push_back({i, double(1) / val});

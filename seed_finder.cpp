@@ -74,9 +74,9 @@ int main(int argc, char const *argv[]) {
   std::string prefix = "";
   bool middle_gap_only = true;
   bool should_output_all_matches = false;
-  double p = 0.01;
+  double p = 0.0001;
   double p_ext = 0.01;
-  double log_fold = 0.5;
+  double log_fold = 2;
   size_t print_lim = 20;
   size_t max_aligns = print_lim;
 #ifdef _OPENMP
@@ -186,7 +186,7 @@ int main(int argc, char const *argv[]) {
   }
 
   if (max_k < 6 || max_k > 24) {
-    std::cerr << "invalide value for maximum k: " << max_k
+    std::cerr << "invalid value for maximum k: " << max_k
               << ", should be in [6, 24] range." << std::endl;
     exit(1);
   }

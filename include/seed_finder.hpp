@@ -45,6 +45,20 @@ class seed_finder {
   double memory_limit_;
   uint8_t k_lim_;
 
+  /**
+   * Check if extension a -> b is valid
+   *
+   * @param a      Mer to extend from
+   * @param b      Mer to extend to
+   * @param a_sig  Number of occurrences of a in the signal set
+   * @param a_bg   Number of occurrences of a in the backround set
+   * @param b_sig  Number of occurrences of b in the signal set
+   * @param b_bg   Number of occurrences of b in the background set
+   * @param a_r    p-value for a from the incomplete beta function
+   * @param b_r    p-value for b from the incomplete beta function
+   *
+   * @return True, if extension from a to b is valid
+   */
   template <bool debug = false>
   bool do_extend([[maybe_unused]] G a, [[maybe_unused]] G b, double a_sig,
                  double a_bg, double b_sig, double b_bg, double a_r,
@@ -91,6 +105,22 @@ class seed_finder {
     }
   }
 
+  /**
+   * Check if a should be discarded based on the neigbour b.
+   *
+   * @tparam calc_b_r  Indicates, wether b_r needs to be computed by this
+   * function, or has been precalculated.
+   *
+   * @param a          Mer to check
+   * @param b          Neighbour of a
+   * @param a_sig      Number of occurrences of a in signal set
+   * @param a_bg       Number of occurrences of a in backgroud set
+   * @param b_sig      Number of occurrences of a in signal set
+   * @param b_bg       Number of occurrences of b in backgroud set
+   * @param a_r        p-value for a from incomplete beta function
+   * @param b_r        p-value for b from incomplete beta function, if calc_b_r
+   * == false, else output parameter.
+   */
   template <bool calc_b_r>
   bool do_filter([[maybe_unused]] G a, [[maybe_unused]] G b, double a_sig,
                  double a_bg, double b_sig, double b_bg, double a_r,
@@ -110,6 +140,21 @@ class seed_finder {
     return b_r < a_r;
   }
 
+  /**
+   * Checks H1 neighbourhood with lengths k and k + 1 of gapmer implied by k, v,
+   * gap_s and gap_l, and marks invalid candidates as discarded in sig_bg_a an
+   * sig_bg_b.
+   *
+   * Surviving mers get added to candidate list.
+   *
+   * @param k        Gapmer length
+   * @param v        Gapmer value as uint64_t
+   * @param gap_s    Start location of gap
+   * @param gap_l    Length of gap
+   * @param offset   Offset value for table access
+   * @param sig_bg_a Length k gapmer count tables
+   * @param sig_bg_b Length k + 1 gapmer count tables
+   */
   void check_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
                    uint8_t gap_l, uint64_t offset, G_C& sig_bg_a,
                    G_C& sig_bg_b) {
@@ -152,6 +197,7 @@ class seed_finder {
       return;
     }
     if constexpr (filter_mers) {
+      // Length k mers.
       auto callback_a = [&](G o) {
         uint64_t o_offset = sig_bg_a.offset(o.gap_start(), o.gap_length());
         uint64_t o_v = o.value();
@@ -171,8 +217,9 @@ class seed_finder {
           sig_bg_a.discarded[o_offset + o_v] = true;
         }
       };
-
       g.template huddinge_neighbours<true, false, true>(callback_a);
+
+      // Length k + 1 mers.
       auto callback_b = [&](G o) {
         uint64_t o_offset = sig_bg_b.offset(o.gap_start(), o.gap_length());
         uint64_t o_v = o.value();
@@ -203,6 +250,22 @@ class seed_finder {
     }
   }
 
+  /**
+   * Checks H1 neighbourhood with lengths k gapmer implied by k, v,
+   * gap_s and gap_l, and marks invalid candidates as discarded in sig_bg_c.
+   *
+   * Surviving mers get added to candidate set m.
+   *
+   * @tparam M       Type of m.
+   *
+   * @param k        Gapmer length
+   * @param v        Gapmer value as uint64_t
+   * @param gap_s    Start location of gap
+   * @param gap_l    Length of gap
+   * @param offset   Offset value for table access
+   * @param sig_bg_c Length k gapmer count tables
+   * @param m        Map to add candidate seeds to.
+   */
   template <class M>
   void filter_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
                     uint8_t gap_l, uint64_t offset, G_C& sig_bg_c, M& m) {
@@ -276,18 +339,27 @@ class seed_finder {
     }
   }
 
+  /**
+   * Generate candidates for all k small enough to enable full k-mer counting
+   *
+   * @param sig_bg_c  Ouput parameter, for storing counts for final k-length
+   * mers
+   */
   uint8_t counted_seeds_and_candidates(G_C& sig_bg_c) {
     uint8_t k_lim = 5;
+    // figure out how big lookup tables will fit in memory.
     while (G_C::lookup_bytes(k_lim) < memory_limit_) {
       ++k_lim;
     }
     std::cerr << "Lookup tables up to " << int(k_lim - 1) << std::endl;
+    // Initialize by counting 5-mers
     G_C sig_bg_a(sig_path_, bg_path_, 5);
     if constexpr (enable_smootihing) {
       sig_bg_a.smooth();
     }
 
     for (uint8_t k = 6; k < k_lim; ++k) {
+      // Initialize the k + 1 to compute extensions
       G_C sig_bg_b(sig_path_, bg_path_, k);
       if constexpr (enable_smootihing) {
         sig_bg_b.smooth();
@@ -317,6 +389,7 @@ class seed_finder {
         }
       }
 
+      // k -> k + 1
       std::swap(sig_bg_a, sig_bg_b);
       std::cerr << int(k - 1) << " -> " << seeds_.size() << " candidates."
                 << std::endl;
@@ -325,6 +398,20 @@ class seed_finder {
     return k_lim;
   }
 
+  /**
+   * Check collected mers for extension validity
+   *
+   * Newly found valid extensions from a to elements found in p_counter are
+   * added to b
+   *
+   * @tparam M Type of the k-mer maps
+   * @tparam P Type of the partial k-mer count data structure
+   *
+   * @param a  Shorter mers to extend
+   * @param b  Valid extended mers
+   * @param p_counter  Partial k-mer counts that may contain valid mer
+   * extensions
+   */
   template <class M, class P>
   void extend_counted(M& a, M& b, P& p_counter) {
     for (auto p : a) {
@@ -364,6 +451,17 @@ class seed_finder {
     }
   }
 
+  /**
+   * Find k length extensions from a, and store valid extensions in b.
+   *
+   * @tparam M  K-mer map type
+   * @tparam P  Partial k-mer counting data structure type
+   *
+   * @param a  k - 1 length mers to extend
+   * @param b  storage for valid k-mers
+   * @param p_counter  Structure to use with partial counting
+   * @param k  length of k-mers to find.
+   */
   template <class M, class P>
   void extend(M& a, M& b, P& p_counter, uint16_t k) {
     const constexpr double fill_limit = 0.4;
@@ -429,6 +527,13 @@ class seed_finder {
     }
   }
 
+  /**
+   * Filter found mers of the same lengths. Keep only the best within H1
+   * distance among same length gapmers.
+   *
+   * @tparam M  gapmer map type
+   * @param m   gapmers to filter
+   */
   template <class M>
   void filter(M& m) {
     auto hash = [](const G& g) { return uint64_t(g); };
@@ -500,10 +605,15 @@ class seed_finder {
     std::cerr << "X = " << x_ << std::endl;
   }
 
+  /**
+   * Does the heavy lifting of counting increasingly long gapmers to find seed
+   * candidates
+   */
   void find_seeds() {
     auto hash = [](const G g) { return uint64_t(g); };
     std::unordered_map<G, Res, decltype(hash)> a;
     std::unordered_map<G, Res, decltype(hash)> b;
+    // full k-mer couting as long as memory is sufficient.
     uint8_t k;
     {
       G_C sig_bg_c;
@@ -526,6 +636,7 @@ class seed_finder {
         }
       }
     }
+    // Partial count with extensions when we can no longer count everything
     partial_count<G> p_counter;
     for (; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
