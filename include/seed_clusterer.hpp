@@ -148,9 +148,12 @@ class seed_clusterer {
             o.is_canonical() ? uint64_t(o) : uint64_t(o.reverse_complement());
         if (seed_map.contains(o_mer)) {
           size_t idx = seed_map[o_mer];
+          // Why does this filtering not work properly?
+          // If set to o_enrichment > enrichment (without the * 2)
+          // True positives get filtered out...
           double o_enrichment =
               double(seeds_[idx].sig_count) / seeds_[idx].bg_count;
-          if (o_enrichment > enrichment) {
+          if (o_enrichment > enrichment * 2) {
             keep = false;
           }
           val += seeds_[idx].sig_count / x_ - seeds_[idx].bg_count / (1 - x);
@@ -169,7 +172,7 @@ class seed_clusterer {
       val /= h_n_count;
       val *= h1_weight_;
       val += seeds_[i].sig_count / x_ - seeds_[i].bg_count / (1 - x_);
-      val /= len;
+      //val /= len;
       if (keep) {
 #pragma omp critical
         local_optima_.push_back({i, 1 / val});
