@@ -23,8 +23,9 @@ namespace sf {
 template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true,
           bool filter_mers = true>
 class seed_finder {
- private:
+ public:
   typedef gapmer<middle_gap_only, max_gap> G;
+ private:
   typedef gapmer_count<middle_gap_only, max_gap> G_C;
   struct Res {
     G g;
@@ -44,6 +45,7 @@ class seed_finder {
   double x_;
   double memory_limit_;
   uint8_t k_lim_;
+  uint8_t lookup_k_;
 
   /**
    * Check if extension a -> b is valid
@@ -345,20 +347,15 @@ class seed_finder {
    * @param sig_bg_c  Ouput parameter, for storing counts for final k-length
    * mers
    */
-  uint8_t counted_seeds_and_candidates(G_C& sig_bg_c) {
-    uint8_t k_lim = 5;
-    // figure out how big lookup tables will fit in memory.
-    while (G_C::lookup_bytes(k_lim) < memory_limit_) {
-      ++k_lim;
-    }
-    std::cerr << "Lookup tables up to " << int(k_lim - 1) << std::endl;
+  void counted_seeds_and_candidates(G_C& sig_bg_c) {
+    std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
     // Initialize by counting 5-mers
     G_C sig_bg_a(sig_path_, bg_path_, 5);
     if constexpr (enable_smootihing) {
       sig_bg_a.smooth();
     }
 
-    for (uint8_t k = 6; k < k_lim; ++k) {
+    for (uint8_t k = 6; k <= lookup_k_; ++k) {
       // Initialize the k + 1 to compute extensions
       G_C sig_bg_b(sig_path_, bg_path_, k);
       if constexpr (enable_smootihing) {
@@ -395,7 +392,6 @@ class seed_finder {
                 << std::endl;
     }
     std::swap(sig_bg_a, sig_bg_c);
-    return k_lim;
   }
 
   /**
@@ -567,7 +563,7 @@ class seed_finder {
  public:
   seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
-              double memory_limit = 4, double p_ext = 0.01)
+              double memory_limit = 4, double p_ext = 0.01, uint8_t lookup_k = 10)
       : sig_path_(sig_path),
         bg_path_(bg_path),
         seeds_(),
@@ -577,7 +573,8 @@ class seed_finder {
         p_ext_(p_ext),
         fold_lim_(std::pow(2, log_fold)),
         memory_limit_(memory_limit),
-        k_lim_(max_k) {
+        k_lim_(max_k),
+        lookup_k_(lookup_k) {
     gsl_set_error_handler_off();
     seq_io::Reader_x sr(sig_path_);
     sr.enable_reverse_complements();
@@ -614,31 +611,29 @@ class seed_finder {
     std::unordered_map<G, Res, decltype(hash)> a;
     std::unordered_map<G, Res, decltype(hash)> b;
     // full k-mer couting as long as memory is sufficient.
-    uint8_t k;
     {
       G_C sig_bg_c;
-      k = counted_seeds_and_candidates(sig_bg_c);
-      uint64_t v_lim = G_C::ONE << (k * 2 - 2);
+      counted_seeds_and_candidates(sig_bg_c);
+      uint64_t v_lim = G_C::ONE << (lookup_k_ * 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
-        filter_count(k - 1, v, 0, 0, 0, sig_bg_c, a);
+        filter_count(lookup_k_, v, 0, 0, 0, sig_bg_c, a);
       }
-      uint8_t local_k = k - 1;
-      uint8_t gap_s = middle_gap_only ? local_k / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? local_k - gap_s : local_k - 1;
+      uint8_t gap_s = middle_gap_only ? lookup_k_ / 2 : 1;
+      uint8_t gap_lim = middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1;
       for (; gap_s <= gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
           uint64_t offset = sig_bg_c.offset(gap_s, gap_l);
 #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
-            filter_count(local_k, v, gap_s, gap_l, offset, sig_bg_c, a);
+            filter_count(lookup_k_, v, gap_s, gap_l, offset, sig_bg_c, a);
           }
         }
       }
     }
     // Partial count with extensions when we can no longer count everything
     partial_count<G> p_counter;
-    for (; k <= k_lim_; ++k) {
+    for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
       extend(a, b, p_counter, k);
       std::cerr << "    " << a.size() << " " << int(k) - 1 << " candidates\n"
@@ -668,5 +663,7 @@ class seed_finder {
   }
 
   const std::vector<Res>& get_seeds() const { return seeds_; }
+
+  double x() const {return x_; }
 };
 }  // namespace sf

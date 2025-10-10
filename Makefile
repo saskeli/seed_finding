@@ -30,6 +30,7 @@ HEADERS =	include/bits.hpp \
 			include/seed_finder.hpp \
 			include/string_buffer.hpp \
 			include/util.hpp \
+			include/dot_writer.hpp \
 			include/version.hpp
 
 ARGS = deps/args/args.hxx
@@ -42,28 +43,18 @@ GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -isystem 
 
 TEST_HPP = test/gapmer_tests.hpp test/util_tests.hpp test/gapmer_count_tests.hpp
 
-.PHONY: clean all fast debug test cover
+.PHONY: clean all test cover
 
-.DEFAULT: all
+seed_finder: seed_finder.cpp $(HEADERS) $(ARGS) | $(SDSL_DIR)
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
 
 %/%.hpp:
-
-all: fast debug
-
-all_: huddinge seed_finder comp huddinge_deb seed_finder_deb
-
-fast: huddinge
-
-debug: huddinge_deb
 
 motivating: motivating.cpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) -isystem deps/seqio/include motivating.cpp -o motivating
 
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
-
-seed_finder: seed_finder.cpp $(HEADERS) $(ARGS) | $(SDSL_DIR)
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
 
 comp: comp.cpp include/util.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
