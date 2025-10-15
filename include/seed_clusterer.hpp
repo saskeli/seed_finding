@@ -148,9 +148,6 @@ class seed_clusterer {
             o.is_canonical() ? uint64_t(o) : uint64_t(o.reverse_complement());
         if (seed_map.contains(o_mer)) {
           size_t idx = seed_map[o_mer];
-          // Why does this filtering not work properly?
-          // If set to o_enrichment > enrichment (without the * 2)
-          // True positives get filtered out...
           double o_enrichment =
               seeds_[idx].sig_count / x_ -  seeds_[idx].bg_count / (1 - x_);
           if (o_enrichment > enrichment) {
