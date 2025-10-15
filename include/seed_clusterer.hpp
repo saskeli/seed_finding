@@ -135,7 +135,7 @@ class seed_clusterer {
       // Value used for attempt to filter false positives
       // uint32_t bogo_ratio = seeds_[i].sig_count - seeds_[i].bg_count;
       bool keep = true;
-      double enrichment = double(seeds_[i].sig_count) / seeds_[i].bg_count;
+      double enrichment = seeds_[i].sig_count / x_ -  seeds_[i].bg_count / (1 - x_);
       uint16_t len = seeds_[i].g.length();
       double val = 0;
       size_t h_n_count = 0;
@@ -152,11 +152,11 @@ class seed_clusterer {
           // If set to o_enrichment > enrichment (without the * 2)
           // True positives get filtered out...
           double o_enrichment =
-              double(seeds_[idx].sig_count) / seeds_[idx].bg_count;
-          if (o_enrichment > enrichment * 2) {
+              seeds_[idx].sig_count / x_ -  seeds_[idx].bg_count / (1 - x_);
+          if (o_enrichment > enrichment) {
             keep = false;
           }
-          val += seeds_[idx].sig_count / x_ - seeds_[idx].bg_count / (1 - x);
+          val += seeds_[idx].sig_count / x_ - seeds_[idx].bg_count / (1 - x_);
           ++h_n_count;
         } else {
           ++h_n_count;
