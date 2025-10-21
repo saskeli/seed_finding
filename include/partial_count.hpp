@@ -57,6 +57,7 @@ class partial_count {
   }
 
   void clear() {
+#pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wclass-memaccess"
     std::memset(data_, 0, MOD * sizeof(elem));
 #pragma GCC diagnostic pop
