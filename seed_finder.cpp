@@ -44,7 +44,7 @@ uint64_t available_gigs() {
 // as a character).
 const constexpr uint16_t max_gap = MAX_GAP;
 
-void filter_seeds(auto &seeds, auto callback) {
+void filter_seeds(auto& seeds, auto callback) {
   std::cerr << "Filtering.." << std::endl;
   uint64_t discarded_seeds = 0;
   auto it = seeds.begin();
@@ -69,12 +69,13 @@ void filter_seeds(auto &seeds, auto callback) {
   std::cerr << discarded_seeds << " seeds discarded in filtering" << std::endl;
 }
 
-int main(int argc, char const *argv[]) {
+int main(int argc, char const* argv[]) {
   std::string bg_path = "";
   std::string sig_path = "";
   std::string prefix = "";
   std::string dot_output = "";
   bool middle_gap_only = true;
+  bool prune = false;
   bool should_output_all_matches = false;
   double p = 0.0001;
   double p_ext = 0.01;
@@ -167,6 +168,10 @@ int main(int argc, char const *argv[]) {
     args::Flag disable_smoothing_(parser, "disable_smoothing",
                                   "Disable smoothing of counted mers.",
                                   {'s', "no-smoothing"});
+    args::Flag dont_prune_extensions_(
+        parser, "enable pruning",
+        "Enable pruning of extendable mers for partial counting.",
+        {"pruning"});
     sf::args::value_flag mem_limit_(
         parser, "memory_limit",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
@@ -180,16 +185,16 @@ int main(int argc, char const *argv[]) {
     // Parse and check.
     try {
       parser.ParseCLI(argc, argv);
-    } catch (args::Help const &) {
+    } catch (args::Help const&) {
       std::cerr << parser;
       std::exit(0);
-    } catch (args::Completion const &) {
+    } catch (args::Completion const&) {
       std::cerr << parser;
       std::exit(0);
-    } catch (sf::args::output_version const &) {
+    } catch (sf::args::output_version const&) {
       std::cout << "seed_finder " << sf::version << '\n';
       std::exit(0);
-    } catch (std::runtime_error const &err) {
+    } catch (std::runtime_error const& err) {
       std::cerr << err.what() << '\n';
       std::exit(1);
     }
@@ -198,6 +203,7 @@ int main(int argc, char const *argv[]) {
     if (gap_any_) middle_gap_only = true;
     if (should_output_all_matches_) should_output_all_matches = true;
     if (disable_smoothing_) enable_smoothing = false;
+    if (dont_prune_extensions_) prune = true;
 
     if (print_lim == 0) {
       print_lim = ~print_lim;
@@ -231,6 +237,7 @@ int main(int argc, char const *argv[]) {
     std::cerr << "lookup_k:                  " << lookup_k << '\n';
     std::cerr << "mem_limit:                 " << mem_limit << '\n';
     std::cerr << "enable_smoothing:          " << enable_smoothing << '\n';
+    std::cerr << "prune:                     " << prune << "\n";
   }
 #endif
 
@@ -272,7 +279,7 @@ int main(int argc, char const *argv[]) {
   if (enable_smoothing) {
     if (middle_gap_only) {
       sf::seed_finder<true, max_gap, true, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k);
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
@@ -293,7 +300,7 @@ int main(int argc, char const *argv[]) {
       }
     } else {
       sf::seed_finder<false, max_gap, true, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k);
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
@@ -316,7 +323,7 @@ int main(int argc, char const *argv[]) {
   } else {
     if (middle_gap_only) {
       sf::seed_finder<true, max_gap, false, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k);
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
@@ -337,7 +344,7 @@ int main(int argc, char const *argv[]) {
       }
     } else {
       sf::seed_finder<false, max_gap, false, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k);
+          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),

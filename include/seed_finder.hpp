@@ -25,6 +25,7 @@ template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true,
 class seed_finder {
  public:
   typedef gapmer<middle_gap_only, max_gap> G;
+
  private:
   typedef gapmer_count<middle_gap_only, max_gap> G_C;
   struct Res {
@@ -46,6 +47,7 @@ class seed_finder {
   double memory_limit_;
   uint8_t k_lim_;
   uint8_t lookup_k_;
+  bool prune_;
 
   /**
    * Check if extension a -> b is valid
@@ -450,35 +452,56 @@ class seed_finder {
   /**
    * Find k length extensions from a, and store valid extensions in b.
    *
-   * @tparam M  K-mer map type
-   * @tparam P  Partial k-mer counting data structure type
+   * @tparam M  K-mer map type.
+   * @tparam P  Partial k-mer counting data structure type.
    *
-   * @param a  k - 1 length mers to extend
-   * @param b  storage for valid k-mers
-   * @param p_counter  Structure to use with partial counting
+   * @param a  k - 1 length mers to extend.
+   * @param b  storage for valid k-mers.
+   * @param p_counter  Structure to use with partial counting.
    * @param k  length of k-mers to find.
+   * @param prune  Should only one pass of extensions be done.
    */
   template <class M, class P>
-  void extend(M& a, M& b, P& p_counter, uint16_t k) {
+  void extend(M& a, M& b, P& p_counter, uint16_t k, bool prune) {
     const constexpr double fill_limit = 0.4;
     std::cerr << "    Extend " << a.size() << " mers." << std::endl;
     auto hash = [](const G g) { return uint64_t(g); };
     std::unordered_set<G, decltype(hash)> del_set;
-    for (auto p : a) {
-      auto callback = [&](G o) {
+    auto callback = [&](G o) {
+      if (not b.contains(o)) {
         p_counter.init(o);
-        auto ccb = [&](G h_n) { p_counter.init(h_n); };
-        o.hamming_neighbours(ccb);
-      };
-      p.first.template huddinge_neighbours<true, true, false>(callback);
-      if (p_counter.fill_rate() >= fill_limit) {
-        std::cerr << "\tLoad factor >= " << fill_limit << " ("
-                  << p_counter.fill_rate() << ") counting.." << std::endl;
-        p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_,
-                                                                bg_path_, k);
-        std::cerr << "\tFiltering extension..." << std::endl;
-        extend_counted(a, b, p_counter);
-        p_counter.clear();
+        if constexpr (enable_smootihing) {
+          auto ccb = [&](G h_n) { p_counter.init(h_n); };
+          o.hamming_neighbours(ccb);
+        }
+      }
+    };
+    if (prune) {
+      std::vector<Res> prio;
+      for (auto p : a) {
+        prio.push_back(p.second);
+      }
+      std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
+        return (lhs.sig_count / lhs.bg_count) > (rhs.sig_count / rhs.bg_count);
+      });
+      for (auto km : prio) {
+        km.g.template huddinge_neighbours<true, true, false>(callback);
+        if (p_counter.fill_rate() >= fill_limit) {
+          break;
+        }
+      }
+    } else {
+      for (auto p : a) {
+        p.first.template huddinge_neighbours<true, true, false>(callback);
+        if (p_counter.fill_rate() >= fill_limit) {
+          std::cerr << "\tLoad factor >= " << fill_limit << " ("
+                    << p_counter.fill_rate() << ") counting.." << std::endl;
+          p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_,
+                                                                  bg_path_, k);
+          std::cerr << "\tFiltering extension..." << std::endl;
+          extend_counted(a, b, p_counter);
+          p_counter.clear();
+        }
       }
     }
     std::cerr << "\tFinal load factor " << p_counter.fill_rate()
@@ -497,7 +520,7 @@ class seed_finder {
                   << p.second.p << std::endl;
 #endif
         bool keep = true;
-        auto callback = [&](G o) {
+        auto callback_extend = [&](G o) {
           if (not o.is_canonical()) {
             o = o.reverse_complement();
           }
@@ -510,7 +533,8 @@ class seed_finder {
             }
           }
         };
-        p.first.template huddinge_neighbours<true, true, false>(callback);
+        p.first.template huddinge_neighbours<true, true, false>(
+            callback_extend);
         if constexpr (filter_mers) {
           if (not keep) {
             del_set.insert(p.first);
@@ -563,7 +587,8 @@ class seed_finder {
  public:
   seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
-              double memory_limit = 4, double p_ext = 0.01, uint8_t lookup_k = 10)
+              double memory_limit = 4, double p_ext = 0.01,
+              uint8_t lookup_k = 10, bool prune = false)
       : sig_path_(sig_path),
         bg_path_(bg_path),
         seeds_(),
@@ -574,7 +599,8 @@ class seed_finder {
         fold_lim_(std::pow(2, log_fold)),
         memory_limit_(memory_limit),
         k_lim_(max_k),
-        lookup_k_(lookup_k) {
+        lookup_k_(lookup_k),
+        prune_(prune) {
     gsl_set_error_handler_off();
     seq_io::Reader_x sr(sig_path_);
     sr.enable_reverse_complements();
@@ -635,7 +661,7 @@ class seed_finder {
     partial_count<G> p_counter;
     for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
-      extend(a, b, p_counter, k);
+      extend(a, b, p_counter, k, prune_);
       std::cerr << "    " << a.size() << " " << int(k) - 1 << " candidates\n"
                 << "    " << b.size() << " " << int(k) << " potentials"
                 << std::endl;
@@ -664,6 +690,6 @@ class seed_finder {
 
   const std::vector<Res>& get_seeds() const { return seeds_; }
 
-  double x() const {return x_; }
+  double x() const { return x_; }
 };
 }  // namespace sf

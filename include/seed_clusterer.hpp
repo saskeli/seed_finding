@@ -135,7 +135,7 @@ class seed_clusterer {
       // Value used for attempt to filter false positives
       // uint32_t bogo_ratio = seeds_[i].sig_count - seeds_[i].bg_count;
       bool keep = true;
-      double enrichment = seeds_[i].sig_count / x_ -  seeds_[i].bg_count / (1 - x_);
+      double enrichment = seeds_[i].sig_count / x_ - seeds_[i].bg_count / (1 - x_);
       uint16_t len = seeds_[i].g.length();
       double val = 0;
       size_t h_n_count = 0;
@@ -153,7 +153,7 @@ class seed_clusterer {
           if (o_enrichment > enrichment) {
             keep = false;
           }
-          val += seeds_[idx].sig_count / x_ - seeds_[idx].bg_count / (1 - x_);
+          val += o_enrichment * ((seeds_[idx].sig_count * (1 - x_)) / (x_ * seeds_[idx].bg_count));
           ++h_n_count;
         } else {
           ++h_n_count;
@@ -168,8 +168,8 @@ class seed_clusterer {
       }
       val /= h_n_count;
       val *= h1_weight_;
-      val += seeds_[i].sig_count / x_ - seeds_[i].bg_count / (1 - x_);
-      //val /= len;
+      double f_m = ((seeds_[i].sig_count * (1 - x_)) / (x_ * seeds_[i].bg_count)) * len;
+      val += enrichment * f_m;
       if (keep) {
 #pragma omp critical
         local_optima_.push_back({i, 1 / val});

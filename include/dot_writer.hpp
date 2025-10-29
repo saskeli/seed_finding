@@ -23,10 +23,13 @@ class Dot_Writer {
     size_t edges = 1;
     size_t i = 0;
     auto cb = [&](G o) {
-      size_t o_i = node_map[uint64_t(o)];
-      if (i < o_i) {
-        dot_file << i << " -- " << o_i << "\n";
-        ++edges;
+      G actual = o.is_canonical() ? o : o.reverse_complement();
+      if (node_map.contains(uint64_t(actual))) {
+        size_t o_i = node_map[uint64_t(actual)];
+        if (i < o_i) {
+          dot_file << i << " -- " << o_i << "\n";
+          ++edges;
+        }
       }
     };
     for (; i < node_vec.size(); ++i) {
