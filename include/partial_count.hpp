@@ -4,12 +4,11 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <SeqIO/SeqIO.hh>
+#include <libbio/algorithm.hh>
 #include <string>
-#include <string_view>
 #include <utility>
 
-#include "string_buffer.hpp"
+#include "libbio_reader_adapter.hpp"
 
 namespace sf {
 
@@ -24,6 +23,7 @@ class partial_count {
     uint64_t bg_count;
   };
 
+  libbio_reader_adapter reader_adapter;
   elem* data_;
   uint64_t size_;
 
@@ -83,85 +83,66 @@ class partial_count {
   template <bool middle_gap_only, uint16_t max_gap>
   void count_mers(const std::string& sig_path, const std::string& bg_path,
                   uint16_t k) {
-    seq_io::Reader_x sr(sig_path);
-    sr.enable_reverse_complements();
+
+    auto const do_count([&](std::string const &fasta_path, auto &&inc){
+      reader_adapter.read_from_path(fasta_path);
+
 #pragma omp parallel
-    while (true) {
-      uint64_t len{};
-      string_buffer<uint64_t> buffer;
-#pragma omp critical
+      while (true)
       {
-        len = sr.get_next_read_to_buffer();
-        buffer = std::string_view{sr.read_buf, len};
-      }
-      if (len == 0) {
-        break;
-      }
-      if (len < k) {
-        continue;
-      }
-      std::string_view const ss{buffer};
-      gapmer_t g(buffer.data(), k);
-      inc_sig(g);
-      for (uint32_t next = k; next < len; ++next) {
-        g = g.next(ss[next]);
-        inc_sig(g);
-      }
-      uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? (k + 3) / 2 : k;
-      for (; gap_s < gap_lim; ++gap_s) {
+        bool should_continue{};
+#pragma omp critical
+        should_continue = reader_adapter.retrieve_next_read();
+
+        if (!should_continue)
+          break;
+
+        if (reader_adapter.read_length() < k)
+          continue;
+
+        auto const &read_buffer{reader_adapter.read_buffer()};
+        gapmer_t g(read_buffer.front() >> (48U + 2U * k), k); // FIXME: replace 48 with 2 * gapmer_type::max_gap.
+        inc(g);
+        reader_adapter.iterate_characters(k, [&](std::uint8_t const cc){
+          g = g.next_(cc);
+          inc(g);
+        });
+
+        uint8_t gap_s = middle_gap_only ? k / 2 : 1;
+        auto gap_lim = libbio::min_ct(reader_adapter.read_length(), middle_gap_only ? (k + 3) / 2 : k);
+
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          if (k + gap_l >= len) {
-            break;
-          }
-          g = {buffer.data(), uint8_t(k), gap_s, gap_l};
-          inc_sig(g);
-          for (uint32_t mid = gap_s, next = k + gap_l; next < len;
-               ++next, ++mid) {
-            g = g.next(ss[mid], ss[next]);
-            inc_sig(g);
-          }
+          auto const tail_start{gap_s + gap_l};
+          g = [&]{
+            auto const tail_length{k - gap_s};
+            std::uint64_t const head_mask{~(~std::uint64_t{} << gap_s) << tail_length};
+            std::uint64_t const head{(read_buffer.front() >> (48U + 2U * k)) & head_mask};
+
+            auto const tail_start_word_idx{tail_start / 32U};
+            auto const tail_start_chr_idx{tail_start % 32U};
+            auto const tail_end_word_idx{(tail_start + tail_length) / 32U};
+            std::uint64_t tail{read_buffer[tail_start_word_idx] >> (2U * tail_start_chr_idx)};
+
+            if (tail_start_word_idx != tail_end_word_idx)
+            {
+              tail <<= 2U * (tail_length - (32U - tail_start_chr_idx));
+              tail |= read_buffer[tail_end_word_idx] >> 2U * (64U - tail_length - tail_start_chr_idx);
+            }
+
+            return gapmer_t(head | tail, k, gap_s, gap_l);
+          }();
+
+          inc(g);
+          reader_adapter.iterate_character_pairs(gap_s, gap_lim, tail_start, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
+            g = g.next_(lhsc, rhsc);
+            inc(g);
+          });
         }
       }
-    }
-    seq_io::Reader_x br(bg_path);
-    br.enable_reverse_complements();
-#pragma omp parallel
-    while (true) {
-      uint64_t len{};
-      string_buffer<uint64_t> buffer;
-#pragma omp critical
-      {
-        len = br.get_next_read_to_buffer();
-        buffer = std::string_view{br.read_buf, len};
-      }
-      if (len == 0) {
-        break;
-      }
-      std::string_view const ss{buffer};
-      gapmer_t g(buffer.data(), k);
-      inc_bg(g);
-      for (uint32_t next = k; next < len; ++next) {
-        g = g.next(ss[next]);
-        inc_bg(g);
-      }
-      uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? (k + 3) / 2 : k;
-      for (; gap_s < gap_lim; ++gap_s) {
-        for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          if (k + gap_l >= len) {
-            break;
-          }
-          g = {buffer.data(), uint8_t(k), gap_s, gap_l};
-          inc_bg(g);
-          for (uint32_t mid = gap_s, next = k + gap_l; next < len;
-               ++next, ++mid) {
-            g = g.next(ss[mid], ss[next]);
-            inc_bg(g);
-          }
-        }
-      }
-    }
+    });
+
+    do_count(sig_path, [this](auto const gg){ inc_sig(gg); });
+    do_count(bg_path, [this](auto const gg){ inc_bg(gg); });
   }
 
   std::pair<uint64_t, uint64_t> count(gapmer_t g) const {

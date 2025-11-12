@@ -6,9 +6,10 @@ endif
 
 GCOV ?= gcov
 
-CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)
+CFLAGS = -std=c++23 -Wall -Werror -Wextra -Wshadow -Wno-gnu-conditional-omitted-operand -Wno-unused-parameter -march=native -DMAX_GAP=$(MAX_GAP)
 
-PERF_FLAGS = -Ofast -DNDEBUG -fopenmp
+PERF_FLAGS = -Ofast -g -DNDEBUG -fopenmp
+#PERF_FLAGS = -O0 -g -DDEBUG
 TEST_PERF_FLAGS = -O0 -g -DDEBUG
 
 DEBUG_FLAGS = -g -DDEBUG
@@ -17,9 +18,9 @@ ifdef VERBOSE
 DEBUG_FLAGS += -DVERBOSE
 endif
 
-INCLUDE += -isystem deps/sdsl-lite/include -isystem deps/seqio/include -isystem deps/args
+INCLUDE += -Iinclude -isystem deps/sdsl-lite/include -isystem deps/seqio/include -isystem deps/args -isystem deps/libbio/include -isystem deps/libbio/lib/range-v3/include
 
-LIBS += -lz -lgsl -lgslcblas -lm
+LIBS += -lboost_iostreams -lz -lgsl -lgslcblas -lm
 
 HEADERS =	include/bits.hpp \
 			include/fm_index.hpp \
@@ -45,9 +46,6 @@ TEST_HPP = test/gapmer_tests.hpp test/util_tests.hpp test/gapmer_count_tests.hpp
 
 .PHONY: clean all test cover
 
-seed_finder: seed_finder.cpp $(HEADERS) $(ARGS) | $(SDSL_DIR)
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
-
 %/%.hpp:
 
 motivating: motivating.cpp
@@ -56,13 +54,16 @@ motivating: motivating.cpp
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
+seed_finder: seed_finder.o libbio_reader_adapter.o $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) deps/libbio
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.o libbio_reader_adapter.o -o seed_finder deps/libbio/src/libbio.a $(LIBS)
+
 comp: comp.cpp include/util.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
 
 huddinge_deb: huddinge.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
-seed_finder_deb: seed_finder.cpp $(HEADERS) | $(SDSL_DIR) $(ARGS_DIR)
+seed_finder_deb: seed_finder.cpp $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) deps/libbio
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
 
 clean:
@@ -82,6 +83,18 @@ $(RAPIDCHECK_DIR):
 
 $(ARGS):
 	git submodule update --init
+
+deps/libbio:
+	git submodule update --init --recursive
+
+deps/libbio/src/libbio.a: deps/libbio/local.mk
+	$(MAKE) -C deps/libbio src/libbio.a
+
+deps/libbio/local.mk: local.mk
+	cp local.mk deps/libbio/
+
+local.mk:
+	bash -c "[ -e local.mk ] || echo -n "" > local.mk"
 
 $(GTEST_DIR)/build/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
 	(mkdir -p $(GTEST_DIR)/build && cd $(GTEST_DIR)/build && cmake -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF .. && $(MAKE))
@@ -107,6 +120,9 @@ cover: test/cover
 	lcov -c --ignore-errors inconsistent,unused --directory test --output-file coverage.info --gcov-tool $(GCOV)
 	lcov --remove coverage.info "/usr*" --output-file coverage.info
 	genhtml coverage.info -o target
+
+%.o: %.cpp
+	$(CXX) -c -o $@ $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) $<
 
 # Output git tag or version hash to config.h.
 include/version.hpp: SHELL := /bin/bash

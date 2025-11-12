@@ -2,19 +2,19 @@
 
 #include <stdlib.h>
 
-#include <SeqIO/SeqIO.hh>
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <libbio/algorithm.hh>
 #include <sdsl/bit_vectors.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
 
 #include "gapmer.hpp"
-#include "string_buffer.hpp"
+#include "libbio_reader_adapter.hpp"
 
 namespace sf {
 
@@ -51,62 +51,80 @@ class gapmer_count {
     return ret;
   }
 
+  libbio_reader_adapter reader_adapter;
   double* sig_counts;
   double* bg_counts;
   sdsl::bit_vector discarded;
   uint8_t k_;
 
  private:
-  static void count_mers(const std::string& fasta_path, double* counts,
-                         uint8_t k) {
-    seq_io::Reader_x r(fasta_path);
-    r.enable_reverse_complements();
+  void count_mers(const std::string& fasta_path, double* counts, uint8_t k) {
+    reader_adapter.read_from_path(fasta_path);
 #pragma omp parallel
     while (true) {
-      uint64_t len{};
-      string_buffer<uint64_t> buffer;
+      bool should_continue{};
 #pragma omp critical
-      {
-        len = r.get_next_read_to_buffer();
-        buffer = std::string_view{r.read_buf, len};
-      }
-      if (len == 0) {
+      should_continue = reader_adapter.retrieve_next_read();
+
+      if (!should_continue)
         break;
-      }
-      if (len < k) {
+
+      if (reader_adapter.read_length() < k)
         continue;
-      }
-      std::string_view const ss{buffer};
-      gapmer<middle_gap_only, max_gap> g(buffer.data(), k);
+
+      auto const &read_buffer{reader_adapter.read_buffer()};
+      gapmer<middle_gap_only, max_gap> g(read_buffer.front() >> (64U - 2U * k), k); // FIXME: replace 48 with 2 * gapmer_type::max_gap.
       uint64_t cv = g.value();
 #pragma omp atomic
       counts[cv] = counts[cv] + 1;
-      for (uint32_t next = k; next < len; ++next) {
-        g = g.next(ss[next]);
+      reader_adapter.iterate_characters(k, [&](std::uint8_t const cc){
+        g = g.next_(cc);
         cv = g.value();
 #pragma omp atomic
         counts[cv] = counts[cv] + 1;
-      }
+      });
+
       uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? (k + 3) / 2 : k;
-      for (; gap_s < gap_lim; ++gap_s) {
-        for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          if (k + gap_l >= len) {
-            break;
-          }
-          uint64_t off = offset(k, gap_s, gap_l);
-          g = {buffer.data(), k, gap_s, gap_l};
+      auto gap_lim = libbio::min_ct(reader_adapter.read_length(), middle_gap_only ? (k + 3) / 2 : k);
+
+      for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
+        uint64_t off = offset(k, gap_s, gap_l);
+
+        auto const tail_start{gap_s + gap_l};
+        g = [&]{
+          auto const tail_length{k - gap_s};
+          auto const tail_start_word_idx{tail_start / 32U};
+          auto const tail_end_word_idx{(tail_start + tail_length) / 32U};
+          auto const tail_start_chr_idx{tail_start % 32U};
+          auto const tail_start_length{32U - tail_start_chr_idx};
+          std::uint64_t const head_mask{~(~std::uint64_t{} << 2U * gap_s) << 2U * tail_length};
+
+          std::uint64_t head{read_buffer.front()};
+          std::uint64_t tail{read_buffer[tail_start_word_idx]};
+          std::uint64_t tail_{read_buffer[tail_end_word_idx]};
+
+          head >>= 64U - 2U * k;
+          head &= head_mask;
+
+          // Concatenate in the right end of the word.
+          tail <<= 2U * tail_start_chr_idx;
+          tail_ >>= 2U * tail_start_length;
+          tail |= tail_;
+          tail >>= 64U - 2U * tail_length;
+
+          return gapmer<middle_gap_only, max_gap>{head | tail, k, gap_s, gap_l};
+        }();
+
+        cv = off + g.value();
+#pragma omp atomic
+        counts[cv] = counts[cv] + 1;
+
+        reader_adapter.iterate_character_pairs(gap_s, gap_lim, tail_start, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
+          g = g.next_(lhsc, rhsc);
           cv = off + g.value();
 #pragma omp atomic
           counts[cv] = counts[cv] + 1;
-          for (uint32_t mid = gap_s, next = k + gap_l; next < len;
-               ++next, ++mid) {
-            g = g.next(ss[mid], ss[next]);
-            cv = off + g.value();
-#pragma omp atomic
-            counts[cv] = counts[cv] + 1;
-          }
-        }
+        });
       }
     }
   }
