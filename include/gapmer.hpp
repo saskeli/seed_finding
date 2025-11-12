@@ -8,6 +8,7 @@
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <span>
 #include <string>
 
@@ -17,7 +18,6 @@
 #ifdef DEBUG
 #include <bitset>
 #include <cassert>
-#include <iostream>
 #endif
 
 namespace sf {
@@ -153,10 +153,12 @@ class gapmer {
       char c) const;  //< For a non-gapped gapmer, returns a copy of it with c
                       // appended and the leftmost character removed. If this is
                       // empty, returns an empty gapmer.
+  gapmer next_(std::uint8_t c) const;
   gapmer next(char c1, char c2)
       const;  //< For a gapped gapmer, returns a copy of it with c1 and c2
               // appended respectively to the prefix and to the suffix, with the
               // leftmost characters removed.
+  gapmer next_(std::uint8_t c1, std::uint8_t c2) const;
   void hamming_neighbours(auto& callback) const;
 
   template <bool no_smaller = false, bool no_same = false,
@@ -1354,17 +1356,28 @@ uint8_t gapmer<middle_gap_only, t_max_gap>::get_c(uint64_t i) const {
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::next(char c) const -> gapmer {
+  return next_(nuc_to_v[c]);
+}
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c) const -> gapmer {
 #ifdef DEBUG
   assert(gap_length() == 0);
 #endif
   uint64_t v = data_ << 2;
-  v |= nuc_to_v[c];
+  v |= c;
   v &= (ONE << (length() * 2)) - 1;
   return gapmer{(data_ & ~value_mask) | v};
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::next(char c1, char c2) const
+    -> gapmer {
+  return next_(nuc_to_v[c1], nuc_to_v[c2]);
+}
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c1, std::uint8_t c2) const
     -> gapmer {
 #ifdef DEBUG
   assert(gap_length() > 0);
