@@ -32,9 +32,10 @@
 *.a
 *.lib
 
-# Jupyter
+# Jupyter and Python
 .ipynb_checkpoints/
 *.ipynb
+__pycache__
 
 # Gcov related
 *.gcda
@@ -46,15 +47,22 @@ target/
 *.csv
 *.fasta
 *.txt
+*.dSYM
 
 # Executables
 *.exe
 *.out
 *.app
+comp
 huddinge
 huddinge_deb
-comp
+motivating
 seed_finder
 seed_finder_deb
 test/test
 test/cover  
+
+# User-specific
+.clangd
+.DS_Store
+.zed
