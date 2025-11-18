@@ -6,7 +6,7 @@ endif
 
 GCOV ?= gcov
 
-CFLAGS = -std=c++23 -Wall -Werror -Wextra -Wshadow -Wno-gnu-conditional-omitted-operand -Wno-unused-parameter -march=native -DMAX_GAP=$(MAX_GAP)
+CFLAGS = -std=c++23 -Wall -Werror -Wextra -Wshadow -Wno-gnu-conditional-omitted-operand -Wno-unused-parameter -Wno-unused-function -march=native -DMAX_GAP=$(MAX_GAP)
 
 PERF_FLAGS = -Ofast -g -DNDEBUG -fopenmp
 #PERF_FLAGS = -O0 -g -DDEBUG
