@@ -87,52 +87,58 @@ class gapmer_count {
       uint8_t gap_s = middle_gap_only ? k / 2 : 1;
       auto gap_lim = libbio::min_ct(reader_adapter.read_length(), middle_gap_only ? (k + 3) / 2 : k);
 
-      for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-        uint64_t off = offset(k, gap_s, gap_l);
+      for (; gap_s < gap_lim; ++gap_s) {
+        for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
+          uint64_t off = offset(k, gap_s, gap_l);
 
-        auto const tail_start{gap_s + gap_l};
-        g = [&]{
-          auto const tail_length{k - gap_s};
-          auto const tail_start_word_idx{tail_start / 32U};
-          auto const tail_end_word_idx{(tail_start + tail_length) / 32U};
-          auto const tail_start_chr_idx{tail_start % 32U};
-          auto const tail_start_length{32U - tail_start_chr_idx};
-          std::uint64_t const head_mask{~(~std::uint64_t{} << 2U * gap_s) << 2U * tail_length};
+          g = [&]{
+            auto const tail_start{gap_s + gap_l};
+            auto const tail_length{k - gap_s};
+            auto const tail_start_word_idx{tail_start / 32U};
+            auto const tail_end_word_idx{(tail_start + tail_length) / 32U};
+            auto const tail_start_chr_idx{tail_start % 32U};
+            auto const tail_start_length{32U - tail_start_chr_idx};
+            std::uint64_t const head_mask{~(~std::uint64_t{} << 2U * gap_s) << 2U * tail_length};
 
-          std::uint64_t head{read_buffer.front()};
-          std::uint64_t tail{read_buffer[tail_start_word_idx]};
-          std::uint64_t tail_{read_buffer[tail_end_word_idx]};
+            std::uint64_t head{read_buffer.front()};
+            std::uint64_t tail{read_buffer[tail_start_word_idx]};
+            std::uint64_t tail_{read_buffer[tail_end_word_idx]};
 
-          head >>= 64U - 2U * k;
-          head &= head_mask;
+            head >>= 64U - 2U * k;
+            head &= head_mask;
 
-          // Concatenate in the right end of the word.
-          tail <<= 2U * tail_start_chr_idx;
-          tail_ >>= 2U * tail_start_length;
-          tail |= tail_;
-          tail >>= 64U - 2U * tail_length;
+            // Concatenate in the right end of the word.
+            tail <<= 2U * tail_start_chr_idx;
+            tail_ >>= 2U * tail_start_length;
+            tail |= tail_;
+            tail >>= 64U - 2U * tail_length;
 
-          return gapmer<middle_gap_only, max_gap>{head | tail, k, gap_s, gap_l};
-        }();
+            return gapmer<middle_gap_only, max_gap>{head | tail, k, gap_s, gap_l};
+          }();
 
-        cv = off + g.value();
-#pragma omp atomic
-        counts[cv] = counts[cv] + 1;
-
-        reader_adapter.iterate_character_pairs(gap_s, gap_lim, tail_start, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
-          g = g.next_(lhsc, rhsc);
           cv = off + g.value();
 #pragma omp atomic
           counts[cv] = counts[cv] + 1;
-        });
+
+          reader_adapter.iterate_character_pairs(gap_s, k + gap_l, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
+            g = g.next_(lhsc, rhsc);
+            cv = off + g.value();
+#pragma omp atomic
+            counts[cv] = counts[cv] + 1;
+          });
+        }
       }
-    }
+    } // while (true)
+
+    reader_adapter.finish();
   }
 
  public:
   gapmer_count(const std::string& sig_fasta_path,
-               const std::string& bg_fasta_path, uint8_t k)
-      : sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
+               const std::string& bg_fasta_path, uint8_t k,
+               libbio_reader_adapter_delegate &delegate)
+      : reader_adapter(delegate),
+        sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         bg_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         discarded(lookup_elems(k)),
         k_(k) {

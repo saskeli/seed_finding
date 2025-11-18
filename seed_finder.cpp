@@ -69,7 +69,18 @@ void filter_seeds(auto& seeds, auto callback) {
   std::cerr << discarded_seeds << " seeds discarded in filtering" << std::endl;
 }
 
+
+void print_invocation(int argc, char const *argv[])
+{
+	std::cerr << "Invocation:";
+	for (int i{}; i < argc; ++i)
+		std::cerr << ' ' << argv[i];
+	std::cerr << '\n';
+}
+
+
 int main(int argc, char const* argv[]) {
+  print_invocation(argc, argv);
   std::string bg_path = "";
   std::string sig_path = "";
   std::string prefix = "";
@@ -283,7 +294,7 @@ int main(int argc, char const* argv[]) {
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::G>(
+                                  decltype(finder)::gapmer_type>(
             dot_output, finder.get_seeds(), max_k);
       }
       sf::seed_clusterer<true, max_gap, decltype(finder.get_seeds())> sc(
@@ -304,7 +315,7 @@ int main(int argc, char const* argv[]) {
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::G>(
+                                  decltype(finder)::gapmer_type>(
             dot_output, finder.get_seeds(), max_k);
       }
       sf::seed_clusterer<false, max_gap, decltype(finder.get_seeds())> sc(
@@ -327,7 +338,7 @@ int main(int argc, char const* argv[]) {
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::G>(
+                                  decltype(finder)::gapmer_type>(
             dot_output, finder.get_seeds(), max_k);
       }
       sf::seed_clusterer<true, max_gap, decltype(finder.get_seeds())> sc(
@@ -348,7 +359,7 @@ int main(int argc, char const* argv[]) {
       finder.find_seeds();
       if (dot_output.size() > 0) {
         sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::G>(
+                                  decltype(finder)::gapmer_type>(
             dot_output, finder.get_seeds(), max_k);
       }
       sf::seed_clusterer<false, max_gap, decltype(finder.get_seeds())> sc(
