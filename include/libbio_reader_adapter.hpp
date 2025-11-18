@@ -1,6 +1,5 @@
 #pragma once
 
-#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <libbio/assert.hh>
@@ -9,71 +8,32 @@
 #include <libbio/file_handle.hh>
 #include <libbio/file_handling.hh>
 #include <libbio/gzip_read_handle.hh>
+#include <libbio/sequence_reader.hh>
 #include <span>
 #include <string>
 #include <string_view>
-#include <vector>
-#include "libbio/sequence_reader.hh"
-
-namespace sf::detail {
-
-	void reverse_complement_packed_scalar_64b(std::span <std::uint64_t> packed_input, std::uint64_t const length);
-}
+#include "packed_character_iteration.hpp"
 
 
 namespace sf {
 
+	class libbio_reader_adapter;
+
+
+	struct libbio_reader_adapter_delegate
+	{
+		virtual ~libbio_reader_adapter_delegate() {}
+		virtual bool should_report_errors_for_path(libbio_reader_adapter &adapter, std::string_view path) = 0;
+		virtual void found_first_read_with_unexpected_character(libbio_reader_adapter &adapter, std::string_view path, std::uint64_t lineno) = 0;
+		virtual void found_total_reads_with_unexpected_characters(libbio_reader_adapter &adapter, std::string_view path, std::uint64_t count) = 0;
+	};
+
+
 	class libbio_reader_adapter final : public libbio::fasta_reader_delegate, libbio::fastq_reader_delegate
 	{
 	public:
-		typedef std::vector <std::uint64_t> read_buffer_type;
-
-	private:
-		struct iteration_context
-		{
-			std::uint64_t const start_idx{};
-			std::uint64_t const shift_amt{};
-			std::uint64_t const mask{};
-
-			std::uint64_t const word_count{};
-			std::uint64_t const last_word_idx{};
-
-			std::uint64_t current_word{};
-			std::uint64_t next_word{};
-
-		public:
-			iteration_context(
-				read_buffer_type const &read_buffer,
-				std::uint64_t read_length,
-				std::uint64_t start_pos
-			):
-				start_idx{start_pos / 32U},
-				shift_amt{2U * (start_pos % 32U)},
-				mask{~(UINT64_C(0xFFFF'FFFF'FFFF'FFFF) << shift_amt)},
-				word_count{(read_length - start_pos + 31U) / 32U},
-				last_word_idx{(read_length + 31U) / 32U - start_pos / 32U},
-				next_word{read_buffer[start_idx]}
-			{
-			}
-
-			iteration_context(
-				read_buffer_type const &read_buffer,
-				std::uint64_t read_length,
-				std::uint64_t start_pos,
-				std::uint64_t limit
-			):
-				start_idx{start_pos / 32U},
-				shift_amt{2U * (start_pos % 32U)},
-				mask{~(UINT64_C(0xFFFF'FFFF'FFFF'FFFF) << shift_amt)},
-				word_count{(limit - start_pos + 31U) / 32U},
-				last_word_idx{(read_length + 31U) / 32U - (limit - 1) / 32U},
-				next_word{read_buffer[start_idx]}
-			{
-			}
-
-			inline void update(std::uint64_t ww);
-			void rotate_current_word() { current_word = std::rotl(current_word, 2); }
-		};
+		typedef packed_word_vector read_buffer_type;
+		typedef libbio_reader_adapter_delegate delegate_type;
 
 	private:
 		libbio::fasta_reader		m_fasta_reader;
@@ -81,18 +41,26 @@ namespace sf {
 
 		libbio::file_handle			m_handle;
 		libbio::gzip_reading_handle	m_gzip_handle;
+		std::string					m_current_input_path;
 
 		read_buffer_type			m_read_buffer;
 		std::uint64_t				m_read_length{};
 
 		libbio::sequence_reader		*m_reader{};
 		libbio::reading_handle		*m_reading_handle{};
+		delegate_type				*m_delegate{};
 
+		std::size_t					m_parsing_block_size{};
+		std::uint64_t				m_skipped_reads{};
+		bool						m_should_report_errors{};
 		bool						m_read_is_valid{};
 		bool						m_next_read_is_reverse_complement{};
 
 	public:
-		libbio_reader_adapter()
+		constexpr libbio_reader_adapter() = default;
+
+		explicit libbio_reader_adapter(libbio_reader_adapter_delegate &delegate):
+			m_delegate(&delegate)
 		{
 			m_fasta_reader.set_delegate(*this);
 			m_fastq_reader.set_delegate(*this);
@@ -100,104 +68,34 @@ namespace sf {
 			m_gzip_handle.prepare();
 		}
 
-		// We pass this to m_fasta_reader and m_fastq_reader, so moving and copying are disabled for now.
 		libbio_reader_adapter(libbio_reader_adapter const &) = delete;
-		libbio_reader_adapter(libbio_reader_adapter &&) = delete;
+		libbio_reader_adapter(libbio_reader_adapter &&) = default;
 		libbio_reader_adapter &operator=(libbio_reader_adapter const &) = delete;
-		libbio_reader_adapter &operator=(libbio_reader_adapter &&) = delete;
+		libbio_reader_adapter &operator=(libbio_reader_adapter &&) & = default;
 
 		void read_from_path(std::string const &path) { read_from_path(path.c_str()); }
 		void read_from_path(char const *path);
 		bool retrieve_next_read();
+		void finish();
 
 		std::uint64_t read_length() const { return m_read_length; }
 		read_buffer_type const &read_buffer() const { return m_read_buffer; }
 
 		template <typename t_cb>
-		void iterate_characters(std::uint64_t start_pos, t_cb &&cb) const;
+		void iterate_characters(std::uint64_t start_pos, t_cb &&cb) const { iterate_packed_characters(m_read_buffer, m_read_length, start_pos, cb); }
 
 		template <typename t_cb>
-		void iterate_character_pairs(std::uint64_t start_lhs, std::uint64_t const limit_lhs, std::uint64_t start_rhs, t_cb &&cb) const;
+		void iterate_character_pairs(std::uint64_t lhs_start, std::uint64_t rhs_start, t_cb &&cb) const { iterate_packed_character_pairs(m_read_buffer, m_read_length, lhs_start, rhs_start, cb); }
 
 	private:
 		bool handle_identifier(libbio::fasta_reader_base &, std::string_view, std::span <std::string_view const>) override { return true; }
 		bool handle_sequence_chunk(libbio::fasta_reader_base &reader, std::string_view sv, bool has_newline) override; // The string view does not have the newline character.
-		bool handle_sequence_end(libbio::fasta_reader_base &reader) override;
+		bool handle_sequence_end(libbio::fasta_reader_base &reader) override { return false; }
 
 		bool handle_identifier(libbio::fastq_reader_base &, std::string_view) override { return true; }
 		bool handle_sequence_chunk(libbio::fastq_reader_base &reader, std::string_view sv, bool has_newline) override; // The string view does not have the newline character.
-		bool handle_sequence_end(libbio::fastq_reader_base &reader) override;
+		bool handle_sequence_end(libbio::fastq_reader_base &reader) override { return true; }
 		bool handle_quality_chunk(libbio::fastq_reader_base &, std::string_view, bool) override { return true; }
-		bool handle_quality_end(libbio::fastq_reader_base &) override { return true; }
+		bool handle_quality_end(libbio::fastq_reader_base &) override { return false; }
 	};
-
-
-	void libbio_reader_adapter::iteration_context::update(std::uint64_t word_)
-	{
-		current_word = next_word << shift_amt;
-		next_word = std::rotl(word_, shift_amt);
-		current_word |= next_word & mask;
-	}
-
-
-	template <typename t_cb>
-	void libbio_reader_adapter::iterate_characters(std::uint64_t const start_pos, t_cb &&cb) const
-	{
-		if (m_read_length <= start_pos)
-			return;
-
-		iteration_context ctx{m_read_buffer, m_read_length, start_pos};
-		std::uint8_t const remaining_characters((m_read_length - start_pos) % 32U ?: 32U);
-
-		for (std::uint64_t ii{1}; ii < ctx.word_count; ++ii)
-		{
-			ctx.update(m_read_buffer[ctx.start_idx + ii]);
-			for (std::uint8_t jj{}; jj < 32U; ++jj)
-			{
-				ctx.rotate_current_word();
-				cb(ctx.current_word & 0x3);
-			}
-		}
-
-		ctx.update(m_read_buffer[ctx.last_word_idx]); // It does not matter if we reload the last word.
-		for (std::uint8_t jj{}; jj < remaining_characters; ++jj)
-		{
-			ctx.rotate_current_word();
-			cb(ctx.current_word & 0x3);
-		}
-	}
-
-
-	template <typename t_cb>
-	void libbio_reader_adapter::iterate_character_pairs(std::uint64_t const lhs_start_pos, std::uint64_t const lhs_limit, std::uint64_t const rhs_start_pos, t_cb &&cb) const
-	{
-		libbio_assert_lte(lhs_start_pos, rhs_start_pos);
-
-		if (m_read_length <= rhs_start_pos)
-			return;
-
-		iteration_context lhs_ctx{m_read_buffer, m_read_length, lhs_start_pos, lhs_limit};
-		iteration_context rhs_ctx{m_read_buffer, m_read_length, rhs_start_pos};
-		std::uint8_t const rhs_remaining_characters((m_read_length - rhs_start_pos) % 32U ?: 32U);
-		for (std::uint64_t ii{1}; ii < rhs_ctx.word_count; ++ii)
-		{
-			lhs_ctx.update(m_read_buffer[lhs_ctx.start_idx + ii]);
-			rhs_ctx.update(m_read_buffer[rhs_ctx.start_idx + ii]);
-			for (std::uint8_t jj{}; jj < 32U; ++jj)
-			{
-				lhs_ctx.rotate_current_word();
-				rhs_ctx.rotate_current_word();
-				cb(lhs_ctx.current_word & 0x3, rhs_ctx.current_word & 0x3);
-			}
-		}
-
-		lhs_ctx.update(m_read_buffer[lhs_ctx.last_word_idx]);
-		rhs_ctx.update(m_read_buffer[rhs_ctx.last_word_idx]);
-		for (std::uint8_t jj{}; jj < rhs_remaining_characters; ++jj)
-		{
-			lhs_ctx.rotate_current_word();
-			rhs_ctx.rotate_current_word();
-			cb(lhs_ctx.current_word & 0x3, rhs_ctx.current_word & 0x3);
-		}
-	}
 }

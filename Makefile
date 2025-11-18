@@ -8,7 +8,7 @@ GCOV ?= gcov
 
 CFLAGS = -std=c++23 -Wall -Werror -Wextra -Wshadow -Wno-gnu-conditional-omitted-operand -Wno-unused-parameter -Wno-unused-function -march=native -DMAX_GAP=$(MAX_GAP)
 
-PERF_FLAGS = -Ofast -g -DNDEBUG -fopenmp
+PERF_FLAGS = -O3 -g -DNDEBUG -fopenmp
 #PERF_FLAGS = -O0 -g -DDEBUG
 TEST_PERF_FLAGS = -O0 -g -DDEBUG
 
@@ -42,7 +42,14 @@ RAPIDCHECK_DIR = deps/rapidcheck
 
 GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -isystem $(RAPIDCHECK_DIR)/include -isystem $(RAPIDCHECK_DIR)/extras/gtest/include -pthread -L $(GTEST_DIR)/build/lib -L $(RAPIDCHECK_DIR)/build
 
-TEST_HPP = test/gapmer_tests.hpp test/util_tests.hpp test/gapmer_count_tests.hpp
+TEST_HPP =	test/bit_tests_arbitrary.hpp \
+			test/gapmer_arbitrary.hpp \
+			test/gapmer_count_tests.hpp \
+			test/gapmer_tests.hpp \
+			test/iterate_packed_characters_arbitrary.hpp \
+			test/string_buffer_arbitrary.hpp \
+			test/util_tests.hpp
+
 
 .PHONY: clean all test cover
 
