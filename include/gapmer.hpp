@@ -21,11 +21,12 @@
 #endif
 
 namespace sf {
-template <bool middle_gap_only = false, uint16_t t_max_gap = 10>
+template <bool t_middle_gap_only = false, uint16_t t_max_gap = 10>
 class gapmer {
  public:
-  const static constexpr uint64_t max_k = 24;
-  const static constexpr uint16_t max_gap = t_max_gap;
+  const static constexpr uint64_t max_k{24};
+  const static constexpr uint16_t max_gap{t_max_gap};
+  const static constexpr bool middle_gap_only{t_middle_gap_only};
 
  private:
   const static constexpr uint64_t ONE = 1;
@@ -1385,8 +1386,8 @@ auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c1, std::uint8_t c2)
   uint64_t suf_len = (length() - gap_start()) * 2;
   uint64_t gap_mask = uint64_t(0b11) << suf_len;
   uint64_t v = (data_ << 2) & ~gap_mask;
-  v |= uint64_t(nuc_to_v[c1]) << suf_len;
-  v |= nuc_to_v[c2];
+  v |= uint64_t{c1} << suf_len;
+  v |= c2;
   v &= (ONE << (length() * 2)) - 1;
   return gapmer{(data_ & ~value_mask) | v};
 }
