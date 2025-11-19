@@ -46,7 +46,7 @@ TEST_HPP =	test/bit_tests_arbitrary.hpp \
 			test/gapmer_arbitrary.hpp \
 			test/gapmer_count_tests.hpp \
 			test/gapmer_tests.hpp \
-			test/iterate_packed_characters_arbitrary.hpp \
+			test/packed_character_iteration_arbitrary.hpp \
 			test/string_buffer_arbitrary.hpp \
 			test/util_tests.hpp
 
