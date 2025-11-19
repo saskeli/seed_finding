@@ -114,28 +114,7 @@ class partial_count {
         for (; gap_s < gap_lim; ++gap_s) {
           for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
             auto const tail_start{gap_s + gap_l};
-            g = [&] {
-              auto const tail_length{k - gap_s};
-              std::uint64_t const head_mask{~(~std::uint64_t{} << gap_s)
-                                            << tail_length};
-              std::uint64_t const head{(read_buffer.front() >> (64U - 2U * k)) &
-                                       head_mask};
-
-              auto const tail_start_word_idx{tail_start / 32U};
-              auto const tail_start_chr_idx{tail_start % 32U};
-              auto const tail_end_word_idx{(tail_start + tail_length) / 32U};
-              std::uint64_t tail{read_buffer[tail_start_word_idx] >>
-                                 (2U * tail_start_chr_idx)};
-
-              if (tail_start_word_idx != tail_end_word_idx) {
-                tail <<= 2U * (tail_length - (32U - tail_start_chr_idx));
-                tail |= read_buffer[tail_end_word_idx] >>
-                        2U * (64U - tail_length - tail_start_chr_idx);
-              }
-
-              return gapmer_t(head | tail, k, gap_s, gap_l);
-            }();
-
+            g = gapmer_t(read_buffer, k, gap_s, gap_l);
             inc(g);
             reader_adapter.iterate_character_pairs(
                 gap_s, tail_start,
