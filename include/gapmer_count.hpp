@@ -73,7 +73,7 @@ class gapmer_count {
         continue;
 
       auto const &read_buffer{reader_adapter.read_buffer()};
-      gapmer<middle_gap_only, max_gap> g(read_buffer.front() >> (64U - 2U * k), k); // FIXME: replace 48 with 2 * gapmer_type::max_gap.
+      gapmer<middle_gap_only, max_gap> g(read_buffer.front() >> (64U - 2U * k), k);
       uint64_t cv = g.value();
 #pragma omp atomic
       counts[cv] = counts[cv] + 1;
