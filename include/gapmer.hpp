@@ -61,6 +61,9 @@ class gapmer {
       uint64_t data, uint8_t kk, uint8_t gap_start,
       uint8_t gap_length);  //< Returns the packed representation including the
                             // lengths and the gap position.
+  static inline uint64_t from_packed_characters(std::span<uint64_t const> data,
+                                                uint8_t kk, uint8_t gap_start,
+                                                uint8_t gap_length);
 
   explicit gapmer(uint64_t data)
       : data_(data) {}  //< Construct from the given data.
@@ -110,7 +113,14 @@ class gapmer {
                                       d_ptr, kk, gap_start, gap_length)),
                kk, gap_start, gap_length) {}
 
-  uint64_t data() const { return data_; }       //< Get the packed data.
+  /// Construct from the given packed character data ([0x0-0x3]*) aligned to 8
+  /// bytes.
+  gapmer(std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
+         uint8_t gap_length)
+      : gapmer(from_packed_characters(data, kk, gap_start, gap_length), kk,
+               gap_start, gap_length) {}
+
+  uint64_t data() const { return data_; }  //< Get the packed data.
   operator uint64_t() const { return data(); }  //< Get the packed data.
   bool operator==(const gapmer& rhs) const {
     return data_ == rhs.data_;
@@ -214,12 +224,41 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
+uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
+    std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
+    uint8_t gap_length) {
+  auto const tail_start{gap_start + gap_length};
+  auto const tail_length{kk - gap_start};
+  auto const tail_start_word_idx{tail_start / 32U};
+  auto const tail_end_word_idx{(tail_start + tail_length) / 32U};
+  auto const tail_start_chr_idx{tail_start % 32U};
+  auto const tail_start_length{32U - tail_start_chr_idx};
+  std::uint64_t const head_mask{~(~std::uint64_t{} << 2U * gap_start)
+                                << 2U * tail_length};
+
+  std::uint64_t head{data.front()};
+  std::uint64_t tail{data[tail_start_word_idx]};
+  std::uint64_t tail_{data[tail_end_word_idx]};
+
+  head >>= 64U - 2U * kk;
+  head &= head_mask;
+
+  // Concatenate in the right end of the word.
+  tail <<= 2U * tail_start_chr_idx;
+  tail_ >>= 2U * tail_start_length;
+  tail |= tail_;
+  tail >>= 64U - 2U * tail_length;
+
+  return head | tail;
+}
+
+template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool t_has_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(
     uint64_t const* d_ptr, uint8_t const kk, uint8_t const gap_start,
     uint8_t const gap_length) {
   assert(kk <= max_k);
-  assert(gap_start < kk);
+  assert(gap_start < kk); // The gap needs to start before the end of the text.
   assert(gap_length <= max_gap);
 
   uint64_t retval{};
@@ -237,6 +276,8 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(
     // even with -O2.)
     while (ii < (max_k + max_gap + 7) / 8) {
       iv = bits::read_multiple_dna_characters(d_ptr[ii]);
+      // Check whether there are less than 8 characters before the
+      // gap start.
       if (gap_start < 8 * (ii + 1)) break;
       retval |= iv;
       retval <<= 16;
@@ -1378,7 +1419,8 @@ auto gapmer<middle_gap_only, t_max_gap>::next(char c1, char c2) const
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c1, std::uint8_t c2) const
+auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c1,
+                                               std::uint8_t c2) const
     -> gapmer {
 #ifdef DEBUG
   assert(gap_length() > 0);
