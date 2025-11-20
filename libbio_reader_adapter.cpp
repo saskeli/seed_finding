@@ -10,6 +10,7 @@
 #include <libbio/file_handling.hh>
 #include <libbio/sequence_reader.hh>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -45,8 +46,12 @@ namespace {
 		}
 		std::cerr << '\n';
 	}
+}
 
-	std::uint64_t read_into_packed_sequence(std::string_view sv, std::vector <std::uint64_t> &dst, std::uint64_t dst_pos)
+
+namespace sf {
+
+	std::uint64_t pack_characters(std::string_view sv, std::vector <std::uint64_t> &dst, std::uint64_t dst_pos)
 	{
 		auto const push_packed([](char const cc, std::uint64_t &dst_word, std::uint64_t const dst_pos_) -> bool {
 			auto const chararcter_pos{dst_pos_ % 32U};
@@ -119,6 +124,42 @@ namespace {
 
 			if (it == end)
 				return dst_pos;
+		}
+	}
+
+
+	void unpack_characters(std::vector <std::uint64_t> const &src, std::uint64_t length, std::string &dst)
+	{
+		auto const append_character([&dst](std::uint64_t const word){
+			switch (word & UINT64_C(0x3))
+			{
+				case 0x0: dst.push_back('A'); break;
+				case 0x1: dst.push_back('C'); break;
+				case 0x2: dst.push_back('G'); break;
+				case 0x3: dst.push_back('T'); break;
+				default: libbio_fail("Unexpected value");
+			}
+		});
+
+		std::uint64_t ii{};
+		while (ii + 32 <= length)
+		{
+			auto word{src[ii / 32]};
+			for (std::uint8_t jj{}; jj < 32; ++jj)
+			{
+				word = std::rotl(word, 2);
+				append_character(word);
+			}
+
+			ii += 32;
+		}
+
+		auto word{src[ii / 32]};
+		while (ii < length)
+		{
+			word = std::rotl(word, 2);
+			append_character(word);
+			++ii;
 		}
 	}
 }
@@ -326,7 +367,7 @@ namespace sf {
 	{
 		if (m_read_is_valid) [[likely]]
 		{
-			auto const chunk_length{read_into_packed_sequence(sv, m_read_buffer, m_read_length)};
+			auto const chunk_length{pack_characters(sv, m_read_buffer, m_read_length)};
 			m_read_is_valid = (UINT64_MAX != chunk_length);
 			if (m_read_is_valid) [[likely]]
 				m_read_length += chunk_length;
@@ -340,7 +381,7 @@ namespace sf {
 	{
 		if (m_read_is_valid) [[likely]]
 		{
-			auto const chunk_length{read_into_packed_sequence(sv, m_read_buffer, m_read_length)};
+			auto const chunk_length{pack_characters(sv, m_read_buffer, m_read_length)};
 			m_read_is_valid = (UINT64_MAX != chunk_length);
 			if (m_read_is_valid) [[likely]]
 				m_read_length += chunk_length;
