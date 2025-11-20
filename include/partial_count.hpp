@@ -17,7 +17,7 @@ template <class gapmer_t>
 class partial_count {
  private:
   static const constexpr uint64_t MOD = 59999999;
-  static const constexpr uint64_t STEP = 127;
+  static const constexpr uint64_t STEP = 40960001;
   struct elem {
     gapmer_t mer;
     uint64_t sig_count;
@@ -31,7 +31,7 @@ class partial_count {
     uint64_t g_val(g);
     uint64_t idx = g_val % MOD;
     uint64_t val(data_[idx].mer);
-    while (val > 0 && val != g_val) {
+    while (val > 0 && val != g_val) [[unlikely]] {
       idx += STEP;
       idx -= idx >= MOD ? MOD : 0;
       val = data_[idx].mer;

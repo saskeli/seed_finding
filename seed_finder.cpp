@@ -27,7 +27,7 @@
 #define SF_STRINGIFY(X) SF_STRINGIFY_(X)
 
 
-uint64_t available_gigs() {
+inline uint64_t available_gigs() {
   uint64_t mem = sysconf(_SC_PHYS_PAGES);
   mem *= sysconf(_SC_PAGE_SIZE);
   mem /= 2;
@@ -365,6 +365,5 @@ int main(int argc, char const* argv[]) {
       }
     }
   }
-
   return 0;
 }
