@@ -93,6 +93,22 @@ class partial_count {
       {
         len = sr.get_next_read_to_buffer();
         buffer = std::string_view{sr.read_buf, len};
+
+        // FIXME: come up with a better way to normalise the read.
+        for (std::size_t ii{}; ii < len; ++ii)
+        {
+          switch (buffer[ii])
+          {
+            case 'A':
+            case 'C':
+            case 'G':
+            case 'T':
+              break;
+            default:
+              buffer[ii] = 'A';
+              break;
+          }
+        }
       }
       if (len == 0) {
         break;
@@ -134,6 +150,22 @@ class partial_count {
       {
         len = br.get_next_read_to_buffer();
         buffer = std::string_view{br.read_buf, len};
+
+        // FIXME: come up with a better way to normalise the read.
+        for (std::size_t ii{}; ii < len; ++ii)
+        {
+          switch (buffer[ii])
+          {
+            case 'A':
+            case 'C':
+            case 'G':
+            case 'T':
+              break;
+            default:
+              buffer[ii] = 'A';
+              break;
+          }
+        }
       }
       if (len == 0) {
         break;
