@@ -8,7 +8,7 @@
 #include <string>
 #include <utility>
 
-#include "libbio_reader_adapter.hpp"
+#include "configuration.hpp"
 
 namespace sf {
 
@@ -23,7 +23,7 @@ class partial_count {
     uint64_t bg_count;
   };
 
-  libbio_reader_adapter reader_adapter;
+  reader_adapter_type reader_adapter;
   elem* data_;
   uint64_t size_;
 
@@ -40,7 +40,7 @@ class partial_count {
   }
 
  public:
-  explicit partial_count(libbio_reader_adapter_delegate& delegate)
+  explicit partial_count(reader_adapter_delegate& delegate)
       : reader_adapter(delegate), size_(0) {
     data_ = (elem*)calloc(MOD, sizeof(elem));
   }
@@ -86,7 +86,7 @@ class partial_count {
   template <bool middle_gap_only, uint16_t max_gap>
   void count_mers(const std::string& sig_path, const std::string& bg_path,
                   uint16_t k) {
-    auto const do_count([&](std::string const& fasta_path, auto&& inc) {
+    auto const do_count([&](std::string const& fasta_path, bool should_check_k, auto&& inc) {
       reader_adapter.read_from_path(fasta_path);
 
 #pragma omp parallel
@@ -97,7 +97,7 @@ class partial_count {
 
         if (!should_continue) break;
 
-        if (reader_adapter.read_length() < k) continue;
+        if (should_check_k && reader_adapter.read_length() < k) continue;
 
         auto const& read_buffer{reader_adapter.read_buffer()};
         gapmer_t g(read_buffer.front() >> (64U - 2U * k), k);
@@ -113,11 +113,10 @@ class partial_count {
 
         for (; gap_s < gap_lim; ++gap_s) {
           for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-            auto const tail_start{gap_s + gap_l};
             g = gapmer_t(read_buffer, k, gap_s, gap_l);
             inc(g);
             reader_adapter.iterate_character_pairs(
-                gap_s, tail_start,
+                gap_s, k + gap_l,
                 [&](std::uint8_t const lhsc, std::uint8_t const rhsc) {
                   g = g.next_(lhsc, rhsc);
                   inc(g);
@@ -128,8 +127,8 @@ class partial_count {
       reader_adapter.finish();
     });
 
-    do_count(sig_path, [this](auto const gg) { inc_sig(gg); });
-    do_count(bg_path, [this](auto const gg) { inc_bg(gg); });
+    do_count(sig_path, true, [this](auto const gg) { inc_sig(gg); });
+    do_count(bg_path, false, [this](auto const gg) { inc_bg(gg); });
   }
 
   std::pair<uint64_t, uint64_t> count(gapmer_t g) const {

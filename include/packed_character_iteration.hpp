@@ -4,11 +4,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <libbio/assert.hh>
-#include <vector>
-
-namespace sf {
-	typedef std::vector <std::uint64_t> packed_word_vector;
-}
+#include "pack_characters.hpp"
 
 
 namespace sf::detail {

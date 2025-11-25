@@ -9,7 +9,6 @@ GCOV ?= gcov
 CFLAGS = -std=c++23 -Wall -Werror -Wextra -Wshadow -Wno-gnu-conditional-omitted-operand -Wno-unused-parameter -Wno-unused-function -march=native -DMAX_GAP=$(MAX_GAP)
 
 PERF_FLAGS = -O3 -g -DNDEBUG -fopenmp
-#PERF_FLAGS = -O0 -g -DDEBUG
 TEST_PERF_FLAGS = -O0 -g -DDEBUG
 
 DEBUG_FLAGS = -g -DDEBUG
@@ -22,17 +21,30 @@ INCLUDE += -Iinclude -isystem deps/sdsl-lite/include -isystem deps/seqio/include
 
 LIBS += -lboost_iostreams -lz -lgsl -lgslcblas -lm
 
-HEADERS =	include/bits.hpp \
+HEADERS =	include/args.hpp \
+			include/bits.hpp \
+			include/configuration.hpp \
+			include/dot_writer.hpp \
 			include/fm_index.hpp \
 			include/gapmer.hpp \
 			include/gapmer_count.hpp \
+			include/libbio_reader_adapter.hpp \
+			include/pack_characters.hpp \
+			include/packed_character_iteration.hpp \
 			include/partial_count.hpp \
+			include/reader_adapter.hpp \
 			include/seed_clusterer.hpp \
 			include/seed_finder.hpp \
+			include/seqio_reader_adapter.hpp \
 			include/string_buffer.hpp \
 			include/util.hpp \
-			include/dot_writer.hpp \
 			include/version.hpp
+
+SEED_FINDER_OBJECTS = \
+			libbio_reader_adapter.o \
+			pack_characters.o \
+			seed_finder.o \
+			seqio_reader_adapter.o
 
 ARGS = deps/args/args.hxx
 SDSL_DIR = deps/sdsl-lite/lib
@@ -46,8 +58,11 @@ TEST_HPP =	test/bit_tests_arbitrary.hpp \
 			test/gapmer_arbitrary.hpp \
 			test/gapmer_count_tests.hpp \
 			test/gapmer_tests.hpp \
+			test/nucleotide.hpp \
+			test/pack_characters_arbitrary.hpp \
 			test/packed_character_iteration_arbitrary.hpp \
 			test/string_buffer_arbitrary.hpp \
+			test/test.hpp \
 			test/util_tests.hpp
 
 
@@ -61,8 +76,8 @@ motivating: motivating.cpp
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
-seed_finder: seed_finder.o libbio_reader_adapter.o $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) deps/libbio
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.o libbio_reader_adapter.o -o seed_finder deps/libbio/src/libbio.a $(LIBS)
+seed_finder: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) deps/libbio
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) $(SEED_FINDER_OBJECTS) -o seed_finder deps/libbio/src/libbio.a $(LIBS)
 
 comp: comp.cpp include/util.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
@@ -70,10 +85,11 @@ comp: comp.cpp include/util.hpp
 huddinge_deb: huddinge.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
-seed_finder_deb: seed_finder.cpp $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) deps/libbio
-	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
+seed_finder_deb: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) deps/libbio
+	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) $(SEED_FINDER_OBJECTS) -o seed_finder_deb $(LIBS)
 
 clean:
+	$(RM) $(SEED_FINDER_OBJECTS)
 	rm -f huddinge huddinge_deb seed_finder seed_finder_deb comp
 	rm -f test/test test/cover test/test.o test/cover.o
 	rm -f *.gcov test/*.gcda test/*.gcno index.info

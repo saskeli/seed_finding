@@ -13,8 +13,9 @@
 #include <string_view>
 #include <utility>
 
+#include "configuration.hpp"
 #include "gapmer.hpp"
-#include "libbio_reader_adapter.hpp"
+#include "reader_adapter.hpp"
 
 namespace sf {
 
@@ -51,7 +52,7 @@ class gapmer_count {
     return ret;
   }
 
-  libbio_reader_adapter reader_adapter;
+  reader_adapter_type reader_adapter;
   double* sig_counts;
   double* bg_counts;
   sdsl::bit_vector discarded;
@@ -111,7 +112,7 @@ class gapmer_count {
  public:
   gapmer_count(const std::string& sig_fasta_path,
                const std::string& bg_fasta_path, uint8_t k,
-               libbio_reader_adapter_delegate &delegate)
+               reader_adapter_delegate &delegate)
       : reader_adapter(delegate),
         sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         bg_counts((double*)calloc(lookup_elems(k), sizeof(double))),

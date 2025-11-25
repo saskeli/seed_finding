@@ -18,15 +18,16 @@
 #include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
-#include "libbio_reader_adapter.hpp"
+#include "reader_adapter.hpp"
 #include "partial_count.hpp"
+#include "seqio_reader_adapter.hpp"
 #include "util.hpp"
 
 namespace sf {
 
 template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true,
           bool filter_mers = true>
-class seed_finder : public libbio_reader_adapter_delegate {
+class seed_finder : public reader_adapter_delegate {
  public:
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
@@ -592,6 +593,21 @@ class seed_finder : public libbio_reader_adapter_delegate {
     std::cerr << "    filtered to " << m.size() << " mers" << std::endl;
   }
 
+  /**
+   * Count the read and their reverse complements in the input.
+   *
+   * @param path input path
+   */
+  std::uint64_t count_reads_with_rc(std::string const &path) {
+    std::uint64_t retval{};
+    reader_adapter_type reader(*this);
+    reader.read_from_path(path);
+    while (reader.retrieve_next_read())
+      ++retval;
+    reader.finish();
+    return retval;
+  }
+
  public:
   seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
@@ -610,24 +626,8 @@ class seed_finder : public libbio_reader_adapter_delegate {
         lookup_k_(lookup_k),
         prune_(prune) {
     gsl_set_error_handler_off();
-    seq_io::Reader_x sr(sig_path_);
-    sr.enable_reverse_complements();
-    while (true) {
-      uint64_t len = sr.get_next_read_to_buffer();
-      if (len == 0) {
-        break;
-      }
-      sig_size_ += len;
-    }
-    seq_io::Reader_x br(bg_path_);
-    br.enable_reverse_complements();
-    while (true) {
-      uint64_t len = br.get_next_read_to_buffer();
-      if (len == 0) {
-        break;
-      }
-      bg_size_ += len;
-    }
+    sig_size_ = count_reads_with_rc(sig_path_);
+    bg_size_ = count_reads_with_rc(bg_path_);
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
     std::cerr << "Background " << bg_path_ << " with length " << bg_size_
               << std::endl;
@@ -701,20 +701,20 @@ class seed_finder : public libbio_reader_adapter_delegate {
   double x() const { return x_; }
 
  private:
-  bool should_report_errors_for_path(libbio_reader_adapter&,
+  bool should_report_errors_for_path(reader_adapter&,
                                      std::string_view path) override {
     return !paths_with_errors_.contains(path);
   }
 
   void found_first_read_with_unexpected_character(
-      libbio_reader_adapter&, std::string_view path,
+      reader_adapter&, std::string_view path,
       std::uint64_t lineno) override {
     std::cerr << "WARNING: Skipping reads with unexpected characters in "
               << path << "; first one on line " << lineno << ".\n";
   }
 
   void found_total_reads_with_unexpected_characters(
-      libbio_reader_adapter&, std::string_view path,
+      reader_adapter&, std::string_view path,
       std::uint64_t count) override {
     paths_with_errors_.emplace(path);
     std::cerr << "WARNING: Skipped " << count << " reads in " << path << ".\n";
