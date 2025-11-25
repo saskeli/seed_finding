@@ -44,7 +44,6 @@ HEADERS =	include/args.hpp \
 
 # FIXME: A library-based design could be a good idea.
 SEED_FINDER_OBJECTS = \
-			libbio_reader_adapter.o \
 			pack_characters.o \
 			seed_finder.o \
 			seqio_reader_adapter.o
@@ -89,8 +88,8 @@ motivating: motivating.cpp
 huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
 
-seed_finder: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) $(SEED_FINDER_OBJECTS) -o seed_finder deps/libbio/src/libbio.a $(LIBS)
+seed_finder: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS) | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
+	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) $(SEED_FINDER_OBJECTS) -o seed_finder $(LIBS)
 
 comp: comp.cpp include/util.hpp
 	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
@@ -98,7 +97,7 @@ comp: comp.cpp include/util.hpp
 huddinge_deb: huddinge.cpp $(HEADERS)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
 
-seed_finder_deb: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS) deps/libbio/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
+seed_finder_deb: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS) | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
 	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) $(SEED_FINDER_OBJECTS) -o seed_finder_deb $(LIBS)
 
 clean:
