@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include "pack_characters.hpp"
 #include "packed_character_iteration.hpp"
 
 
