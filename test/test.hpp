@@ -47,6 +47,7 @@ namespace sf {
 // Mainly for checking if empty parentheses are passed in place of a macro parameter.
 // We could detect this with __VA_OPT__ but since it is fairly new, we use the GCC extension
 // which causes the comma in , ##__VA_ARGS__ to be deleted if __VA_ARGS__ is empty.
+// FIXME: __VA_OPT__ is available in GCC 8.5.0 (or so) even in C++17 mode.
 #define SF_NARGS_(_0, _16, _15, _14, _13, _12, _11, _10, _9, _8, _7, _6, _5, _4, _3, _2, _1, N, ...) N
 #define SF_NARGS(...) SF_NARGS_(0, ##__VA_ARGS__, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 

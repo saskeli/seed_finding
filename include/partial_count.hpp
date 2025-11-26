@@ -4,12 +4,11 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <SeqIO/SeqIO.hh>
+#include <libbio/algorithm.hh>
 #include <string>
-#include <string_view>
 #include <utility>
 
-#include "string_buffer.hpp"
+#include "configuration.hpp"
 
 namespace sf {
 
@@ -24,6 +23,7 @@ class partial_count {
     uint64_t bg_count;
   };
 
+  reader_adapter_type reader_adapter;
   elem* data_;
   uint64_t size_;
 
@@ -40,7 +40,10 @@ class partial_count {
   }
 
  public:
-  partial_count() : size_(0) { data_ = (elem*)calloc(MOD, sizeof(elem)); }
+  explicit partial_count(reader_adapter_delegate& delegate)
+      : reader_adapter(delegate), size_(0) {
+    data_ = (elem*)calloc(MOD, sizeof(elem));
+  }
 
   ~partial_count() {
     if (data_ != nullptr) {
@@ -83,117 +86,49 @@ class partial_count {
   template <bool middle_gap_only, uint16_t max_gap>
   void count_mers(const std::string& sig_path, const std::string& bg_path,
                   uint16_t k) {
-    seq_io::Reader_x sr(sig_path);
-    sr.enable_reverse_complements();
-#pragma omp parallel
-    while (true) {
-      uint64_t len{};
-      string_buffer<uint64_t> buffer;
-#pragma omp critical
-      {
-        len = sr.get_next_read_to_buffer();
-        buffer = std::string_view{sr.read_buf, len};
+    auto const do_count([&](std::string const& fasta_path, bool should_check_k, auto&& inc) {
+      reader_adapter.read_from_path(fasta_path);
 
-        // FIXME: come up with a better way to normalise the read.
-        for (std::size_t ii{}; ii < len; ++ii)
-        {
-          switch (buffer[ii])
-          {
-            case 'A':
-            case 'C':
-            case 'G':
-            case 'T':
-              break;
-            default:
-              buffer[ii] = 'A';
-              break;
-          }
-        }
-      }
-      if (len == 0) {
-        break;
-      }
-      if (len < k) {
-        continue;
-      }
-      std::string_view const ss{buffer};
-      gapmer_t g(buffer.data(), k);
-      inc_sig(g);
-      for (uint32_t next = k; next < len; ++next) {
-        g = g.next(ss[next]);
-        inc_sig(g);
-      }
-      uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? (k + 3) / 2 : k;
-      for (; gap_s < gap_lim; ++gap_s) {
-        for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          if (k + gap_l >= len) {
-            break;
-          }
-          g = {buffer.data(), uint8_t(k), gap_s, gap_l};
-          inc_sig(g);
-          for (uint32_t mid = gap_s, next = k + gap_l; next < len;
-               ++next, ++mid) {
-            g = g.next(ss[mid], ss[next]);
-            inc_sig(g);
-          }
-        }
-      }
-    }
-    seq_io::Reader_x br(bg_path);
-    br.enable_reverse_complements();
 #pragma omp parallel
-    while (true) {
-      uint64_t len{};
-      string_buffer<uint64_t> buffer;
+      while (true) {
+        bool should_continue{};
 #pragma omp critical
-      {
-        len = br.get_next_read_to_buffer();
-        buffer = std::string_view{br.read_buf, len};
+        should_continue = reader_adapter.retrieve_next_read();
 
-        // FIXME: come up with a better way to normalise the read.
-        for (std::size_t ii{}; ii < len; ++ii)
-        {
-          switch (buffer[ii])
-          {
-            case 'A':
-            case 'C':
-            case 'G':
-            case 'T':
-              break;
-            default:
-              buffer[ii] = 'A';
-              break;
+        if (!should_continue) break;
+
+        if (should_check_k && reader_adapter.read_length() < k) continue;
+
+        auto const& read_buffer{reader_adapter.read_buffer()};
+        gapmer_t g(read_buffer.front() >> (64U - 2U * k), k);
+        inc(g);
+        reader_adapter.iterate_characters(k, [&](std::uint8_t const cc) {
+          g = g.next_(cc);
+          inc(g);
+        });
+
+        uint8_t gap_s = middle_gap_only ? k / 2 : 1;
+        auto gap_lim = libbio::min_ct(reader_adapter.read_length(),
+                                      middle_gap_only ? (k + 3) / 2 : k);
+
+        for (; gap_s < gap_lim; ++gap_s) {
+          for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
+            g = gapmer_t(read_buffer, k, gap_s, gap_l);
+            inc(g);
+            reader_adapter.iterate_character_pairs(
+                gap_s, k + gap_l,
+                [&](std::uint8_t const lhsc, std::uint8_t const rhsc) {
+                  g = g.next_(lhsc, rhsc);
+                  inc(g);
+                });
           }
         }
       }
-      if (len == 0) {
-        break;
-      }
-      std::string_view const ss{buffer};
-      gapmer_t g(buffer.data(), k);
-      inc_bg(g);
-      for (uint32_t next = k; next < len; ++next) {
-        g = g.next(ss[next]);
-        inc_bg(g);
-      }
-      uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? (k + 3) / 2 : k;
-      for (; gap_s < gap_lim; ++gap_s) {
-        for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          if (k + gap_l >= len) {
-            break;
-          }
-          g = {buffer.data(), uint8_t(k), gap_s, gap_l};
-          inc_bg(g);
-          for (uint32_t mid = gap_s, next = k + gap_l; next < len;
-               ++next, ++mid) {
-            g = g.next(ss[mid], ss[next]);
-            inc_bg(g);
-          }
-        }
-      }
-    }
+      reader_adapter.finish();
+    });
+
+    do_count(sig_path, true, [this](auto const gg) { inc_sig(gg); });
+    do_count(bg_path, false, [this](auto const gg) { inc_bg(gg); });
   }
 
   std::pair<uint64_t, uint64_t> count(gapmer_t g) const {
@@ -231,9 +166,7 @@ class partial_count {
     return {sig_val / 11, bg_val / 11};
   }
 
-  double fill_rate() const {
-    return double(size_) / MOD;
-  }
+  double fill_rate() const { return double(size_) / MOD; }
 };
 
 }  // namespace sf

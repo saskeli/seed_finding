@@ -19,3 +19,6 @@
 
 // kmer counter tests
 #include "gapmer_count_tests.hpp"
+
+#include "packed_character_iteration_arbitrary.hpp"
+#include "pack_characters_arbitrary.hpp"
