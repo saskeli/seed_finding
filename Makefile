@@ -37,7 +37,7 @@ INCLUDE += \
 	-isystem deps/libbio/include \
 	-isystem deps/libbio/lib/range-v3/include
 
-LIBS += -lboost_iostreams -lz -lgsl -lgslcblas -lm
+LIBS += -lz -lgsl -lgslcblas -lm
 
 ## Used directly
 CPPFLAGS				= -DMAX_GAP=$(MAX_GAP) $(INCLUDE)
