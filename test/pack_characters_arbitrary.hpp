@@ -14,6 +14,7 @@
 RC_GTEST_PROP(pack_characters_arbitrary, PackAndUnpack,
               (std::vector<std::vector<nucleotide>> const& text)) {
   {
+    // Determine the sum of the lengths of the input texts.
     auto const total_length{[&] {
       std::uint64_t retval{};
       for (auto const& vec : text) retval += vec.size();
@@ -40,10 +41,13 @@ RC_GTEST_PROP(pack_characters_arbitrary, PackAndUnpack,
   // Unpack.
   sf::unpack_characters(packed, pos, unpacked);
 
-  // Flatten the range.
+  // Since the input consists of multiple vectors of characters,
+  // we flatten the enclosing range so that we can compare the
+  // unpacked value (above) to the input character by character.
   auto rng{ranges::views::for_each(
       text, [](auto const& vec) { return ranges::views::all(vec); })};
 
+  // Compare character by character.
   for (auto const& [lhs, rhs] : ranges::views::zip(rng, unpacked))
     EXPECT_EQ(lhs, rhs);
 }
