@@ -115,6 +115,8 @@ std::uint64_t pack_characters(std::string_view sv,
 
 void unpack_characters(std::vector<std::uint64_t> const& src,
                        std::uint64_t length, std::string& dst) {
+  if (src.empty()) return;
+
   auto const append_character([&dst](std::uint64_t const word) {
     switch (word & UINT64_C(0x3)) {
       case 0x0:
