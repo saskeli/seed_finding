@@ -120,7 +120,7 @@ class gapmer {
   /// bytes.
   gapmer(std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
          uint8_t gap_length)
-      : gapmer(from_value(data, kk, gap_start, gap_length), kk, gap_start,
+      : gapmer(from_packed_characters(data, kk, gap_start, gap_length), kk, gap_start,
                gap_length) {}
 
   uint64_t data() const { return data_; }  //< Get the packed data.
