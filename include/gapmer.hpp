@@ -54,22 +54,25 @@ class gapmer {
                                                       uint8_t gap_start = 0,
                                                       uint8_t gap_length = 0);
 
-  static inline uint64_t from_packed_characters(
-      uint64_t data,
-      uint8_t kk);  //< Returns the packed representation including the length.
-  static inline uint64_t from_packed_characters(
-      uint64_t data, uint8_t kk, uint8_t gap_start,
-      uint8_t gap_length);  //< Returns the packed representation including the
-                            // lengths and the gap position.
+  /// Takes packed characters as input, returns the packed representation
+  /// including the lengths and the gap position.
+  static inline uint64_t from_packed_characters(uint64_t data, uint8_t kk);
+  /// Takes packed characters as input, returns the packed representation
+  /// including the lengths and the gap position.
+  static inline uint64_t from_packed_characters(uint64_t data, uint8_t kk,
+                                                uint8_t gap_start,
+                                                uint8_t gap_length);
+  /// Takes packed characters as input, returns the packed representation
+  /// including the lengths and the gap position.
   static inline uint64_t from_packed_characters(std::span<uint64_t const> data,
                                                 uint8_t kk, uint8_t gap_start,
                                                 uint8_t gap_length);
 
-  explicit gapmer(uint64_t data)
-      : data_(data) {}  //< Construct from the given data.
+  /// Construct from the given data.
+  explicit gapmer(uint64_t data) : data_(data) {}
+  /// Construct from the given prefix, suffix, gap position and lengths.
   gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len,
-         uint8_t gap_s, uint8_t gap_l);  //< Construct from the given prefix,
-                                         // suffix, gap position and lengths.
+         uint8_t gap_s, uint8_t gap_l);
 
   uint64_t prefix() const;
   uint64_t suffix() const;
@@ -77,8 +80,10 @@ class gapmer {
   uint64_t suffix(uint64_t i) const;
   gapmer hamming(uint64_t v, auto& callback) const;
 
- public:  // FIXME: all_gap_neighbours, middle_gap_neighbours should be private.
-          // For now they are public so that unit tests can access them.
+ public:
+  // FIXME: Consider making all_gap_neighbours, middle_gap_neighbours private.
+  // For now they are public so that unit tests can access them.
+
   template <bool no_smaller, bool no_same, bool no_larger>
   void middle_gap_neighbours(auto&& callback) const;
 
@@ -94,12 +99,11 @@ class gapmer {
 
  public:
   constexpr gapmer() = default;  //< Construct an empty value.
-  gapmer(uint64_t v, uint8_t k)
-      : data_(from_packed_characters(v, k)) {
-  }  //< Construct from the given packed data and lengths.
+  /// Construct from the given packed data and lengths.
+  gapmer(uint64_t v, uint8_t k) : data_(from_packed_characters(v, k)) {}
+  /// Construct from the given packed data, gap position and lengths.
   gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length)
-      : data_(from_packed_characters(v, k, gap_start, gap_length)) {
-  }  //< Construct from the given packed data, gap position and lengths.
+      : data_(from_packed_characters(v, k, gap_start, gap_length)) {}
 
   /// Construct from the given character data ([ACGT.]*) aligned to 8 bytes.
   gapmer(uint64_t const* d_ptr, uint8_t kk)
@@ -122,12 +126,10 @@ class gapmer {
 
   uint64_t data() const { return data_; }  //< Get the packed data.
   operator uint64_t() const { return data(); }  //< Get the packed data.
-  bool operator==(const gapmer& rhs) const {
-    return data_ == rhs.data_;
-  }  //< Compare packed bytes.
-  bool operator!=(const gapmer& rhs) const {
-    return data_ != rhs.data_;
-  }  //< Compare packed bytes.
+  /// Compare packed bytes.
+  bool operator==(const gapmer& rhs) const { return data_ == rhs.data_; }
+  /// Compare packed bytes.
+  bool operator!=(const gapmer& rhs) const { return data_ != rhs.data_; }
 
   template <bool compare_rc = false, bool debug = false>
   bool is_neighbour(const gapmer& other) const;
@@ -146,29 +148,25 @@ class gapmer {
 
   size_t compute_offset(const gapmer& other, int& out) const;
 
-  uint16_t length() const {
-    return (data_ >> (max_k * 2)) & meta_mask;
-  }  //< Get the count of the defined bases.
+  /// Get the count of the defined bases.
+  uint16_t length() const { return (data_ >> (max_k * 2)) & meta_mask; }
   uint16_t gap_start() const;  //< Get the starting position of the gap.
-  uint16_t gap_length() const {
-    return data_ >> (max_k * 2 + 10);
-  }  //< Get the gap length.
-  uint8_t nuc(uint8_t i) const;  //< Get the i-th 2-bit encoded nucleotide (gap
-                                 // not taken into account).
-  uint8_t get_c(uint64_t i)
-      const;  //< Get the unpacked character or gap at the i-th position.
-  uint64_t value() const {
-    return data_ & value_mask;
-  }  //< Get the encoded value.
-  gapmer next(
-      char c) const;  //< For a non-gapped gapmer, returns a copy of it with c
-                      // appended and the leftmost character removed. If this is
-                      // empty, returns an empty gapmer.
+  /// Get the gap length.
+  uint16_t gap_length() const { return data_ >> (max_k * 2 + 10); }
+  /// Get the i-th 2-bit encoded nucleotide (gap not taken into account).
+  uint8_t nuc(uint8_t i) const;
+  /// Get the unpacked character or gap at the i-th position.
+  uint8_t get_c(uint64_t i) const;
+  /// Get the encoded value.
+  uint64_t value() const { return data_ & value_mask; }
+  /// For a non-gapped gapmer, returns a copy of it with c appended and the
+  /// leftmost character removed. If this is empty, returns an empty gapmer.
+  gapmer next(char c) const;
   gapmer next_(std::uint8_t c) const;
-  gapmer next(char c1, char c2)
-      const;  //< For a gapped gapmer, returns a copy of it with c1 and c2
-              // appended respectively to the prefix and to the suffix, with the
-              // leftmost characters removed.
+  /// For a gapped gapmer, returns a copy of it with c1 and c2 appended
+  /// respectively to the prefix and to the suffix, with the leftmost characters
+  /// removed.
+  gapmer next(char c1, char c2) const;
   gapmer next_(std::uint8_t c1, std::uint8_t c2) const;
   void hamming_neighbours(auto& callback) const;
 
@@ -176,12 +174,14 @@ class gapmer {
             bool no_larger = false>
   void huddinge_neighbours(auto&& callback) const;
 
-  uint16_t huddinge_distance(
-      gapmer const other, int& out) const;  //< Calculate the Huddinge distance.
-  std::string to_string() const;  //< Returns the sequence as std::string.
-  bool is_canonical()
-      const;  //< Returns true iff. this is lexicographically equal or smaller
-              // than its reverse complement. // FIXME: is the statement true?
+  /// Calculate the Huddinge distance.
+  uint16_t huddinge_distance(gapmer const other, int& out) const;
+  /// Returns the sequence as std::string.
+  std::string to_string() const;
+  /// Returns true iff. this is lexicographically equal or smaller
+  /// than its reverse complement.
+  // FIXME: is the statement true?
+  bool is_canonical() const;
   gapmer reverse_complement() const;  //< Get this’s reverse complement.
   bool is_valid() const;
   std::bitset<64> bits() const { return data_; }
@@ -258,14 +258,14 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::read_word_aligned_characters(
     uint64_t const* d_ptr, uint8_t const kk, uint8_t const gap_start,
     uint8_t const gap_length) {
   assert(kk <= max_k);
-  assert(gap_start < kk); // The gap needs to start before the end of the text.
+  assert(gap_start < kk);  // The gap needs to start before the end of the text.
   assert(gap_length <= max_gap);
 
   uint64_t retval{};
   uint8_t ii{};
-  uint8_t const limit((kk + gap_length + 7) /
-                      8);  // Since d_ptr is uint64_t const *, we are bound to
-                           // have a multiple of 8 bytes.
+  // Since d_ptr is uint64_t const *, we are bound to
+  // have a multiple of 8 bytes.
+  uint8_t const limit((kk + gap_length + 7) / 8);
   if constexpr (t_has_gap) {
     assert(gap_start);
     assert(gap_length);
@@ -390,9 +390,9 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
     auto&& callback) const {
   const uint64_t val = value();
   const uint8_t len = length();
-  assert(no_larger ||
-         len < max_k);  // It is the user’s responsibility to check the length
-                        // before listing the neighbours.
+  // It is the user’s responsibility to check the length before listing the
+  // neighbours.
+  assert(no_larger || len < max_k);
   assert(no_smaller || 5 <= len);
   const uint8_t gap_s = gap_start();
   const uint8_t prefix_len = gap_s;
