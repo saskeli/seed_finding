@@ -78,8 +78,8 @@ std::uint64_t pack_characters(std::string_view sv,
   auto it{sv.cbegin()};
   auto const end{sv.cend()};
 
-                // If the current position is not divisible by 32, dst
-                // must be non-empty.
+  // If the current position is not divisible by 32, dst
+  // must be non-empty.
   if (dst_pos % 32U) {
     auto& dst_word{dst.back()};
     do {
@@ -95,7 +95,7 @@ std::uint64_t pack_characters(std::string_view sv,
 
   if (it == end) return dst_pos;
 
-                // 0 == dst_pos % 32U.
+  // 0 == dst_pos % 32U.
   while (true) {
     auto& dst_word{dst.emplace_back(0)};
     do {
