@@ -28,7 +28,7 @@ RC_GTEST_PROP(pack_characters_arbitrary, PackAndUnpack,
   std::string buffer;
   std::uint64_t pos{};
 
-        // Pack the characters.
+  // Pack the characters.
   for (auto const& vec : text) {
     buffer.clear();
     for (auto const nt : vec) buffer.push_back(char(nt));
@@ -37,10 +37,10 @@ RC_GTEST_PROP(pack_characters_arbitrary, PackAndUnpack,
     EXPECT_NE(UINT64_MAX, pos);
   }
 
-        // Unpack.
+  // Unpack.
   sf::unpack_characters(packed, pos, unpacked);
 
-        // Flatten the range.
+  // Flatten the range.
   auto rng{ranges::views::for_each(
       text, [](auto const& vec) { return ranges::views::all(vec); })};
 
