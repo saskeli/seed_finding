@@ -10,7 +10,7 @@
 
 namespace sf::detail {
 
-// The purpose is to maintain the state while iterating
+// The purpose of this class is to maintain the state while iterating
 // characters or pairs of characters in a packed string.
 class packed_character_iteration_context {
  private:
@@ -94,14 +94,14 @@ inline void iterate_packed_character_pairs(packed_word_vector const& src,
                                            std::uint64_t const lhs_start_pos,
                                            std::uint64_t const rhs_start_pos,
                                            t_cb&& cb) {
+  typedef detail::packed_character_iteration_context context_type;
+
   if (length <= rhs_start_pos) return;
 
   libbio_assert_lte(lhs_start_pos, rhs_start_pos);
 
-  detail::packed_character_iteration_context lhs_ctx{src, lhs_start_pos,
-                                                     length};
-  detail::packed_character_iteration_context rhs_ctx{src, rhs_start_pos,
-                                                     length};
+  context_type lhs_ctx{src, lhs_start_pos, length};
+  context_type rhs_ctx{src, rhs_start_pos, length};
   std::uint8_t const rhs_remaining_characters((length - rhs_start_pos) % 32U
                                                   ?: 32U);
 
