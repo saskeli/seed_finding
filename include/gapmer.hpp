@@ -54,14 +54,13 @@ class gapmer {
                                                       uint8_t gap_start = 0,
                                                       uint8_t gap_length = 0);
 
-  /// Takes packed characters as input, returns the packed representation
+  /// Takes data as input, returns the packed representation
   /// including the lengths and the gap position.
-  static inline uint64_t from_packed_characters(uint64_t data, uint8_t kk);
-  /// Takes packed characters as input, returns the packed representation
+  static inline uint64_t from_value(uint64_t data, uint8_t kk);
+  /// Takes data as input, returns the packed representation
   /// including the lengths and the gap position.
-  static inline uint64_t from_packed_characters(uint64_t data, uint8_t kk,
-                                                uint8_t gap_start,
-                                                uint8_t gap_length);
+  static inline uint64_t from_value(uint64_t data, uint8_t kk,
+                                    uint8_t gap_start, uint8_t gap_length);
   /// Takes packed characters as input, returns the packed representation
   /// including the lengths and the gap position.
   static inline uint64_t from_packed_characters(std::span<uint64_t const> data,
@@ -100,10 +99,10 @@ class gapmer {
  public:
   constexpr gapmer() = default;  //< Construct an empty value.
   /// Construct from the given packed data and lengths.
-  gapmer(uint64_t v, uint8_t k) : data_(from_packed_characters(v, k)) {}
+  gapmer(uint64_t v, uint8_t k) : data_(from_value(v, k)) {}
   /// Construct from the given packed data, gap position and lengths.
   gapmer(uint64_t v, uint8_t k, uint8_t gap_start, uint8_t gap_length)
-      : data_(from_packed_characters(v, k, gap_start, gap_length)) {}
+      : data_(from_value(v, k, gap_start, gap_length)) {}
 
   /// Construct from the given character data ([ACGT.]*) aligned to 8 bytes.
   gapmer(uint64_t const* d_ptr, uint8_t kk)
@@ -121,8 +120,8 @@ class gapmer {
   /// bytes.
   gapmer(std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
          uint8_t gap_length)
-      : gapmer(from_packed_characters(data, kk, gap_start, gap_length), kk,
-               gap_start, gap_length) {}
+      : gapmer(from_value(data, kk, gap_start, gap_length), kk, gap_start,
+               gap_length) {}
 
   uint64_t data() const { return data_; }  //< Get the packed data.
   operator uint64_t() const { return data(); }  //< Get the packed data.
@@ -199,8 +198,8 @@ gapmer<middle_gap_only, t_max_gap>::gapmer(uint64_t prefix, uint64_t suffix,
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
-    uint64_t data, uint8_t kk) {
+uint64_t gapmer<middle_gap_only, t_max_gap>::from_value(uint64_t data,
+                                                        uint8_t kk) {
   assert(kk <= max_k);
   uint64_t meta{kk};
   meta <<= 2 * max_k;
@@ -208,8 +207,10 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
-    uint64_t data, uint8_t kk, uint8_t gap_start, uint8_t gap_length) {
+uint64_t gapmer<middle_gap_only, t_max_gap>::from_value(uint64_t data,
+                                                        uint8_t kk,
+                                                        uint8_t gap_start,
+                                                        uint8_t gap_length) {
   assert(kk <= max_k);
   assert((0 == gap_start && 0 == gap_length) ||
          (gap_start < kk && gap_length <= max_gap));
