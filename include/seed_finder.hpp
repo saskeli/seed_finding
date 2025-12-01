@@ -7,7 +7,10 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <libbio/utility.hh>
+#include <set>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -15,21 +18,25 @@
 #include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
+#include "reader_adapter.hpp"
 #include "partial_count.hpp"
+#include "seqio_reader_adapter.hpp"
 #include "util.hpp"
 
 namespace sf {
 
 template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true,
           bool filter_mers = true>
-class seed_finder {
+class seed_finder : public reader_adapter_delegate {
  public:
-  typedef gapmer<middle_gap_only, max_gap> G;
+  typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
  private:
-  typedef gapmer_count<middle_gap_only, max_gap> G_C;
+  typedef gapmer_count<middle_gap_only, max_gap> gapmer_count_type;
+  typedef std::set<std::string, libbio::compare_strings_transparent> path_set;
+
   struct Res {
-    G g;
+    gapmer_type g;
     double p;
     uint64_t sig_count;
     uint64_t bg_count;
@@ -38,6 +45,7 @@ class seed_finder {
   std::string sig_path_;
   std::string bg_path_;
   std::vector<Res> seeds_;
+  path_set paths_with_errors_;
   uint64_t sig_size_;
   uint64_t bg_size_;
   double p_;
@@ -64,9 +72,9 @@ class seed_finder {
    * @return True, if extension from a to b is valid
    */
   template <bool debug = false>
-  bool do_extend([[maybe_unused]] G a, [[maybe_unused]] G b, double a_sig,
-                 double a_bg, double b_sig, double b_bg, double a_r,
-                 double b_r) {
+  bool do_extend([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
+                 double a_sig, double a_bg, double b_sig, double b_bg,
+                 double a_r, double b_r) {
     if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (a_sig > b_sig * 4) {
         return false;
@@ -126,9 +134,9 @@ class seed_finder {
    * == false, else output parameter.
    */
   template <bool calc_b_r>
-  bool do_filter([[maybe_unused]] G a, [[maybe_unused]] G b, double a_sig,
-                 double a_bg, double b_sig, double b_bg, double a_r,
-                 double& b_r) {
+  bool do_filter([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
+                 double a_sig, double a_bg, double b_sig, double b_bg,
+                 double a_r, double& b_r) {
     if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (b_sig > a_sig) {
         if constexpr (calc_b_r) {
@@ -160,13 +168,13 @@ class seed_finder {
    * @param sig_bg_b Length k + 1 gapmer count tables
    */
   void check_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                   uint8_t gap_l, uint64_t offset, G_C& sig_bg_a,
-                   G_C& sig_bg_b) {
+                   uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_a,
+                   gapmer_count_type& sig_bg_b) {
 #ifdef DEBUG
-    if (offset + v >= G_C::lookup_elems(k)) {
+    if (offset + v >= gapmer_count_type::lookup_elems(k)) {
       std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
-                << " of " << G_C::lookup_elems(k) << " element table"
-                << std::endl;
+                << " of " << gapmer_count_type::lookup_elems(k)
+                << " element table" << std::endl;
       exit(1);
     }
 #endif
@@ -175,7 +183,7 @@ class seed_finder {
         return;
       }
     }
-    G g(v, k, gap_s, gap_l);
+    gapmer_type g(v, k, gap_s, gap_l);
     if (not g.is_canonical()) {
       if constexpr (filter_mers) {
 #pragma omp critical(a_bv)
@@ -202,7 +210,7 @@ class seed_finder {
     }
     if constexpr (filter_mers) {
       // Length k mers.
-      auto callback_a = [&](G o) {
+      auto callback_a = [&](gapmer_type o) {
         uint64_t o_offset = sig_bg_a.offset(o.gap_start(), o.gap_length());
         uint64_t o_v = o.value();
         double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
@@ -224,7 +232,7 @@ class seed_finder {
       g.template huddinge_neighbours<true, false, true>(callback_a);
 
       // Length k + 1 mers.
-      auto callback_b = [&](G o) {
+      auto callback_b = [&](gapmer_type o) {
         uint64_t o_offset = sig_bg_b.offset(o.gap_start(), o.gap_length());
         uint64_t o_v = o.value();
         double o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
@@ -272,12 +280,13 @@ class seed_finder {
    */
   template <class M>
   void filter_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                    uint8_t gap_l, uint64_t offset, G_C& sig_bg_c, M& m) {
+                    uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_c,
+                    M& m) {
 #ifdef DEBUG
-    if (offset + v >= G_C::lookup_elems(k)) {
+    if (offset + v >= gapmer_count_type::lookup_elems(k)) {
       std::cerr << "k = " << int(k) << " & sig_bg_c.k_ = " << int(sig_bg_c.k_)
                 << " :\n accessing " << offset << " + " << v << " = "
-                << offset + v << " of " << G_C::lookup_elems(k)
+                << offset + v << " of " << gapmer_count_type::lookup_elems(k)
                 << " element table" << std::endl;
       exit(1);
     }
@@ -287,7 +296,7 @@ class seed_finder {
         return;
       }
     }
-    G g(v, k, gap_s, gap_l);
+    gapmer_type g(v, k, gap_s, gap_l);
     if (not g.is_canonical()) {
       if constexpr (filter_mers) {
 #pragma omp critical(d_bv)
@@ -313,7 +322,7 @@ class seed_finder {
       return;
     }
     if constexpr (filter_mers) {
-      auto callback = [&](G o) {
+      auto callback = [&](gapmer_type o) {
         uint64_t o_offset = sig_bg_c.offset(o.gap_start(), o.gap_length());
         uint64_t o_v = o.value();
         double o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
@@ -349,21 +358,21 @@ class seed_finder {
    * @param sig_bg_c  Ouput parameter, for storing counts for final k-length
    * mers
    */
-  void counted_seeds_and_candidates(G_C& sig_bg_c) {
+  void counted_seeds_and_candidates(gapmer_count_type& sig_bg_c) {
     std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
     // Initialize by counting 5-mers
-    G_C sig_bg_a(sig_path_, bg_path_, 5);
+    gapmer_count_type sig_bg_a(sig_path_, bg_path_, 5, *this);
     if constexpr (enable_smootihing) {
       sig_bg_a.smooth();
     }
 
     for (uint8_t k = 6; k <= lookup_k_; ++k) {
       // Initialize the k + 1 to compute extensions
-      G_C sig_bg_b(sig_path_, bg_path_, k);
+      gapmer_count_type sig_bg_b(sig_path_, bg_path_, k, *this);
       if constexpr (enable_smootihing) {
         sig_bg_b.smooth();
       }
-      uint64_t v_lim = G_C::ONE << ((k - 1) * 2);
+      uint64_t v_lim = gapmer_count_type::ONE << ((k - 1) * 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
         check_count(k - 1, v, 0, 0, 0, sig_bg_a, sig_bg_b);
@@ -374,7 +383,7 @@ class seed_finder {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
           uint64_t offset = sig_bg_a.offset(gap_s, gap_l);
 #ifdef DEBUG
-          if (offset >= G_C::lookup_elems(k + 1)) {
+          if (offset >= gapmer_count_type::lookup_elems(k + 1)) {
             std::cerr << "invalid offset " << offset << " for gap start "
                       << int(gap_s) << " and gap length " << int(gap_l)
                       << std::endl;
@@ -418,7 +427,7 @@ class seed_finder {
                 << p.second.sig_count << ", " << p.second.bg_count << ", "
                 << p.second.p << std::endl;
 #endif
-      auto callback = [&](G o) {
+      auto callback = [&](gapmer_type o) {
         if (not o.is_canonical()) {
           o = o.reverse_complement();
         }
@@ -465,13 +474,13 @@ class seed_finder {
   void extend(M& a, M& b, P& p_counter, uint16_t k, bool prune) {
     const constexpr double fill_limit = 0.4;
     std::cerr << "    Extend " << a.size() << " mers." << std::endl;
-    auto hash = [](const G g) { return uint64_t(g); };
-    std::unordered_set<G, decltype(hash)> del_set;
-    auto callback = [&](G o) {
+    auto hash = [](const gapmer_type g) { return uint64_t(g); };
+    std::unordered_set<gapmer_type, decltype(hash)> del_set;
+    auto callback = [&](gapmer_type o) {
       if (not b.contains(o)) {
         p_counter.init(o);
         if constexpr (enable_smootihing) {
-          auto ccb = [&](G h_n) { p_counter.init(h_n); };
+          auto ccb = [&](gapmer_type h_n) { p_counter.init(h_n); };
           o.hamming_neighbours(ccb);
         }
       }
@@ -520,7 +529,7 @@ class seed_finder {
                   << p.second.p << std::endl;
 #endif
         bool keep = true;
-        auto callback_extend = [&](G o) {
+        auto callback_extend = [&](gapmer_type o) {
           if (not o.is_canonical()) {
             o = o.reverse_complement();
           }
@@ -556,8 +565,8 @@ class seed_finder {
    */
   template <class M>
   void filter(M& m) {
-    auto hash = [](const G& g) { return uint64_t(g); };
-    std::unordered_set<G, decltype(hash)> del_set;
+    auto hash = [](const gapmer_type& g) { return uint64_t(g); };
+    std::unordered_set<gapmer_type, decltype(hash)> del_set;
     auto e = m.end();
     for (auto it = m.begin(); it != e; ++it) {
       bool keep = true;
@@ -584,6 +593,21 @@ class seed_finder {
     std::cerr << "    filtered to " << m.size() << " mers" << std::endl;
   }
 
+  /**
+   * Count the read and their reverse complements in the input.
+   *
+   * @param path input path
+   */
+  std::uint64_t count_reads_with_rc(std::string const &path) {
+    std::uint64_t retval{};
+    reader_adapter_type reader(*this);
+    reader.read_from_path(path);
+    while (reader.retrieve_next_read())
+      ++retval;
+    reader.finish();
+    return retval;
+  }
+
  public:
   seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
@@ -602,24 +626,8 @@ class seed_finder {
         lookup_k_(lookup_k),
         prune_(prune) {
     gsl_set_error_handler_off();
-    seq_io::Reader_x sr(sig_path_);
-    sr.enable_reverse_complements();
-    while (true) {
-      uint64_t len = sr.get_next_read_to_buffer();
-      if (len == 0) {
-        break;
-      }
-      sig_size_ += len;
-    }
-    seq_io::Reader_x br(bg_path_);
-    br.enable_reverse_complements();
-    while (true) {
-      uint64_t len = br.get_next_read_to_buffer();
-      if (len == 0) {
-        break;
-      }
-      bg_size_ += len;
-    }
+    sig_size_ = count_reads_with_rc(sig_path_);
+    bg_size_ = count_reads_with_rc(bg_path_);
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
     std::cerr << "Background " << bg_path_ << " with length " << bg_size_
               << std::endl;
@@ -633,14 +641,14 @@ class seed_finder {
    * candidates
    */
   void find_seeds() {
-    auto hash = [](const G g) { return uint64_t(g); };
-    std::unordered_map<G, Res, decltype(hash)> a;
-    std::unordered_map<G, Res, decltype(hash)> b;
+    auto hash = [](const gapmer_type g) { return uint64_t(g); };
+    std::unordered_map<gapmer_type, Res, decltype(hash)> a;
+    std::unordered_map<gapmer_type, Res, decltype(hash)> b;
     // full k-mer couting as long as memory is sufficient.
     {
-      G_C sig_bg_c;
+      gapmer_count_type sig_bg_c;
       counted_seeds_and_candidates(sig_bg_c);
-      uint64_t v_lim = G_C::ONE << (lookup_k_ * 2);
+      uint64_t v_lim = gapmer_count_type::ONE << (lookup_k_ * 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
         filter_count(lookup_k_, v, 0, 0, 0, sig_bg_c, a);
@@ -658,7 +666,7 @@ class seed_finder {
       }
     }
     // Partial count with extensions when we can no longer count everything
-    partial_count<G> p_counter;
+    partial_count<gapmer_type> p_counter(*this);
     for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
       extend(a, b, p_counter, k, prune_);
@@ -691,5 +699,25 @@ class seed_finder {
   const std::vector<Res>& get_seeds() const { return seeds_; }
 
   double x() const { return x_; }
+
+ private:
+  bool should_report_errors_for_path(reader_adapter&,
+                                     std::string_view path) override {
+    return !paths_with_errors_.contains(path);
+  }
+
+  void found_first_read_with_unexpected_character(
+      reader_adapter&, std::string_view path,
+      std::uint64_t lineno) override {
+    std::cerr << "WARNING: Skipping reads with unexpected characters in "
+              << path << "; first one on line " << lineno << ".\n";
+  }
+
+  void found_total_reads_with_unexpected_characters(
+      reader_adapter&, std::string_view path,
+      std::uint64_t count) override {
+    paths_with_errors_.emplace(path);
+    std::cerr << "WARNING: Skipped " << count << " reads in " << path << ".\n";
+  }
 };
 }  // namespace sf

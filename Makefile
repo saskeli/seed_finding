@@ -4,72 +4,142 @@ ifndef MAX_GAP
 MAX_GAP = 15
 endif
 
+CMAKE ?= cmake
 GCOV ?= gcov
 
-CFLAGS = -std=c++23 -Wall -Wextra -Wshadow -pedantic -march=native -DMAX_GAP=$(MAX_GAP)
+## Not used directly
+WARNING_FLAGS = \
+	-Wall \
+	-Werror \
+	-Wextra \
+	-Wshadow \
+	-Wno-gnu-conditional-omitted-operand \
+	-Wno-unused-parameter \
+	-Wno-unused-function \
+	-Wno-error=unused-command-line-argument
 
-PERF_FLAGS = -Ofast -DNDEBUG -fopenmp
-TEST_PERF_FLAGS = -O0 -g -DDEBUG
+PERF_FLAGS = -O3 -g -DNDEBUG -fopenmp -march=native
+DEBUG_PERF_FLAGS = -O0 -g -DDEBUG
+TEST_PERF_FLAGS = $(DEBUG_PERF_FLAGS)
+TEST_COVERAGE_PERF_FLAGS = -O1 -g
 
-DEBUG_FLAGS = -g -DDEBUG
+DEBUG_FLAGS = -DDEBUG
 
 ifdef VERBOSE
 DEBUG_FLAGS += -DVERBOSE
 endif
 
-INCLUDE += -isystem deps/sdsl-lite/include -isystem deps/seqio/include -isystem deps/args
+INCLUDE += \
+	-Iinclude \
+	-isystem deps/sdsl-lite/include \
+	-isystem deps/seqio/include \
+	-isystem deps/args \
+	-isystem deps/libbio/include \
+	-isystem deps/libbio/lib/range-v3/include
 
 LIBS += -lz -lgsl -lgslcblas -lm
 
-HEADERS =	include/bits.hpp \
+## Used directly
+CPPFLAGS				= -DMAX_GAP=$(MAX_GAP) $(INCLUDE)
+CXXFLAGS				= -std=c++23 $(WARNING_FLAGS) $(PERF_FLAGS)
+LDFLAGS					= $(LIBS)
+DEBUG_CPPFLAGS			= $(CPPFLAGS) $(DEBUG_FLAGS)
+DEBUG_CXXFLAGS			= -std=c++23 $(WARNING_FLAGS) $(DEBUG_PERF_FLAGS)
+DEBUG_LDFLAGS			= $(LDFLAGS)
+TEST_CPPFLAGS			= -DGTEST_ON $(INCLUDE) -isystem $(GTEST_DIR)/googletest/include -isystem $(RAPIDCHECK_DIR)/include -isystem $(RAPIDCHECK_DIR)/extras/gtest/include
+TEST_CXXFLAGS			= -std=c++23 -pthread $(WARNING_FLAGS) $(TEST_PERF_FLAGS)
+TEST_LDFLAGS			= -L $(GTEST_DIR)/build/lib -L $(RAPIDCHECK_DIR)/build -lgtest_main -lgtest -lrapidcheck $(LIBS)
+TEST_COVERAGE_CPPFLAGS	= $(TEST_CPPFLAGS)
+TEST_COVERAGE_CXXFLAGS	= -std=c++23 -pthread --coverage $(WARNING_FLAGS) $(TEST_COVERAGE_PERF_FLAGS)
+TEST_COVERAGE_LDFLAGS	= $(TEST_LDFLAGS)
+
+
+HEADERS =	include/args.hpp \
+			include/bits.hpp \
+			include/configuration.hpp \
+			include/dot_writer.hpp \
 			include/fm_index.hpp \
 			include/gapmer.hpp \
 			include/gapmer_count.hpp \
+			include/libbio_reader_adapter.hpp \
+			include/pack_characters.hpp \
+			include/packed_character_iteration.hpp \
 			include/partial_count.hpp \
+			include/reader_adapter.hpp \
 			include/seed_clusterer.hpp \
 			include/seed_finder.hpp \
+			include/seqio_reader_adapter.hpp \
 			include/string_buffer.hpp \
 			include/util.hpp \
-			include/dot_writer.hpp \
 			include/version.hpp
 
-ARGS = deps/args/args.hxx
+# FIXME: A library-based design could be a good idea.
+SEED_FINDER_OBJECTS = \
+			pack_characters.o \
+			seed_finder.o \
+			seqio_reader_adapter.o
+
+SEED_FINDER_DEBUG_OBJECTS = $(SEED_FINDER_OBJECTS:.o=.debug.o)
+
+TEST_OBJECTS = \
+			pack_characters.o \
+			test/test.o
+
+TEST_COVERAGE_OBJECTS = $(TEST_OBJECTS:.o=.coverage.o)
+GCDA = $(TEST_COVERAGE_OBJECTS:.o=.gcda)
+GCNO = $(TEST_COVERAGE_OBJECTS:.o=.gcno)
+
+ARGS_HXX = deps/args/args.hxx
+LIBBIO_DIR = deps/libbio
 SDSL_DIR = deps/sdsl-lite/lib
 
 GTEST_DIR = deps/googletest
 RAPIDCHECK_DIR = deps/rapidcheck
 
-GFLAGS = -lpthread -DGTEST_ON -isystem $(GTEST_DIR)/googletest/include -isystem $(RAPIDCHECK_DIR)/include -isystem $(RAPIDCHECK_DIR)/extras/gtest/include -pthread -L $(GTEST_DIR)/build/lib -L $(RAPIDCHECK_DIR)/build
+TEST_HEADERS = \
+			test/bit_tests_arbitrary.hpp \
+			test/gapmer_arbitrary.hpp \
+			test/gapmer_count_tests.hpp \
+			test/gapmer_tests.hpp \
+			test/nucleotide.hpp \
+			test/pack_characters_arbitrary.hpp \
+			test/packed_character_iteration_arbitrary.hpp \
+			test/string_buffer_arbitrary.hpp \
+			test/test.hpp \
+			test/util_tests.hpp
 
-TEST_HPP = test/gapmer_tests.hpp test/util_tests.hpp test/gapmer_count_tests.hpp
 
-.PHONY: clean all test cover
+.PHONY: clean all debug test cover
 
-seed_finder: seed_finder.cpp $(HEADERS) $(ARGS) | $(SDSL_DIR)
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder $(LIBS)
 
-%/%.hpp:
+all: motivating huddinge seed_finder comp
 
-motivating: motivating.cpp
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) -isystem deps/seqio/include motivating.cpp -o motivating
+debug: seed_finder_deb huddinge_deb
 
-huddinge: huddinge.cpp include/util.hpp include/gapmer.hpp
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge
+motivating: motivating.o
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
-comp: comp.cpp include/util.hpp
-	$(CXX) $(CFLAGS) $(PERF_FLAGS) $(INCLUDE) comp.cpp -o comp
+huddinge: huddinge.o include/util.hpp include/gapmer.hpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
-huddinge_deb: huddinge.cpp $(HEADERS)
-	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) huddinge.cpp -o huddinge_deb
+seed_finder: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS_HXX) | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
+	$(CXX) $(CXXFLAGS) $(SEED_FINDER_OBJECTS) -o $@ $(LDFLAGS)
 
-seed_finder_deb: seed_finder.cpp $(HEADERS) | $(SDSL_DIR) $(ARGS_DIR)
-	$(CXX) $(CFLAGS) $(DEBUG_FLAGS) $(INCLUDE) seed_finder.cpp -o seed_finder_deb $(LIBS)
+comp: comp.o include/util.hpp
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
+
+huddinge_deb: huddinge.debug.o $(HEADERS)
+	$(CXX) $(DEBUG_CXXFLAGS) $< -o $@ $(DEBUG_LDFLAGS)
+
+seed_finder_deb: $(SEED_FINDER_DEBUG_OBJECTS) $(HEADERS) $(ARGS_HXX) | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
+	$(CXX) $(DEBUG_CXXFLAGS) $(SEED_FINDER_DEBUG_OBJECTS) -o $@ $(DEBUG_LDFLAGS)
 
 clean:
-	rm -f huddinge huddinge_deb seed_finder seed_finder_deb comp
-	rm -f test/test test/cover test/test.o test/cover.o
-	rm -f *.gcov test/*.gcda test/*.gcno index.info
-	rm -rf target/
+	$(RM) $(SEED_FINDER_OBJECTS) motivating.o huddinge.o comp.o $(SEED_FINDER_DEBUG_OBJECTS) huddinge.debug.o $(TEST_OBJECTS) $(TEST_COVERAGE_OBJECTS)
+	$(RM) $(GCDA) $(GCNO) coverage.info
+	$(RM) huddinge huddinge_deb seed_finder seed_finder_deb comp motivating
+	$(RM) test/test test/cover
+	$(RM) -r target/
 
 $(SDSL_DIR):
 	git submodule update --init
@@ -80,33 +150,59 @@ $(GTEST_DIR)/googletest:
 $(RAPIDCHECK_DIR):
 	git submodule update --init
 
-$(ARGS):
+$(ARGS_HXX):
 	git submodule update --init
 
+$(LIBBIO_DIR):
+	git submodule update --init --recursive
+
+$(LIBBIO_DIR)/src/libbio.a: deps/libbio/local.mk
+	$(MAKE) -C deps/libbio src/libbio.a
+
+$(LIBBIO_DIR)/local.mk: local.mk
+	cp local.mk deps/libbio/
+
+local.mk:
+	bash -c "[ -e local.mk ] || echo -n "" > local.mk"
+
 $(GTEST_DIR)/build/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
-	(mkdir -p $(GTEST_DIR)/build && cd $(GTEST_DIR)/build && cmake -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF .. && $(MAKE))
+	(mkdir -p $(GTEST_DIR)/build && cd $(GTEST_DIR)/build && $(CMAKE) -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF .. && $(MAKE))
 
 $(RAPIDCHECK_DIR)/build/librapidcheck.a: | $(RAPIDCHECK_DIR)
-	(mkdir -p $(RAPIDCHECK_DIR)/build && cd $(RAPIDCHECK_DIR)/build && cmake -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF -DRC_ENABLE_GTEST=ON .. && $(MAKE))
+	(mkdir -p $(RAPIDCHECK_DIR)/build && cd $(RAPIDCHECK_DIR)/build && $(CMAKE) -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF -DRC_ENABLE_GTEST=ON .. && $(MAKE))
 
-test/test.o: $(TEST_HPP) $(GTEST_HEADERS) $(HEADERS) test/test.cpp
-	$(CXX) $(CFLAGS) $(GFLAGS) -c test/test.cpp -o test/test.o
+test/test: $(TEST_OBJECTS) $(HEADERS) $(TEST_HEADERS) $(GTEST_DIR)/build/lib/libgtest_main.a $(RAPIDCHECK_DIR)/build/librapidcheck.a
+	$(CXX) $(TEST_CXXFLAGS) $(TEST_OBJECTS) -o $@ $(TEST_LDFLAGS)
 
-test/test: $(GTEST_DIR)/build/lib/libgtest_main.a $(RAPIDCHECK_DIR)/build/librapidcheck.a $(TEST_HPP) $(HEADERS) test/test.cpp
-	$(CXX) $(CFLAGS) $(GFLAGS) $(INCLUDE) $(TEST_PERF_FLAGS) test/test.cpp -o test/test -lgtest_main -lgtest -lrapidcheck $(LIBS)
+test/cover: $(TEST_COVERAGE_OBJECTS) $(HEADERS) $(TEST_HEADERS) $(GTEST_DIR)/build/lib/libgtest_main.a $(RAPIDCHECK_DIR)/build/librapidcheck.a
+	$(CXX) $(TEST_COVERAGE_CXXFLAGS) $(TEST_COVERAGE_OBJECTS) -o $@ $(TEST_COVERAGE_LDFLAGS)
 
 test: test/test
 	test/test $(ARG)
 
-test/cover: $(GTEST_DIR)/build/lib/libgtest_main.a $(TEST_HPP) $(HEADERS) test/test.cpp
-	$(CXX) -g --coverage -O1 $(CFLAGS) $(GFLAGS) $(INCLUDE) test/test.cpp -o test/cover -lgtest_main -lgtest -lrapidcheck -lgcov $(LIBS)
-
 cover: test/cover
-	rm -f *.gcov test/*.gcda coverage.info
-	test/cover
+	$(RM) $(GCDA) $(GCNO) coverage.info
+	./test/cover
 	lcov -c --ignore-errors inconsistent,unused --directory test --output-file coverage.info --gcov-tool $(GCOV)
 	lcov --remove coverage.info "/usr*" --output-file coverage.info
 	genhtml coverage.info -o target
+
+test/test.o: test/test.cpp $(HEADERS) $(TEST_HEADERS) $(GTEST_HEADERS)
+	$(CXX) $(TEST_CPPFLAGS) $(TEST_CXXFLAGS) -c $< -o $@
+
+test/test.coverage.o: test/test.cpp $(HEADERS) $(TEST_HEADERS) $(GTEST_HEADERS)
+	$(CXX) $(TEST_COVERAGE_CPPFLAGS) $(TEST_COVERAGE_CXXFLAGS) -c $< -o $@
+
+%/%.hpp:
+
+%.o: %.cpp
+	$(CXX) -c -o $@ $(CPPFLAGS) $(CXXFLAGS) $<
+
+%.debug.o: %.cpp
+	$(CXX) -c -o $@ $(DEBUG_CPPFLAGS) $(DEBUG_CXXFLAGS) $<
+
+%.coverage.o: %.cpp
+	$(CXX) -c -o $@ $(TEST_COVERAGE_CPPFLAGS) $(TEST_COVERAGE_CXXFLAGS) $<
 
 # Output git tag or version hash to config.h.
 include/version.hpp: SHELL := /bin/bash

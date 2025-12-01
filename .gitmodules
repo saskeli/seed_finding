@@ -13,3 +13,6 @@
 [submodule "deps/args"]
 	path = deps/args
 	url = https://github.com/Taywee/args.git
+[submodule "deps/libbio"]
+	path = deps/libbio
+	url = https://github.com/tsnorri/libbio.git

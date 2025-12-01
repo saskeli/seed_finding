@@ -12,15 +12,23 @@
 #include <cstdint>
 #include <iostream>
 #include <iterator>
+#include <libbio/algorithm.hh>
 #include <ostream>
+#include <range/v3/view/enumerate.hpp>
+#include <range/v3/view/zip.hpp>
 #include <set>
+#include <span>
 #include <stdexcept>
+#include <string_view>
+#include <utility>
 #include <vector>
 
 #include "../include/gapmer.hpp"
 #include "../include/string_buffer.hpp"
 #include "../include/util.hpp"
+#include "gtest/gtest.h"
 #include "nucleotide.hpp"
+#include "pack_characters.hpp"
 #include "test.hpp"
 
 
@@ -53,6 +61,37 @@ using pointer_to_data_member_t =
     pointer_to_data_member_traits<t_data_member_ptr>::data_member_type;
 
 
+struct gapmer_packed_input {
+  typedef std::vector<packed_nucleotide> text_type;
+  text_type text;
+  std::uint8_t kk{};
+  std::uint8_t gap_start{};
+  std::uint8_t gap_length{};
+
+  constexpr gapmer_packed_input() = default;
+
+  explicit gapmer_packed_input(text_type const& text_, std::uint8_t kk_,
+                               std::uint8_t gap_start_,
+                               std::uint8_t gap_length_)
+      : text{text_}, kk{kk_}, gap_start{gap_start_}, gap_length{gap_length_} {
+    RC_ASSERT((gap_start == 0 && gap_length == 0) ||
+              !(gap_start == 0 || gap_length == 0));
+  }
+
+  explicit gapmer_packed_input(text_type const& text_, std::uint8_t kk_)
+      : gapmer_packed_input(text_, kk_, 0, 0) {}
+};
+
+
+std::ostream& operator<<(std::ostream& os, gapmer_packed_input const& input) {
+  os << "text: ";
+  for (auto const cc : input.text) os << char(cc);
+  os << " kk: " << +input.kk << " gap_start " << +input.gap_start
+     << " gap_length: " << +input.gap_length;
+  return os;
+}
+
+
 struct gapmer_data_config_base {
   uint8_t min_length{};
   uint8_t max_length{sf::gapmer<>::max_k};
@@ -61,12 +100,12 @@ struct gapmer_data_config_base {
 };
 
 
-template <typename t_type, t_type gapmer_data_config_base::*t_member>
+template <typename t_type, t_type gapmer_data_config_base::* t_member>
 struct gapmer_data_constraint_tpl {
   t_type value{};
 
   constexpr gapmer_data_constraint_tpl(t_type value_) : value{value_} {};
-  constexpr void assign(gapmer_data_config_base &config) const {
+  constexpr void assign(gapmer_data_config_base& config) const {
     config.*t_member = value;
   }
 };
@@ -113,7 +152,7 @@ struct gapmer_data {
 
   gapmer_type to_gapmer() const;
   operator gapmer_type() const { return to_gapmer(); }
-  void write_to_buffer(std::vector<uint64_t> &buffer) const;
+  void write_to_buffer(std::vector<uint64_t>& buffer) const;
   uint8_t gap_start() const {
     return suffix_length ? length - suffix_length : 0;
   }
@@ -203,11 +242,11 @@ auto gapmer_data<t_gapmer>::to_gapmer() const -> gapmer_type {
 
 template <typename t_gapmer>
 void gapmer_data<t_gapmer>::write_to_buffer(
-    std::vector<uint64_t> &buffer) const {
+    std::vector<uint64_t>& buffer) const {
   if (!length) return;
 
   buffer.resize((length + gap_length - 1) / 8 + 1, 0);
-  auto *dst(reinterpret_cast<char *>(buffer.data()));
+  auto* dst(reinterpret_cast<char*>(buffer.data()));
   auto sequence_{std::rotr(sequence, 2 * (length - 1))};
   uint8_t i{};
 
@@ -231,7 +270,7 @@ void gapmer_data<t_gapmer>::write_to_buffer(
 
 
 template <typename t_gapmer>
-std::ostream &operator<<(std::ostream &os, gapmer_data<t_gapmer> const gd) {
+std::ostream& operator<<(std::ostream& os, gapmer_data<t_gapmer> const gd) {
   os << gd.to_gapmer().to_string() << " (" << +gd.length << ", "
      << +gd.gap_start() << ", " << +gd.gap_length << ')';
   return os;
@@ -239,15 +278,15 @@ std::ostream &operator<<(std::ostream &os, gapmer_data<t_gapmer> const gd) {
 
 
 template <typename t_gapmer>
-std::ostream &operator<<(std::ostream &os, gapmer_pair<t_gapmer> const &pp) {
+std::ostream& operator<<(std::ostream& os, gapmer_pair<t_gapmer> const& pp) {
   os << "source: " << pp.source << " target: " << pp.target;
   return os;
 }
 
 
 template <typename t_gapmer>
-std::ostream &operator<<(std::ostream &os,
-                         huddinge_neighbourhood<t_gapmer> const &hn) {
+std::ostream& operator<<(std::ostream& os,
+                         huddinge_neighbourhood<t_gapmer> const& hn) {
   os << "source: '" << hn.gd << "' values.size(): " << hn.values.size();
   return os;
 }
@@ -255,6 +294,56 @@ std::ostream &operator<<(std::ostream &os,
 
 
 namespace rc {
+
+template <>
+struct Arbitrary<gapmer_packed_input> {
+  static Gen<gapmer_packed_input> arbitrary() {
+    return gen::mapcat(
+        gen::arbitrary<gapmer_packed_input::text_type>(),
+        [](gapmer_packed_input::text_type const& text) {
+          // We first generate the text, then based on its length kk, gap_start
+          // and gap_length one at a time. For some reason the integer values do
+          // not match if they are referenced (not copied) in the lambdas.
+          // Determine the length before moving below.
+          std::size_t const length{text.size()};
+          if (!length) return gen::just(gapmer_packed_input{});
+
+          if (1 == length) return gen::just(gapmer_packed_input(text, 1));
+
+          // Make sure that the gap length is meaningful by limiting the maximum
+          // k.
+          auto const make_k_gen{[&] {
+            std::uint8_t const length_limit(
+                1 +
+                libbio::min_ct(default_gapmer_type::max_k, (1 + length) / 2));
+            return gen::inRange(std::uint8_t{1}, length_limit);
+          }};
+
+          return gen::mapcat(make_k_gen(), [=, &text](std::uint8_t const kk) {
+            if (1 == kk) return gen::just(gapmer_packed_input(text, 1));
+
+            std::uint8_t const gap_length_limit(
+                libbio::min_ct(default_gapmer_type::max_gap, length - kk));
+            return gen::mapcat(
+                gen::inRange(std::uint8_t{}, gap_length_limit),
+                [=, &text](std::uint8_t const gap_length) {
+                  if (0 == gap_length)
+                    return gen::just(gapmer_packed_input{text, kk});
+
+                  std::uint8_t const gap_start_limit(
+                      libbio::min_ct(kk, length - kk - gap_length + 1));
+                  return gen::map(
+                      gen::inRange(std::uint8_t{1}, gap_start_limit),
+                      [=, &text](std::uint8_t const gap_start) {
+                        return gapmer_packed_input{text, kk, gap_start,
+                                                   gap_length};
+                      });
+                });
+          });
+        });
+  }
+};
+
 
 template <typename t_gapmer>
 struct Arbitrary<gapmer_data<t_gapmer>> {
@@ -537,7 +626,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
           str = gg.to_string();
           auto span(str.to_span());
 
-          auto const add_gapmer([&retval](string_buffer_type const &sb,
+          auto const add_gapmer([&retval](string_buffer_type const& sb,
                                           uint8_t const gap_start_,
                                           uint8_t const gap_length_) {
             // The constructor takes the number of defined characters as the
@@ -552,10 +641,10 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
             retval.values.insert(gg_);
           });
 
-          auto const modify_([&add_gapmer](string_buffer_type &sb,
+          auto const modify_([&add_gapmer](string_buffer_type& sb,
                                            uint8_t const gap_start_,
                                            uint8_t const gap_length_, auto it) {
-            auto &cc(*it);
+            auto& cc(*it);
             auto const orig_cc(cc);
             for (auto const cc_ : characters) {
               cc = cc_;
@@ -564,7 +653,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
             cc = orig_cc;
           });
 
-          auto const modify([&](string_buffer_type &sb,
+          auto const modify([&](string_buffer_type& sb,
                                 uint8_t const gap_start_,
                                 uint8_t const gap_length_, auto it, auto end) {
             while (it != end) {
@@ -573,7 +662,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
             }
           });
 
-          auto const extend_both([&modify_](string_buffer_type &sb,
+          auto const extend_both([&modify_](string_buffer_type& sb,
                                             uint8_t const gap_start_,
                                             uint8_t const gap_length_) {
             // Case 6.
@@ -596,7 +685,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
           });
 
           auto const extend_with_edge_gap_run(
-              [&modify_](string_buffer_type &sb) {
+              [&modify_](string_buffer_type& sb) {
                 // Case 7.
                 // Does not restore sb.
                 auto const orig_size(sb.size());
@@ -629,9 +718,8 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
               });
 
           auto const extend_middle_gap_both_ends(
-              [&add_gapmer, &modify_](string_buffer_type &sb,
-                                      uint8_t const gap_start_,
-                                      uint8_t const gap_length_) {
+              [&modify_](string_buffer_type& sb, uint8_t const gap_start_,
+                         uint8_t const gap_length_) {
                 // Case 4c.
                 switch (gap_length_) {
                   case 0:
@@ -737,7 +825,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
 
             case 1: {
               // Cases 4b and 2b.
-              auto &cc(*(span.begin() + gap_start));
+              auto& cc(*(span.begin() + gap_start));
               auto const orig_cc(cc);
               for (auto const cc_ : characters) {
                 cc = cc_;
@@ -776,7 +864,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
               extend_with_edge_gap_run(str_);
             } else {
               // Case 3a.
-              auto &cc(span[gap_start - 1]);
+              auto& cc(span[gap_start - 1]);
               auto const cc_(cc);
               cc = '.';
               if (gap_length < gapmer_type::max_gap)
@@ -811,7 +899,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
               extend_with_edge_gap_run(str_);
             } else {
               // Case 3a.
-              auto &cc(span[gap_start + gap_length]);
+              auto& cc(span[gap_start + gap_length]);
               auto const cc_(cc);
               cc = '.';
               if (gap_length < gapmer_type::max_gap)
@@ -901,7 +989,7 @@ struct Arbitrary<huddinge_neighbourhood_<t_gapmer_data>> {
 namespace sf {
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-void showValue(gapmer<middle_gap_only, t_max_gap> const gg, std::ostream &os) {
+void showValue(gapmer<middle_gap_only, t_max_gap> const gg, std::ostream& os) {
   os << gg.to_string();
 }
 
@@ -938,6 +1026,39 @@ SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, Constructors, gapmer_data,
       SF_ASSERT(gg1 == gg4);
     }
   }
+}
+
+
+// FIXME: test other gapmer types.
+RC_GTEST_PROP(gapmer_arbitrary, FromPackedCharacterStringConstructor,
+              (gapmer_packed_input const& test_input)) {
+  typedef std::vector<std::uint64_t> vector_type;
+  // Non-zero length required in gapmer’s constructor.
+  vector_type plain_text(1 + (test_input.text.size() + 7) / 8, 0);
+  vector_type packed_text{};
+  std::span plain_text_(reinterpret_cast<char*>(plain_text.data()),
+                        test_input.text.size());
+
+  // Assign the input characters to plain_text (via plain_text_).
+  for (auto&& [lhs, rhs] : ranges::views::zip(test_input.text, plain_text_))
+    rhs = char(lhs);
+
+  // Assign the input characters to packed_text.
+  auto const pack_res{sf::pack_characters(std::string_view{plain_text_}, packed_text, 0)};
+  EXPECT_EQ(pack_res, test_input.text.size());
+
+  RC_LOG() << "Plain text: ";
+  for (auto const cc : plain_text_) RC_LOG() << cc;
+  RC_LOG() << '\n';
+
+  auto const expected([&] {
+    if (0 == test_input.kk) return default_gapmer_type{};
+    return default_gapmer_type{plain_text.data(), test_input.kk,
+                               test_input.gap_start, test_input.gap_length};
+  }());
+  default_gapmer_type const actual{packed_text, test_input.kk,
+                                   test_input.gap_start, test_input.gap_length};
+  EXPECT_EQ(expected, actual);
 }
 
 
@@ -1011,7 +1132,7 @@ SF_RC_TEST_WITH_BASE_CASE(gapmer_arbitrary, AlignEmptyGapmer, gapmer_data,
 
 
 RC_GTEST_PROP(gapmer_arbitrary, AlignNonemptyGapmer,
-              (aligning_gapmer_pair<> const &pair)) {
+              (aligning_gapmer_pair<> const& pair)) {
   SF_RC_TAG(pair.target.length, pair.target.gap_length);
 
   typedef aligning_gapmer_pair<>::gapmer_type gapmer_type;
@@ -1023,7 +1144,7 @@ RC_GTEST_PROP(gapmer_arbitrary, AlignNonemptyGapmer,
 
 
 SF_RC_TEMPLATE_TEST(gapmer_arbitrary_aligns_to, AlignNonMatchingGapmer,
-                    (TypeParam const &pair),
+                    (TypeParam const& pair),
                     non_aligning_gapmer_pair_value_mismatch<>,
                     non_aligning_gapmer_pair_source_length_greater<>) {
   SF_RC_TAG(pair.target.length, pair.target.gap_length);
@@ -1035,7 +1156,7 @@ SF_RC_TEMPLATE_TEST(gapmer_arbitrary_aligns_to, AlignNonMatchingGapmer,
 
 
 SF_RC_TEMPLATE_TEST(gapmer_arbitrary_aligns_to_reversible,
-                    AlignNonMatchingGapmerReversible, (TypeParam const &pair),
+                    AlignNonMatchingGapmerReversible, (TypeParam const& pair),
                     non_aligning_gapmer_pair_gap_length_mismatch<>,
                     non_aligning_gapmer_pair_gap_position_mismatch<>) {
   SF_RC_TAG(pair.target.length, pair.target.gap_length);
@@ -1069,7 +1190,7 @@ typedef huddinge_neighbourhood<
 
 SF_RC_TEST_PROP(gapmer_arbitrary, GenerateHuddingeNeighbourhood,
                 gapmer_arbitrary_huddinge_neighbourhood_test_type,
-                gapmer_arbitrary_huddinge_neighbourhood_result_type const &hn,
+                gapmer_arbitrary_huddinge_neighbourhood_result_type const& hn,
                 (hn.gd.length, hn.gd.gap_length)) {
   typedef gapmer_arbitrary_huddinge_neighbourhood_gapmer_type
       gapmer_type;  // FIXME: Use a type parameter here.

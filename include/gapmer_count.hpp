@@ -2,19 +2,20 @@
 
 #include <stdlib.h>
 
-#include <SeqIO/SeqIO.hh>
 #include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <libbio/algorithm.hh>
 #include <sdsl/bit_vectors.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
 
+#include "configuration.hpp"
 #include "gapmer.hpp"
-#include "string_buffer.hpp"
+#include "reader_adapter.hpp"
 
 namespace sf {
 
@@ -51,86 +52,69 @@ class gapmer_count {
     return ret;
   }
 
+  reader_adapter_type reader_adapter;
   double* sig_counts;
   double* bg_counts;
   sdsl::bit_vector discarded;
   uint8_t k_;
 
  private:
-  static void count_mers(const std::string& fasta_path, double* counts,
-                         uint8_t k) {
-    seq_io::Reader_x r(fasta_path);
-    r.enable_reverse_complements();
+  void count_mers(const std::string& fasta_path, double* counts, uint8_t k) {
+    reader_adapter.read_from_path(fasta_path);
 #pragma omp parallel
     while (true) {
-      uint64_t len{};
-      string_buffer<uint64_t> buffer;
+      bool should_continue{};
 #pragma omp critical
-      {
-        len = r.get_next_read_to_buffer();
-        buffer = std::string_view{r.read_buf, len};
+      should_continue = reader_adapter.retrieve_next_read();
 
-        // FIXME: come up with a better way to normalise the read.
-        for (std::size_t ii{}; ii < len; ++ii)
-        {
-          switch (buffer[ii])
-          {
-            case 'A':
-            case 'C':
-            case 'G':
-            case 'T':
-              break;
-            default:
-              buffer[ii] = 'A';
-              break;
-          }
-        }
-      }
-      if (len == 0) {
+      if (!should_continue)
         break;
-      }
-      if (len < k) {
+
+      if (reader_adapter.read_length() < k)
         continue;
-      }
-      std::string_view const ss{buffer};
-      gapmer<middle_gap_only, max_gap> g(buffer.data(), k);
+
+      auto const &read_buffer{reader_adapter.read_buffer()};
+      gapmer<middle_gap_only, max_gap> g(read_buffer.front() >> (64U - 2U * k), k);
       uint64_t cv = g.value();
 #pragma omp atomic
       counts[cv] = counts[cv] + 1;
-      for (uint32_t next = k; next < len; ++next) {
-        g = g.next(ss[next]);
+      reader_adapter.iterate_characters(k, [&](std::uint8_t const cc){
+        g = g.next_(cc);
         cv = g.value();
 #pragma omp atomic
         counts[cv] = counts[cv] + 1;
-      }
+      });
+
       uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? (k + 3) / 2 : k;
+      auto gap_lim = libbio::min_ct(reader_adapter.read_length(), middle_gap_only ? (k + 3) / 2 : k);
+
       for (; gap_s < gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          if (k + gap_l >= len) {
-            break;
-          }
           uint64_t off = offset(k, gap_s, gap_l);
-          g = {buffer.data(), k, gap_s, gap_l};
+          g = gapmer<middle_gap_only, max_gap>(read_buffer, k, gap_s, gap_l);
           cv = off + g.value();
 #pragma omp atomic
           counts[cv] = counts[cv] + 1;
-          for (uint32_t mid = gap_s, next = k + gap_l; next < len;
-               ++next, ++mid) {
-            g = g.next(ss[mid], ss[next]);
+
+          reader_adapter.iterate_character_pairs(gap_s, k + gap_l, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
+            g = g.next_(lhsc, rhsc);
             cv = off + g.value();
 #pragma omp atomic
             counts[cv] = counts[cv] + 1;
-          }
+          });
         }
       }
-    }
+    } // while (true)
+
+    reader_adapter.finish();
   }
 
  public:
   gapmer_count(const std::string& sig_fasta_path,
-               const std::string& bg_fasta_path, uint8_t k)
-      : sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
+               const std::string& bg_fasta_path, uint8_t k,
+               reader_adapter_delegate &delegate)
+      : reader_adapter(delegate),
+        sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         bg_counts((double*)calloc(lookup_elems(k), sizeof(double))),
         discarded(lookup_elems(k)),
         k_(k) {
