@@ -1035,7 +1035,7 @@ RC_GTEST_PROP(gapmer_arbitrary, FromPackedCharacterStringConstructor,
   typedef std::vector<std::uint64_t> vector_type;
   // Non-zero length required in gapmer’s constructor.
   vector_type plain_text(1 + (test_input.text.size() + 7) / 8, 0);
-  vector_type packed_text(1 + (test_input.text.size() + 31) / 32, 0);
+  vector_type packed_text{};
   std::span plain_text_(reinterpret_cast<char*>(plain_text.data()),
                         test_input.text.size());
 
