@@ -10,6 +10,8 @@
 
 namespace sf::detail {
 
+// The purpose is to maintain the state while iterating
+// characters or pairs of characters in a packed string.
 class packed_character_iteration_context {
  private:
   std::uint64_t const m_shift_amt{};
@@ -53,8 +55,8 @@ void packed_character_iteration_context::update(std::uint64_t word_) {
 
 namespace sf {
 
-        // To iterate the characters, we have cases like the following:
-        // – One word encloses the character range.
+// To iterate the characters, we have cases like the following:
+// – One word encloses the character range.
 // – j words enclose the character range but there are less than (j - 2) * 32
 // characters in total. – j words enclose the character range and there are at
 // least (j - 1) * 32 characters in total.
