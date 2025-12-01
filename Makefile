@@ -8,6 +8,7 @@ CMAKE ?= cmake
 GCOV ?= gcov
 
 ## Not used directly
+WARNING_FLAGS_ ?=
 WARNING_FLAGS = \
 	-Wall \
 	-Werror \
@@ -16,7 +17,7 @@ WARNING_FLAGS = \
 	-Wno-gnu-conditional-omitted-operand \
 	-Wno-unused-parameter \
 	-Wno-unused-function \
-	-Wno-error=unused-command-line-argument
+	$(WARNING_FLAGS_)
 
 PERF_FLAGS = -O3 -g -DNDEBUG -fopenmp -march=native
 DEBUG_PERF_FLAGS = -O0 -g -DDEBUG
