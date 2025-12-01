@@ -228,6 +228,14 @@ template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
     std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
     uint8_t gap_length) {
+  [[unlikely]] if (data.empty())
+  {
+    assert(0 == kk);
+    assert(0 == gap_start);
+    assert(0 == gap_length);
+    return 0;
+  }
+
   // We assume that the first two words of the span enclose the range
   // of the packed characters including the gap.
   auto const tail_start{gap_start + gap_length};
