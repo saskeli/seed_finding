@@ -227,6 +227,8 @@ template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
     std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
     uint8_t gap_length) {
+  // We assume that the first two words of the span enclose the range
+  // of the packed characters including the gap.
   auto const tail_start{gap_start + gap_length};
   auto const tail_length{kk - gap_start};
   auto const tail_start_word_idx{tail_start / 32U};
