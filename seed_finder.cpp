@@ -295,21 +295,19 @@ int main(int argc, char const* argv[]) {
 
     typedef sf::seed_finder<middle_gap_only, max_gap, enable_smoothing, false>
         seed_finder_type;
+    typedef typename seed_finder_type::gapmer_type gapmer_type;
 
     seed_finder_type finder(sig_path, bg_path, p, log_fold, max_k, mem_limit,
                             p_ext, lookup_k, prune);
 
-    typedef sf::seed_clusterer<middle_gap_only, max_gap,
-                               decltype(finder.get_seeds())>
-        seed_clusterer_type;
-
     finder.find_seeds();
     if (!dot_output.empty()) {
-      sf::Dot_Writer::write_dot<typename seed_finder_type::gapmer_type>(
-          dot_output, finder.get_seeds(), max_k);
+      sf::Dot_Writer::write_dot<gapmer_type>(dot_output, finder.get_seeds(),
+                                             max_k);
     }
-    seed_clusterer_type sc(finder.get_seeds(), sig_path, bg_path, p_ext,
-                           h1_weight, finder.x());
+
+    auto sc{make_seed_clusterer<middle_gap_only, max_gap>(
+        finder.get_seeds(), sig_path, bg_path, p_ext, h1_weight, finder.x())};
     std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
     for (size_t i = 0; i < print_lim; ++i) {
       if (not sc.has_next()) {

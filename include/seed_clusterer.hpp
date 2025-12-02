@@ -8,6 +8,8 @@
 #include <iostream>
 #include <regex>
 #include <string>
+#include <string_view>
+#include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -114,8 +116,9 @@ class seed_clusterer {
    * @param bg_path  Path to backgroud `.fast(a|q)(.gz)?`.
    * @param pext     P-value to filter extensions with binomial tests.
    */
-  seed_clusterer(const Res_vec_T& seeds, const std::string sig_path,
-                 const std::string bg_path, double pext, double h1_weight, double x)
+  seed_clusterer(const Res_vec_T& seeds, std::string_view sig_path,
+                 std::string_view bg_path, double pext, double h1_weight,
+                 double x)
       : seeds_(seeds),
         local_optima_(),
         sig_path_(sig_path),
@@ -135,7 +138,8 @@ class seed_clusterer {
       // Value used for attempt to filter false positives
       // uint32_t bogo_ratio = seeds_[i].sig_count - seeds_[i].bg_count;
       bool keep = true;
-      double enrichment = seeds_[i].sig_count / x_ - seeds_[i].bg_count / (1 - x_);
+      double enrichment =
+          seeds_[i].sig_count / x_ - seeds_[i].bg_count / (1 - x_);
       uint16_t len = seeds_[i].g.length();
       double val = 0;
       size_t h_n_count = 0;
@@ -149,11 +153,12 @@ class seed_clusterer {
         if (seed_map.contains(o_mer)) {
           size_t idx = seed_map[o_mer];
           double o_enrichment =
-              seeds_[idx].sig_count / x_ -  seeds_[idx].bg_count / (1 - x_);
+              seeds_[idx].sig_count / x_ - seeds_[idx].bg_count / (1 - x_);
           if (o_enrichment > enrichment) {
             keep = false;
           }
-          val += o_enrichment * ((seeds_[idx].sig_count * (1 - x_)) / (x_ * seeds_[idx].bg_count));
+          val += o_enrichment * ((seeds_[idx].sig_count * (1 - x_)) /
+                                 (x_ * seeds_[idx].bg_count));
           ++h_n_count;
         } else {
           ++h_n_count;
@@ -168,7 +173,8 @@ class seed_clusterer {
       }
       val /= h_n_count;
       val *= h1_weight_;
-      double f_m = ((seeds_[i].sig_count * (1 - x_)) / (x_ * seeds_[i].bg_count)) * len;
+      double f_m =
+          ((seeds_[i].sig_count * (1 - x_)) / (x_ * seeds_[i].bg_count)) * len;
       val += enrichment * f_m;
       if (keep) {
 #pragma omp critical
@@ -246,4 +252,19 @@ class seed_clusterer {
     }
   }
 };
+
+
+// Convenience function for instantiating seed_clusterer. t_result_vector is
+// deduced. (C++ as of version 23 does not have partial class template argument
+// deduction and this is the second-best option.)
+template <bool t_middle_gap_only, uint16_t t_max_gap, typename t_result_vector>
+auto make_seed_clusterer(t_result_vector const& seeds,
+                         std::string_view sig_path, std::string_view bg_path,
+                         double const pext, double const h1_weight,
+                         double const x)
+    -> seed_clusterer<t_middle_gap_only, t_max_gap,
+                      std::remove_cvref_t<t_result_vector>> {
+  return {seeds, sig_path, bg_path, pext, h1_weight, x};
+}
+
 }  // namespace sf
