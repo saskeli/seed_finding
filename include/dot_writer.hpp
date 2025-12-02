@@ -1,3 +1,4 @@
+#include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <iostream>
@@ -7,7 +8,7 @@
 namespace sf {
 class Dot_Writer {
  public:
-  template <class T, class G>
+  template <class G, class T>
   static void write_dot(const std::string& dot_path, const T& node_vec,
                         uint8_t max_k) {
     std::ofstream dot_file(dot_path);

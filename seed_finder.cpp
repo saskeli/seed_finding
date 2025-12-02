@@ -305,8 +305,7 @@ int main(int argc, char const* argv[]) {
 
     finder.find_seeds();
     if (!dot_output.empty()) {
-      sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                typename seed_finder_type::gapmer_type>(
+      sf::Dot_Writer::write_dot<typename seed_finder_type::gapmer_type>(
           dot_output, finder.get_seeds(), max_k);
     }
     seed_clusterer_type sc(finder.get_seeds(), sig_path, bg_path, p_ext,
