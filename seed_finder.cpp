@@ -5,6 +5,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -70,12 +71,10 @@ void filter_seeds(auto& seeds, auto callback) {
 }
 
 
-void print_invocation(int argc, char const *argv[])
-{
-	std::cerr << "Invocation:";
-	for (int i{}; i < argc; ++i)
-		std::cerr << ' ' << argv[i];
-	std::cerr << '\n';
+void print_invocation(int argc, char const* argv[]) {
+  std::cerr << "Invocation:";
+  for (int i{}; i < argc; ++i) std::cerr << ' ' << argv[i];
+  std::cerr << '\n';
 }
 
 
@@ -181,8 +180,7 @@ int main(int argc, char const* argv[]) {
                                   {'s', "no-smoothing"});
     args::Flag dont_prune_extensions_(
         parser, "enable pruning",
-        "Enable pruning of extendable mers for partial counting.",
-        {"pruning"});
+        "Enable pruning of extendable mers for partial counting.", {"pruning"});
     sf::args::value_flag mem_limit_(
         parser, "memory_limit",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
@@ -287,94 +285,61 @@ int main(int argc, char const* argv[]) {
   if (prefix.length() > 0) {
     std::filesystem::create_directory(prefix);
   }
-  if (enable_smoothing) {
-    if (middle_gap_only) {
-      sf::seed_finder<true, max_gap, true, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
-      finder.find_seeds();
-      if (dot_output.size() > 0) {
-        sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::gapmer_type>(
-            dot_output, finder.get_seeds(), max_k);
-      }
-      sf::seed_clusterer<true, max_gap, decltype(finder.get_seeds())> sc(
-          finder.get_seeds(), sig_path, bg_path, p_ext, h1_weight, finder.x());
-      std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
-      for (size_t i = 0; i < print_lim; ++i) {
-        if (not sc.has_next()) {
-          break;
-        }
-        if (max_aligns == i) {
-          prefix = "";
-        }
-        sc.output_cluster(prefix, should_output_all_matches);
-      }
-    } else {
-      sf::seed_finder<false, max_gap, true, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
-      finder.find_seeds();
-      if (dot_output.size() > 0) {
-        sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::gapmer_type>(
-            dot_output, finder.get_seeds(), max_k);
-      }
-      sf::seed_clusterer<false, max_gap, decltype(finder.get_seeds())> sc(
-          finder.get_seeds(), sig_path, bg_path, p_ext, h1_weight, finder.x());
-      std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
-      for (size_t i = 0; i < print_lim; ++i) {
-        if (not sc.has_next()) {
-          break;
-        }
-        if (max_aligns == i) {
-          prefix = "";
-        }
-        sc.output_cluster(prefix, should_output_all_matches);
-      }
+
+  // We use the lambdas below to get constants from runtime parameters.
+  auto const run__([&]<typename t_middle_gap_only, typename t_enable_smoothing>(
+                       t_middle_gap_only const,
+                       t_enable_smoothing const) -> void {
+    constexpr auto const middle_gap_only{t_middle_gap_only::value};
+    constexpr auto const enable_smoothing{t_enable_smoothing::value};
+
+    typedef sf::seed_finder<middle_gap_only, max_gap, enable_smoothing, false>
+        seed_finder_type;
+
+    seed_finder_type finder(sig_path, bg_path, p, log_fold, max_k, mem_limit,
+                            p_ext, lookup_k, prune);
+
+    typedef sf::seed_clusterer<middle_gap_only, max_gap,
+                               decltype(finder.get_seeds())>
+        seed_clusterer_type;
+
+    finder.find_seeds();
+    if (!dot_output.empty()) {
+      sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
+                                typename seed_finder_type::gapmer_type>(
+          dot_output, finder.get_seeds(), max_k);
     }
-  } else {
-    if (middle_gap_only) {
-      sf::seed_finder<true, max_gap, false, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
-      finder.find_seeds();
-      if (dot_output.size() > 0) {
-        sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::gapmer_type>(
-            dot_output, finder.get_seeds(), max_k);
+    seed_clusterer_type sc(finder.get_seeds(), sig_path, bg_path, p_ext,
+                           h1_weight, finder.x());
+    std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
+    for (size_t i = 0; i < print_lim; ++i) {
+      if (not sc.has_next()) {
+        break;
       }
-      sf::seed_clusterer<true, max_gap, decltype(finder.get_seeds())> sc(
-          finder.get_seeds(), sig_path, bg_path, p_ext, h1_weight, finder.x());
-      std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
-      for (size_t i = 0; i < print_lim; ++i) {
-        if (not sc.has_next()) {
-          break;
-        }
-        if (max_aligns == i) {
-          prefix = "";
-        }
-        sc.output_cluster(prefix, should_output_all_matches);
+      if (max_aligns == i) {
+        prefix = "";
       }
-    } else {
-      sf::seed_finder<false, max_gap, false, false> finder(
-          sig_path, bg_path, p, log_fold, max_k, mem_limit, p_ext, lookup_k, prune);
-      finder.find_seeds();
-      if (dot_output.size() > 0) {
-        sf::Dot_Writer::write_dot<decltype(finder.get_seeds()),
-                                  decltype(finder)::gapmer_type>(
-            dot_output, finder.get_seeds(), max_k);
-      }
-      sf::seed_clusterer<false, max_gap, decltype(finder.get_seeds())> sc(
-          finder.get_seeds(), sig_path, bg_path, p_ext, h1_weight, finder.x());
-      std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
-      for (size_t i = 0; i < print_lim; ++i) {
-        if (not sc.has_next()) {
-          break;
-        }
-        if (max_aligns == i) {
-          prefix = "";
-        }
-        sc.output_cluster(prefix, should_output_all_matches);
-      }
+      sc.output_cluster(prefix, should_output_all_matches);
     }
-  }
+  });
+
+  auto const run_([&run__]<typename t_middle_gap_only>(
+                      t_middle_gap_only const middle_gap_only,
+                      bool const enable_smoothing) {
+    if (enable_smoothing)
+      run__(middle_gap_only, std::true_type{});
+    else
+      run__(middle_gap_only, std::false_type{});
+  });
+
+  auto const run(
+      [&run_](bool const middle_gap_only, bool const enable_smoothing) {
+        if (middle_gap_only)
+          run_(std::true_type{}, enable_smoothing);
+        else
+          run_(std::false_type{}, enable_smoothing);
+      });
+
+  run(middle_gap_only, enable_smoothing);
   return 0;
 }
