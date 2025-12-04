@@ -612,15 +612,16 @@ class seed_finder : public reader_adapter_delegate {
   }
 
   /**
-   * Count the read and their reverse complements in the input.
+   * Calculate the sum of the lengths of the reads and their reverse complements
+   * in the input.
    *
    * @param path input path
    */
-  std::uint64_t count_reads_with_rc(std::string const& path) {
+  std::uint64_t read_length_sum_with_rc(std::string const& path) {
     std::uint64_t retval{};
     reader_adapter_type reader(*this);
     reader.read_from_path(path);
-    while (reader.retrieve_next_read()) ++retval;
+    while (reader.retrieve_next_read()) retval += reader.read_length();
     reader.finish();
     return retval;
   }
@@ -643,8 +644,8 @@ class seed_finder : public reader_adapter_delegate {
         lookup_k_(lookup_k),
         prune_(prune) {
     gsl_set_error_handler_off();
-    sig_size_ = count_reads_with_rc(sig_path_);
-    bg_size_ = count_reads_with_rc(bg_path_);
+    sig_size_ = read_length_sum_with_rc(sig_path_);
+    bg_size_ = read_length_sum_with_rc(bg_path_);
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
     std::cerr << "Background " << bg_path_ << " with length " << bg_size_
               << std::endl;
