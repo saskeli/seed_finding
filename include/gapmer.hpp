@@ -77,7 +77,7 @@ class gapmer {
   uint64_t suffix() const;
   uint64_t prefix(uint64_t i) const;
   uint64_t suffix(uint64_t i) const;
-  gapmer hamming(uint64_t v, auto& callback) const;
+  gapmer hamming(uint64_t v, auto&& callback) const;
 
  public:
   // FIXME: Consider making all_gap_neighbours, middle_gap_neighbours private.
@@ -167,7 +167,7 @@ class gapmer {
   /// removed.
   gapmer next(char c1, char c2) const;
   gapmer next_(std::uint8_t c1, std::uint8_t c2) const;
-  void hamming_neighbours(auto& callback) const;
+  void hamming_neighbours(auto&& callback) const;
 
   template <bool no_smaller = false, bool no_same = false,
             bool no_larger = false>
@@ -384,7 +384,7 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::suffix(uint64_t i) const {
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::hamming(uint64_t v,
-                                                 auto& callback) const
+                                                 auto&& callback) const
     -> gapmer {
   callback(*this);
   callback(gapmer(data_ ^ v));
@@ -1447,7 +1447,7 @@ auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c1,
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 void gapmer<middle_gap_only, t_max_gap>::hamming_neighbours(
-    auto& callback) const {
+    auto&& callback) const {
   uint16_t len = length();
   for (uint64_t n = 1; n < 4; ++n) {
     uint64_t xor_val = n;
