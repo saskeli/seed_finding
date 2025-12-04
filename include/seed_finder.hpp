@@ -18,8 +18,8 @@
 #include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
-#include "reader_adapter.hpp"
 #include "partial_count.hpp"
+#include "reader_adapter.hpp"
 #include "seqio_reader_adapter.hpp"
 #include "util.hpp"
 
@@ -183,36 +183,52 @@ class seed_finder : public reader_adapter_delegate {
         return;
       }
     }
-    gapmer_type g(v, k, gap_s, gap_l);
-    if (not g.is_canonical()) {
+    gapmer_type const gg(v, k, gap_s, gap_l);
+    if (not gg.is_canonical()) {
       if constexpr (filter_mers) {
 #pragma omp critical(a_bv)
         sig_bg_a.discarded[offset + v] = true;
       }
       return;
     }
-    uint64_t a = sig_bg_a.sig_counts[offset + v] + 1;
-    uint64_t b = sig_bg_a.bg_counts[offset + v] + 1;
-    if (a * bg_size_ <= fold_lim_ * b * sig_size_) {
+
+    uint64_t const aa{sig_bg_a.sig_counts[offset + v] + 1};
+    uint64_t const bb{sig_bg_a.bg_counts[offset + v] + 1};
+
+    // Check the enrichment w.r.t. background by requiring that
+    // the logarithmic fold change is greater than log_fold passed
+    // to the constructor, 0.5 by default (with the added pseudocount, see the
+    // definitions of aa and bb). The formula we use is
+    // log_2((sig_count / sig_size) / (bg_count / bg_size)) ≤ log_fold
+    // but with the logarithm and divisions removed.
+    if (aa * bg_size_ <= fold_lim_ * bb * sig_size_) {
       if constexpr (filter_mers) {
 #pragma omp critical(a_bv)
         sig_bg_a.discarded[offset + v] = true;
       }
       return;
     }
-    double r = error_suppressed_beta_inc(a, b, x_);
-    if (r > p_) {
+
+    // Check the enrichment w.r.t. background by using the Audic-Claverie test.
+    // (Using the incomplete regularized beta function is explained in
+    // the supplement of Jean-Michel Claverie, Thi Ngan Ta, ACDtool: a
+    // web-server for the generic analysis of large data sets of counts,
+    // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
+    // https://doi.org/10.1093/bioinformatics/bty640)
+    double const rr{error_suppressed_beta_inc(aa, bb, x_)};
+    if (rr > p_) {
       if constexpr (filter_mers) {
 #pragma omp critical(a_bv)
         sig_bg_a.discarded[offset + v] = true;
       }
       return;
     }
+
     if constexpr (filter_mers) {
       // Length k mers.
-      auto callback_a = [&](gapmer_type o) {
-        uint64_t o_offset = sig_bg_a.offset(o.gap_start(), o.gap_length());
-        uint64_t o_v = o.value();
+      gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
+        uint64_t o_offset = sig_bg_a.offset(oo.gap_start(), oo.gap_length());
+        uint64_t o_v = oo.value();
         double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
         double o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1;
         if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
@@ -220,21 +236,20 @@ class seed_finder : public reader_adapter_delegate {
           sig_bg_a.discarded[o_offset + o_v] = true;
           return;
         }
-        double o_r;
-        if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+        double o_r; // FIXME: Should be initialised?
+        if (do_filter<true>(gg, oo, aa, bb, o_a, o_b, rr, o_r)) {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[offset + v] = true;
         } else {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[o_offset + o_v] = true;
         }
-      };
-      g.template huddinge_neighbours<true, false, true>(callback_a);
+      });
 
       // Length k + 1 mers.
-      auto callback_b = [&](gapmer_type o) {
-        uint64_t o_offset = sig_bg_b.offset(o.gap_start(), o.gap_length());
-        uint64_t o_v = o.value();
+      gg.template huddinge_neighbours<true, true, false>([&](gapmer_type oo) {
+        uint64_t o_offset = sig_bg_b.offset(oo.gap_start(), oo.gap_length());
+        uint64_t o_v = oo.value();
         double o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
         double o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
         if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
@@ -243,22 +258,22 @@ class seed_finder : public reader_adapter_delegate {
           return;
         }
         double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
-        if (do_extend(g, o, a, b, o_a, o_b, r, o_r)) {
+        if (do_extend(gg, oo, aa, bb, o_a, o_b, rr, o_r)) {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[offset + v] = true;
         } else {
 #pragma omp critical(o_bv)
           sig_bg_b.discarded[o_offset + o_v] = true;
         }
-      };
-      g.template huddinge_neighbours<true, true, false>(callback_b);
+      });
+
       if (sig_bg_a.discarded[offset + v] == false) {
 #pragma omp critical
-        seeds_.push_back({g, r, a, b});
+        seeds_.push_back({gg, rr, aa, bb});
       }
     } else {
 #pragma omp critical
-      seeds_.push_back({g, r, a, b});
+      seeds_.push_back({gg, rr, aa, bb});
     }
   }
 
@@ -598,12 +613,11 @@ class seed_finder : public reader_adapter_delegate {
    *
    * @param path input path
    */
-  std::uint64_t count_reads_with_rc(std::string const &path) {
+  std::uint64_t count_reads_with_rc(std::string const& path) {
     std::uint64_t retval{};
     reader_adapter_type reader(*this);
     reader.read_from_path(path);
-    while (reader.retrieve_next_read())
-      ++retval;
+    while (reader.retrieve_next_read()) ++retval;
     reader.finish();
     return retval;
   }
@@ -707,15 +721,13 @@ class seed_finder : public reader_adapter_delegate {
   }
 
   void found_first_read_with_unexpected_character(
-      reader_adapter&, std::string_view path,
-      std::uint64_t lineno) override {
+      reader_adapter&, std::string_view path, std::uint64_t lineno) override {
     std::cerr << "WARNING: Skipping reads with unexpected characters in "
               << path << "; first one on line " << lineno << ".\n";
   }
 
   void found_total_reads_with_unexpected_characters(
-      reader_adapter&, std::string_view path,
-      std::uint64_t count) override {
+      reader_adapter&, std::string_view path, std::uint64_t count) override {
     paths_with_errors_.emplace(path);
     std::cerr << "WARNING: Skipped " << count << " reads in " << path << ".\n";
   }
