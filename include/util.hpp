@@ -1,7 +1,9 @@
 #pragma once
+
 #include <array>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <unordered_set>
 
 #include <gsl/gsl_cdf.h>
@@ -159,6 +161,15 @@ inline double error_suppressed_beta_inc(double a, double b, double x) {
   gsl_sf_result res;
   int err = gsl_sf_beta_inc_e(a, b, x, &res);
   return err ? 0 : res.val;
+}
+
+
+template <typename t_cb>
+void call_with_constant(bool val, t_cb&& cb) {
+  if (val)
+    cb(std::true_type{});
+  else
+    cb(std::false_type{});
 }
 
 

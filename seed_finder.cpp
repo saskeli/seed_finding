@@ -18,6 +18,7 @@
 #include "include/dot_writer.hpp"
 #include "include/seed_clusterer.hpp"
 #include "include/seed_finder.hpp"
+#include "include/util.hpp"
 #include "include/version.hpp"
 
 #ifndef MAX_GAP
@@ -286,8 +287,8 @@ int main(int argc, char const* argv[]) {
     std::filesystem::create_directory(prefix);
   }
 
-  // We use the lambdas below to get constants from runtime parameters.
-  auto const run__([&]<typename t_middle_gap_only, typename t_enable_smoothing>(
+  // Run the algorithm.
+  auto const run([&]<typename t_middle_gap_only, typename t_enable_smoothing>(
                        t_middle_gap_only const,
                        t_enable_smoothing const) -> void {
     constexpr auto const middle_gap_only{t_middle_gap_only::value};
@@ -320,23 +321,12 @@ int main(int argc, char const* argv[]) {
     }
   });
 
-  auto const run_([&run__]<typename t_middle_gap_only>(
-                      t_middle_gap_only const middle_gap_only,
-                      bool const enable_smoothing) {
-    if (enable_smoothing)
-      run__(middle_gap_only, std::true_type{});
-    else
-      run__(middle_gap_only, std::false_type{});
+  // Convert runtime parameters to constants.
+  sf::call_with_constant(middle_gap_only, [&](auto const middle_gap_only){
+    sf::call_with_constant(enable_smoothing, [&](auto const enable_smoothing){
+      run(middle_gap_only, enable_smoothing);
+    });
   });
 
-  auto const run(
-      [&run_](bool const middle_gap_only, bool const enable_smoothing) {
-        if (middle_gap_only)
-          run_(std::true_type{}, enable_smoothing);
-        else
-          run_(std::false_type{}, enable_smoothing);
-      });
-
-  run(middle_gap_only, enable_smoothing);
   return 0;
 }
