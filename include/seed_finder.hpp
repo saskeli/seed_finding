@@ -510,9 +510,11 @@ class seed_finder : public reader_adapter_delegate {
       for (auto p : a) {
         prio.push_back(p.second);
       }
+      // Sort by fold change.
       std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
         return (lhs.sig_count / lhs.bg_count) > (rhs.sig_count / rhs.bg_count);
       });
+
       for (auto km : prio) {
         km.g.template huddinge_neighbours<true, true, false>(init_counters);
         if (p_counter.fill_rate() >= fill_limit) {
@@ -540,6 +542,7 @@ class seed_finder : public reader_adapter_delegate {
     std::cerr << "\tFiltering extension..." << std::endl;
     extend_counted(a, b, p_counter);
     p_counter.clear();
+
     if constexpr (filter_mers) {
       std::cerr << "\tFiltering sources..." << std::endl;
       for (auto p : a) {
