@@ -179,7 +179,7 @@ int main(int argc, char const* argv[]) {
     args::Flag disable_smoothing_(parser, "disable_smoothing",
                                   "Disable smoothing of counted mers.",
                                   {'s', "no-smoothing"});
-    args::Flag dont_prune_extensions_(
+    args::Flag enable_pruning_(
         parser, "enable pruning",
         "Enable pruning of extendable mers for partial counting.", {"pruning"});
     sf::args::value_flag mem_limit_(
@@ -213,7 +213,7 @@ int main(int argc, char const* argv[]) {
     if (gap_any_) middle_gap_only = true;
     if (should_output_all_matches_) should_output_all_matches = true;
     if (disable_smoothing_) enable_smoothing = false;
-    if (dont_prune_extensions_) prune = true;
+    if (enable_pruning_) prune = true;
 
     if (print_lim == 0) {
       print_lim = ~print_lim;
