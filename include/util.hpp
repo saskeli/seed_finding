@@ -1,8 +1,8 @@
 #pragma once
 #include <array>
 #include <cstdint>
-#include <unordered_set>
 #include <string>
+#include <unordered_set>
 
 #include <gsl/gsl_cdf.h>
 #include <gsl/gsl_sf_gamma.h>
@@ -136,10 +136,11 @@ void gap_mer_neighbour_generation(G g, F& callback) {
 }
 
 template <class G, bool middle_gap_only, uint16_t max_gap>
-bool compare_generation(G g, std::unordered_set<std::string>& a, std::unordered_set<std::string>& b) {
+bool compare_generation(G g, std::unordered_set<std::string>& a,
+                        std::unordered_set<std::string>& b) {
   auto callback = [&](G o) { a.insert(o.to_string()); };
-  gap_mer_neighbour_generation<G, decltype(callback), middle_gap_only,
-                                   max_gap>(g, callback);
+  gap_mer_neighbour_generation<G, decltype(callback), middle_gap_only, max_gap>(
+      g, callback);
 
   auto o_callback = [&](G o) { b.insert(o.to_string()); };
   g.huddinge_neighbours(o_callback);
@@ -159,5 +160,23 @@ inline double error_suppressed_beta_inc(double a, double b, double x) {
   int err = gsl_sf_beta_inc_e(a, b, x, &res);
   return err ? 0 : res.val;
 }
+
+
+// OpenMP helpers.
+struct critical_a_bv {
+  template <typename t_cb>
+  void operator()(t_cb&& cb) {
+#pragma omp critical(a_bv)
+    cb();
+  }
+};
+
+struct critical_d_bv {
+  template <typename t_cb>
+  void operator()(t_cb&& cb) {
+#pragma omp critical(d_bv)
+    cb();
+  }
+};
 
 }  // namespace sf

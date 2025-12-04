@@ -11,6 +11,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -33,6 +34,7 @@ class seed_finder : public reader_adapter_delegate {
 
  private:
   typedef gapmer_count<middle_gap_only, max_gap> gapmer_count_type;
+  typedef typename gapmer_count_type::value_type gapmer_count_value_type;
   typedef std::set<std::string, libbio::compare_strings_transparent> path_set;
 
   struct Res {
@@ -152,6 +154,71 @@ class seed_finder : public reader_adapter_delegate {
     return b_r < a_r;
   }
 
+
+  typedef std::tuple<bool, uint64_t, uint64_t, double>
+      check_enrichment_return_type;
+
+  /**
+   * Check the enrichment of gg in the given signal and background.
+   *
+   * @param gg The gapmer in question.
+   * @param counts The signal and background counts.
+   * @param critical OpenMP’s critical section wrapper.
+   */
+  template <typename t_critical>
+  [[nodiscard]] check_enrichment_return_type check_enrichment(
+      gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
+      t_critical&& critical) {
+    auto const vv{gg.value()};
+
+    if constexpr (filter_mers) {
+      if (counts.discarded[offset + vv]) {
+        return {false, 0, 0, 0};
+      }
+    }
+
+    if (not gg.is_canonical()) {
+      if constexpr (filter_mers) {
+        critical([&] { counts.discarded[offset + vv] = true; });
+      }
+      return {false, 0, 0, 0};
+    }
+
+    // Narrows the count value type (double).
+    uint64_t const sc(counts.sig_counts[offset + vv] + 1);
+    uint64_t const bc(counts.bg_counts[offset + vv] + 1);
+
+    // Check the enrichment w.r.t. background by requiring that
+    // the logarithmic fold change is greater than log_fold passed
+    // to the constructor, 0.5 by default (with the added pseudocount, see the
+    // definitions of aa and bb). The formula we use is
+    // log_2((sig_count / sig_size) / (bg_count / bg_size)) ≤ log_fold
+    // but with the logarithm and divisions removed.
+    if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
+      if constexpr (filter_mers) {
+        critical([&] { counts.discarded[offset + vv] = true; });
+      }
+      return {false, sc, bc, 0};
+    }
+
+    // Check the enrichment w.r.t. background by using the Audic-Claverie test.
+    // (Using the incomplete regularized beta function is explained in
+    // the supplement of Jean-Michel Claverie, Thi Ngan Ta, ACDtool: a
+    // web-server for the generic analysis of large data sets of counts,
+    // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
+    // https://doi.org/10.1093/bioinformatics/bty640)
+    double const rr{error_suppressed_beta_inc(sc, bc, x_)};
+    if (rr > p_) {
+      if constexpr (filter_mers) {
+        critical([&] { counts.discarded[offset + vv] = true; });
+      }
+      return {false, sc, bc, rr};
+    }
+
+    return {true, sc, bc, rr};
+  }
+
+
   /**
    * Checks H1 neighbourhood with lengths k and k + 1 of gapmer implied by k, v,
    * gap_s and gap_l, and marks invalid candidates as discarded in sig_bg_a an
@@ -178,51 +245,10 @@ class seed_finder : public reader_adapter_delegate {
       exit(1);
     }
 #endif
-    if constexpr (filter_mers) {
-      if (sig_bg_a.discarded[offset + v]) {
-        return;
-      }
-    }
     gapmer_type const gg(v, k, gap_s, gap_l);
-    if (not gg.is_canonical()) {
-      if constexpr (filter_mers) {
-#pragma omp critical(a_bv)
-        sig_bg_a.discarded[offset + v] = true;
-      }
-      return;
-    }
-
-    uint64_t const aa{sig_bg_a.sig_counts[offset + v] + 1};
-    uint64_t const bb{sig_bg_a.bg_counts[offset + v] + 1};
-
-    // Check the enrichment w.r.t. background by requiring that
-    // the logarithmic fold change is greater than log_fold passed
-    // to the constructor, 0.5 by default (with the added pseudocount, see the
-    // definitions of aa and bb). The formula we use is
-    // log_2((sig_count / sig_size) / (bg_count / bg_size)) ≤ log_fold
-    // but with the logarithm and divisions removed.
-    if (aa * bg_size_ <= fold_lim_ * bb * sig_size_) {
-      if constexpr (filter_mers) {
-#pragma omp critical(a_bv)
-        sig_bg_a.discarded[offset + v] = true;
-      }
-      return;
-    }
-
-    // Check the enrichment w.r.t. background by using the Audic-Claverie test.
-    // (Using the incomplete regularized beta function is explained in
-    // the supplement of Jean-Michel Claverie, Thi Ngan Ta, ACDtool: a
-    // web-server for the generic analysis of large data sets of counts,
-    // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
-    // https://doi.org/10.1093/bioinformatics/bty640)
-    double const rr{error_suppressed_beta_inc(aa, bb, x_)};
-    if (rr > p_) {
-      if constexpr (filter_mers) {
-#pragma omp critical(a_bv)
-        sig_bg_a.discarded[offset + v] = true;
-      }
-      return;
-    }
+    auto const& [should_continue, sc, bc, rr] =
+        check_enrichment(gg, offset, sig_bg_a, critical_a_bv{});
+    if (not should_continue) return;
 
     if constexpr (filter_mers) {
       // Length k mers.
@@ -236,8 +262,8 @@ class seed_finder : public reader_adapter_delegate {
           sig_bg_a.discarded[o_offset + o_v] = true;
           return;
         }
-        double o_r; // FIXME: Should be initialised?
-        if (do_filter<true>(gg, oo, aa, bb, o_a, o_b, rr, o_r)) {
+        double o_r{};
+        if (do_filter<true>(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[offset + v] = true;
         } else {
@@ -258,7 +284,7 @@ class seed_finder : public reader_adapter_delegate {
           return;
         }
         double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
-        if (do_extend(gg, oo, aa, bb, o_a, o_b, rr, o_r)) {
+        if (do_extend(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[offset + v] = true;
         } else {
@@ -269,11 +295,11 @@ class seed_finder : public reader_adapter_delegate {
 
       if (sig_bg_a.discarded[offset + v] == false) {
 #pragma omp critical
-        seeds_.push_back({gg, rr, aa, bb});
+        seeds_.push_back({gg, rr, sc, bc});
       }
     } else {
 #pragma omp critical
-      seeds_.push_back({gg, rr, aa, bb});
+      seeds_.push_back({gg, rr, sc, bc});
     }
   }
 
@@ -306,53 +332,26 @@ class seed_finder : public reader_adapter_delegate {
       exit(1);
     }
 #endif
-    if constexpr (filter_mers) {
-      if (sig_bg_c.discarded[offset + v]) {
-        return;
-      }
-    }
     gapmer_type const gg(v, k, gap_s, gap_l);
-    if (not gg.is_canonical()) {
-      if constexpr (filter_mers) {
-#pragma omp critical(d_bv)
-        sig_bg_c.discarded[offset + v] = true;
-      }
-      return;
-    }
-
-    uint64_t const aa{sig_bg_c.sig_counts[offset + v] + 1};
-    uint64_t const bb{sig_bg_c.bg_counts[offset + v] + 1};
-
-    if (aa * sig_size_ <= fold_lim_ * bb * bg_size_) {
-      if constexpr (filter_mers) {
-#pragma omp critical(d_bv)
-        sig_bg_c.discarded[offset + v] = true;
-      }
-      return;
-    }
-
-    double const rr{error_suppressed_beta_inc(aa, bb, x_)};
-    if (rr > p_) {
-      if constexpr (filter_mers) {
-#pragma omp critical(d_bv)
-        sig_bg_c.discarded[offset + v] = true;
-      }
-      return;
-    }
+    auto const& [should_continue, sc, bc, rr] =
+        check_enrichment(gg, offset, sig_bg_c, critical_d_bv{});
+    if (not should_continue) return;
 
     if constexpr (filter_mers) {
-      gg.template huddinge_neighbours<true, false, true>([&](gapmer_type o) {
-        uint64_t o_offset = sig_bg_c.offset(o.gap_start(), o.gap_length());
-        uint64_t o_v = o.value();
-        double o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
-        double o_b = sig_bg_c.bg_counts[o_offset + v] + 1;
+      gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
+        uint64_t o_offset = sig_bg_c.offset(oo.gap_start(), oo.gap_length());
+        uint64_t o_v = oo.value();
+        double o_a = sig_bg_c.sig_counts[o_offset + v] +
+                     1;  // FIXME: should o_v be used in place of v?
+        double o_b = sig_bg_c.bg_counts[o_offset + v] +
+                     1;  // FIXME: should o_v be used in place of v?
         if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
 #pragma omp critical(d_bv)
           sig_bg_c.discarded[o_offset + o_v] = true;
           return;
         }
-        double o_r;
-        if (do_filter<true>(gg, o, aa, bb, o_a, o_b, rr, o_r)) {
+        double o_r{};
+        if (do_filter<true>(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
 #pragma omp critical(d_bv)
           sig_bg_c.discarded[offset + v] = true;
         } else {
@@ -363,11 +362,11 @@ class seed_finder : public reader_adapter_delegate {
 
       if (sig_bg_c.discarded[offset + v] == false) {
 #pragma omp critical
-        mm[gg] = {gg, rr, aa, bb};
+        mm[gg] = {gg, rr, sc, bc};
       }
     } else {
 #pragma omp critical
-      mm[gg] = {gg, rr, aa, bb};
+      mm[gg] = {gg, rr, sc, bc};
     }
   }
 
