@@ -562,24 +562,21 @@ class seed_finder : public reader_adapter_delegate {
                 if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
                               b[o].sig_count, b[o].bg_count, p.second.p,
                               b[o].p)) {
-                  if constexpr (filter_mers) {
-                    keep = false;
-                  }
+                  keep = false;
                 }
               }
             });
 
-        if constexpr (filter_mers) {
-          if (not keep) {
-            del_set.insert(p.first);
-          }
+        if (not keep) {
+          del_set.insert(p.first);
         }
       }
+
       for (auto d : del_set) {
         a.erase(d);
       }
     }
-  }
+  } // if constexpr (filter_mers)
 
   /**
    * Filter found mers of the same lengths. Keep only the best within H1
