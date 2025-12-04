@@ -291,12 +291,12 @@ class seed_finder : public reader_adapter_delegate {
    * @param gap_l    Length of gap
    * @param offset   Offset value for table access
    * @param sig_bg_c Length k gapmer count tables
-   * @param m        Map to add candidate seeds to.
+   * @param mm       Map to add candidate seeds to.
    */
   template <class M>
   void filter_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
                     uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_c,
-                    M& m) {
+                    M& mm) {
 #ifdef DEBUG
     if (offset + v >= gapmer_count_type::lookup_elems(k)) {
       std::cerr << "k = " << int(k) << " & sig_bg_c.k_ = " << int(sig_bg_c.k_)
@@ -311,33 +311,37 @@ class seed_finder : public reader_adapter_delegate {
         return;
       }
     }
-    gapmer_type g(v, k, gap_s, gap_l);
-    if (not g.is_canonical()) {
+    gapmer_type const gg(v, k, gap_s, gap_l);
+    if (not gg.is_canonical()) {
       if constexpr (filter_mers) {
 #pragma omp critical(d_bv)
         sig_bg_c.discarded[offset + v] = true;
       }
       return;
     }
-    uint64_t a = sig_bg_c.sig_counts[offset + v] + 1;
-    uint64_t b = sig_bg_c.bg_counts[offset + v] + 1;
-    if (a * sig_size_ <= fold_lim_ * b * bg_size_) {
+
+    uint64_t const aa{sig_bg_c.sig_counts[offset + v] + 1};
+    uint64_t const bb{sig_bg_c.bg_counts[offset + v] + 1};
+
+    if (aa * sig_size_ <= fold_lim_ * bb * bg_size_) {
       if constexpr (filter_mers) {
 #pragma omp critical(d_bv)
         sig_bg_c.discarded[offset + v] = true;
       }
       return;
     }
-    double r = error_suppressed_beta_inc(a, b, x_);
-    if (r > p_) {
+
+    double const rr{error_suppressed_beta_inc(aa, bb, x_)};
+    if (rr > p_) {
       if constexpr (filter_mers) {
 #pragma omp critical(d_bv)
         sig_bg_c.discarded[offset + v] = true;
       }
       return;
     }
+
     if constexpr (filter_mers) {
-      auto callback = [&](gapmer_type o) {
+      gg.template huddinge_neighbours<true, false, true>([&](gapmer_type o) {
         uint64_t o_offset = sig_bg_c.offset(o.gap_start(), o.gap_length());
         uint64_t o_v = o.value();
         double o_a = sig_bg_c.sig_counts[o_offset + v] + 1;
@@ -348,22 +352,22 @@ class seed_finder : public reader_adapter_delegate {
           return;
         }
         double o_r;
-        if (do_filter<true>(g, o, a, b, o_a, o_b, r, o_r)) {
+        if (do_filter<true>(gg, o, aa, bb, o_a, o_b, rr, o_r)) {
 #pragma omp critical(d_bv)
           sig_bg_c.discarded[offset + v] = true;
         } else {
 #pragma omp critical(d_bv)
           sig_bg_c.discarded[o_offset + o_v] = true;
         }
-      };
-      g.template huddinge_neighbours<true, false, true>(callback);
+      });
+
       if (sig_bg_c.discarded[offset + v] == false) {
 #pragma omp critical
-        m[g] = {g, r, a, b};
+        mm[gg] = {gg, rr, aa, bb};
       }
     } else {
 #pragma omp critical
-      m[g] = {g, r, a, b};
+      mm[gg] = {gg, rr, aa, bb};
     }
   }
 
