@@ -22,6 +22,7 @@ namespace sf {
 template <bool middle_gap_only, uint8_t max_gap>
 class gapmer_count {
  public:
+  typedef double value_type;
   const static constexpr uint64_t ONE = 1;
 
   static constexpr uint64_t lookup_elems(uint8_t k) {
@@ -53,13 +54,13 @@ class gapmer_count {
   }
 
   reader_adapter_type reader_adapter;
-  double* sig_counts;
-  double* bg_counts;
+  value_type* sig_counts;
+  value_type* bg_counts;
   sdsl::bit_vector discarded;
   uint8_t k_;
 
  private:
-  void count_mers(const std::string& fasta_path, double* counts, uint8_t k) {
+  void count_mers(const std::string& fasta_path, value_type* counts, uint8_t k) {
     reader_adapter.read_from_path(fasta_path);
 #pragma omp parallel
     while (true) {
@@ -114,8 +115,8 @@ class gapmer_count {
                const std::string& bg_fasta_path, uint8_t k,
                reader_adapter_delegate &delegate)
       : reader_adapter(delegate),
-        sig_counts((double*)calloc(lookup_elems(k), sizeof(double))),
-        bg_counts((double*)calloc(lookup_elems(k), sizeof(double))),
+        sig_counts((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
+        bg_counts((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
         discarded(lookup_elems(k)),
         k_(k) {
     count_mers(sig_fasta_path, sig_counts, k_);
@@ -145,7 +146,7 @@ class gapmer_count {
   gapmer_count& operator=(const gapmer_count&) = delete;
 
  private:
-  void smooth(double* arr, double* brr, double* sig_scratch, double* bg_scratch,
+  void smooth(value_type* arr, value_type* brr, value_type* sig_scratch, value_type* bg_scratch,
               uint64_t v_lim) {
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
@@ -180,23 +181,23 @@ class gapmer_count {
  public:
   void smooth() {
     uint64_t v_lim = ONE << (k_ * 2);
-    double* sig_scratch = (double*)calloc(v_lim, sizeof(double));
-    double* bg_scratch = (double*)calloc(v_lim, sizeof(double));
+    value_type* sig_scratch = (value_type*)calloc(v_lim, sizeof(value_type));
+    value_type* bg_scratch = (value_type*)calloc(v_lim, sizeof(value_type));
     smooth(sig_counts, bg_counts, sig_scratch, bg_scratch, v_lim);
-    std::memcpy(sig_counts, sig_scratch, v_lim * sizeof(double));
-    std::memcpy(bg_counts, bg_scratch, v_lim * sizeof(double));
+    std::memcpy(sig_counts, sig_scratch, v_lim * sizeof(value_type));
+    std::memcpy(bg_counts, bg_scratch, v_lim * sizeof(value_type));
     uint8_t gap_s = middle_gap_only ? k_ / 2 : 1;
     uint8_t gap_lim = middle_gap_only ? (k_ + 3) / 2 : k_;
     for (; gap_s < gap_lim; ++gap_s) {
       for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
         uint64_t off = offset(gap_s, gap_l);
-        double* l_count = sig_counts + off;
-        double* r_count = bg_counts + off;
-        std::memset(sig_scratch, 0, v_lim * sizeof(double));
-        std::memset(bg_scratch, 0, v_lim * sizeof(double));
+        value_type* l_count = sig_counts + off;
+        value_type* r_count = bg_counts + off;
+        std::memset(sig_scratch, 0, v_lim * sizeof(value_type));
+        std::memset(bg_scratch, 0, v_lim * sizeof(value_type));
         smooth(l_count, r_count, sig_scratch, bg_scratch, v_lim);
-        std::memcpy(l_count, sig_scratch, v_lim * sizeof(double));
-        std::memcpy(r_count, bg_scratch, v_lim * sizeof(double));
+        std::memcpy(l_count, sig_scratch, v_lim * sizeof(value_type));
+        std::memcpy(r_count, bg_scratch, v_lim * sizeof(value_type));
       }
     }
     free(sig_scratch);
@@ -204,7 +205,7 @@ class gapmer_count {
   }
 
   template <class gapmer>
-  std::pair<double, double> count(gapmer g) const {
+  std::pair<value_type, value_type> count(gapmer g) const {
     uint64_t off = offset(g.gap_start(), g.gap_length());
     off += g.value();
     return {sig_counts[off], bg_counts[off]};
