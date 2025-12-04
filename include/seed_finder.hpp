@@ -490,19 +490,21 @@ class seed_finder : public reader_adapter_delegate {
    */
   template <class M, class P>
   void extend(M& a, M& b, P& p_counter, uint16_t k, bool prune) {
-    const constexpr double fill_limit = 0.4;
     std::cerr << "    Extend " << a.size() << " mers." << std::endl;
+
+    const constexpr double fill_limit = 0.4;
     auto hash = [](const gapmer_type g) { return uint64_t(g); };
     std::unordered_set<gapmer_type, decltype(hash)> del_set;
-    auto callback = [&](gapmer_type o) {
-      if (not b.contains(o)) {
-        p_counter.init(o);
+
+    auto const init_counters{[&](gapmer_type oo) {
+      if (not b.contains(oo)) {
+        p_counter.init(oo);
         if constexpr (enable_smootihing) {
-          auto ccb = [&](gapmer_type h_n) { p_counter.init(h_n); };
-          o.hamming_neighbours(ccb);
+          oo.hamming_neighbours([&](gapmer_type h_n) { p_counter.init(h_n); });
         }
       }
-    };
+    }};
+
     if (prune) {
       std::vector<Res> prio;
       for (auto p : a) {
@@ -512,14 +514,14 @@ class seed_finder : public reader_adapter_delegate {
         return (lhs.sig_count / lhs.bg_count) > (rhs.sig_count / rhs.bg_count);
       });
       for (auto km : prio) {
-        km.g.template huddinge_neighbours<true, true, false>(callback);
+        km.g.template huddinge_neighbours<true, true, false>(init_counters);
         if (p_counter.fill_rate() >= fill_limit) {
           break;
         }
       }
     } else {
       for (auto p : a) {
-        p.first.template huddinge_neighbours<true, true, false>(callback);
+        p.first.template huddinge_neighbours<true, true, false>(init_counters);
         if (p_counter.fill_rate() >= fill_limit) {
           std::cerr << "\tLoad factor >= " << fill_limit << " ("
                     << p_counter.fill_rate() << ") counting.." << std::endl;
@@ -547,21 +549,23 @@ class seed_finder : public reader_adapter_delegate {
                   << p.second.p << std::endl;
 #endif
         bool keep = true;
-        auto callback_extend = [&](gapmer_type o) {
-          if (not o.is_canonical()) {
-            o = o.reverse_complement();
-          }
-          if (b.contains(o)) {
-            if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
-                          b[o].sig_count, b[o].bg_count, p.second.p, b[o].p)) {
-              if constexpr (filter_mers) {
-                keep = false;
-              }
-            }
-          }
-        };
+
         p.first.template huddinge_neighbours<true, true, false>(
-            callback_extend);
+            [&](gapmer_type o) {
+              if (not o.is_canonical()) {
+                o = o.reverse_complement();
+              }
+              if (b.contains(o)) {
+                if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
+                              b[o].sig_count, b[o].bg_count, p.second.p,
+                              b[o].p)) {
+                  if constexpr (filter_mers) {
+                    keep = false;
+                  }
+                }
+              }
+            });
+
         if constexpr (filter_mers) {
           if (not keep) {
             del_set.insert(p.first);
