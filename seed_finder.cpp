@@ -257,22 +257,16 @@ int main(int argc, char const* argv[]) {
 
   if (lookup_k == 0) {
     lookup_k = 5;
+
     // figure out how big lookup tables will fit in memory.
-    if (middle_gap_only) {
-      while (sf::gapmer_count<true, max_gap>::lookup_bytes(lookup_k) <
-             mem_limit) {
+    sf::call_with_constant(middle_gap_only, [&](auto const middle_gap_only) {
+      while (sf::gapmer_count<middle_gap_only, max_gap>::lookup_bytes(
+                 lookup_k) < mem_limit && lookup_k <= 10) {
         ++lookup_k;
       }
-    } else {
-      while (sf::gapmer_count<false, max_gap>::lookup_bytes(lookup_k) <
-             mem_limit) {
-        ++lookup_k;
-      }
-    }
-    if (lookup_k > 10) {
-      lookup_k = 10;
-    }
+    });
   }
+
   if (lookup_k < 5 || lookup_k > max_k) {
     std::cerr << "Invalid lookup_k value (" << lookup_k << " not in [" << 5
               << ", " << max_k << "]).";
@@ -289,8 +283,8 @@ int main(int argc, char const* argv[]) {
 
   // Run the algorithm.
   auto const run([&]<typename t_middle_gap_only, typename t_enable_smoothing>(
-                       t_middle_gap_only const,
-                       t_enable_smoothing const) -> void {
+                     t_middle_gap_only const,
+                     t_enable_smoothing const) -> void {
     constexpr auto const middle_gap_only{t_middle_gap_only::value};
     constexpr auto const enable_smoothing{t_enable_smoothing::value};
 
@@ -322,8 +316,8 @@ int main(int argc, char const* argv[]) {
   });
 
   // Convert runtime parameters to constants.
-  sf::call_with_constant(middle_gap_only, [&](auto const middle_gap_only){
-    sf::call_with_constant(enable_smoothing, [&](auto const enable_smoothing){
+  sf::call_with_constant(middle_gap_only, [&](auto const middle_gap_only) {
+    sf::call_with_constant(enable_smoothing, [&](auto const enable_smoothing) {
       run(middle_gap_only, enable_smoothing);
     });
   });
