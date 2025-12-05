@@ -461,7 +461,7 @@ class seed_finder : public reader_adapter_delegate {
           double const sc(counts.first + 1);
           double const bc(counts.second + 1);
 
-          if (sc * sig_size_ <= fold_lim_ * bc * bg_size_) {
+          if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
             return;
           }
 
