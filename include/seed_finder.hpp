@@ -26,7 +26,7 @@
 
 namespace sf {
 
-template <bool middle_gap_only, uint8_t max_gap, bool enable_smootihing = true,
+template <bool middle_gap_only, uint8_t max_gap, bool enable_smoothing = true,
           bool filter_mers = true>
 class seed_finder : public reader_adapter_delegate {
  public:
@@ -380,14 +380,14 @@ class seed_finder : public reader_adapter_delegate {
     std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
     // Initialize by counting 5-mers
     gapmer_count_type sig_bg_a(sig_path_, bg_path_, 5, *this);
-    if constexpr (enable_smootihing) {
+    if constexpr (enable_smoothing) {
       sig_bg_a.smooth();
     }
 
     for (uint8_t k = 6; k <= lookup_k_; ++k) {
       // Initialize the k + 1 to compute extensions
       gapmer_count_type sig_bg_b(sig_path_, bg_path_, k, *this);
-      if constexpr (enable_smootihing) {
+      if constexpr (enable_smoothing) {
         sig_bg_b.smooth();
       }
       uint64_t v_lim = gapmer_count_type::ONE << ((k - 1) * 2);
@@ -451,7 +451,7 @@ class seed_finder : public reader_adapter_delegate {
         }
         if (not b.contains(o)) {
           double o_a, o_b;
-          if constexpr (enable_smootihing) {
+          if constexpr (enable_smoothing) {
             auto sig_bg = p_counter.smooth_count(o);
             o_a = sig_bg.first;
             o_b = sig_bg.second;
@@ -499,7 +499,7 @@ class seed_finder : public reader_adapter_delegate {
     auto const init_counters{[&](gapmer_type oo) {
       if (not b.contains(oo)) {
         p_counter.init(oo);
-        if constexpr (enable_smootihing) {
+        if constexpr (enable_smoothing) {
           oo.hamming_neighbours([&](gapmer_type h_n) { p_counter.init(h_n); });
         }
       }
@@ -535,6 +535,7 @@ class seed_finder : public reader_adapter_delegate {
         }
       }
     }
+
     std::cerr << "\tFinal load factor " << p_counter.fill_rate()
               << " counting.." << std::endl;
     p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_, bg_path_,
@@ -664,8 +665,8 @@ class seed_finder : public reader_adapter_delegate {
    */
   void find_seeds() {
     auto hash = [](const gapmer_type g) { return uint64_t(g); };
-    std::unordered_map<gapmer_type, Res, decltype(hash)> a;
-    std::unordered_map<gapmer_type, Res, decltype(hash)> b;
+    std::unordered_map<gapmer_type, Res, decltype(hash)> aa;
+    std::unordered_map<gapmer_type, Res, decltype(hash)> bb;
     // full k-mer couting as long as memory is sufficient.
     {
       gapmer_count_type sig_bg_c;
@@ -673,7 +674,7 @@ class seed_finder : public reader_adapter_delegate {
       uint64_t v_lim = gapmer_count_type::ONE << (lookup_k_ * 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
-        filter_count(lookup_k_, v, 0, 0, 0, sig_bg_c, a);
+        filter_count(lookup_k_, v, 0, 0, 0, sig_bg_c, aa);
       }
       uint8_t gap_s = middle_gap_only ? lookup_k_ / 2 : 1;
       uint8_t gap_lim = middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1;
@@ -682,7 +683,7 @@ class seed_finder : public reader_adapter_delegate {
           uint64_t offset = sig_bg_c.offset(gap_s, gap_l);
 #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
-            filter_count(lookup_k_, v, gap_s, gap_l, offset, sig_bg_c, a);
+            filter_count(lookup_k_, v, gap_s, gap_l, offset, sig_bg_c, aa);
           }
         }
       }
@@ -691,26 +692,26 @@ class seed_finder : public reader_adapter_delegate {
     partial_count<gapmer_type> p_counter(*this);
     for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
-      extend(a, b, p_counter, k, prune_);
-      std::cerr << "    " << a.size() << " " << int(k) - 1 << " candidates\n"
-                << "    " << b.size() << " " << int(k) << " potentials"
+      extend(aa, bb, p_counter, k, prune_);
+      std::cerr << "    " << aa.size() << " " << int(k) - 1 << " candidates\n"
+                << "    " << bb.size() << " " << int(k) << " potentials"
                 << std::endl;
-      for (auto p : a) {
+      for (auto p : aa) {
         seeds_.push_back(p.second);
       }
-      a.clear();
+      aa.clear();
       if constexpr (filter_mers) {
-        filter(b);
+        filter(bb);
       }
-      a.swap(b);
+      aa.swap(bb);
       std::cerr << int(k) - 1 << " -> " << seeds_.size() << " candidates."
                 << std::endl;
-      if (a.size() == 0) {
+      if (aa.size() == 0) {
         break;
       }
     }
-    if (a.size() > 0) {
-      for (auto p : a) {
+    if (aa.size() > 0) {
+      for (auto p : aa) {
         seeds_.push_back(p.second);
       }
       std::cerr << int(k_lim_) << " -> " << seeds_.size() << " candidates."
