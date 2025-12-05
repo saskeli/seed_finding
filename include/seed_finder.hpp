@@ -575,8 +575,8 @@ class seed_finder : public reader_adapter_delegate {
       for (auto d : del_set) {
         a.erase(d);
       }
-    }
-  } // if constexpr (filter_mers)
+    } // if constexpr (filter_mers)
+  }
 
   /**
    * Filter found mers of the same lengths. Keep only the best within H1
