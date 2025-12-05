@@ -445,34 +445,33 @@ class seed_finder : public reader_adapter_delegate {
                 << p.second.sig_count << ", " << p.second.bg_count << ", "
                 << p.second.p << std::endl;
 #endif
-      auto callback = [&](gapmer_type o) {
+      p.first.template huddinge_neighbours<true, true, false>([&](gapmer_type o) {
         if (not o.is_canonical()) {
           o = o.reverse_complement();
         }
         if (not b.contains(o)) {
-          double o_a, o_b;
-          if constexpr (enable_smoothing) {
-            auto sig_bg = p_counter.smooth_count(o);
-            o_a = sig_bg.first;
-            o_b = sig_bg.second;
-          } else {
-            auto sig_bg = p_counter.count(o);
-            o_a = sig_bg.first;
-            o_b = sig_bg.second;
-          }
-          o_a += 1;
-          o_b += 1;
-          if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) {
+          auto const counts([&]{
+            if constexpr (enable_smoothing)
+              return p_counter.smooth_count(o);
+            else
+              return p_counter.count(o);
+          }());
+
+          // Potentially narrowing conversion.
+          double const sc(counts.first + 1);
+          double const bc(counts.second + 1);
+
+          if (sc * sig_size_ <= fold_lim_ * bc * bg_size_) {
             return;
           }
-          double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
+
+          double const rr{error_suppressed_beta_inc(sc, bc, x_)};
           if (do_extend<false>(p.first, o, p.second.sig_count,
-                               p.second.bg_count, o_a, o_b, p.second.p, o_r)) {
-            b[o] = {o, o_r, uint64_t(o_a), uint64_t(o_b)};
+                               p.second.bg_count, sc, bc, p.second.p, rr)) {
+            b[o] = {o, rr, uint64_t(sc), uint64_t(bc)};
           }
         }
-      };
-      p.first.template huddinge_neighbours<true, true, false>(callback);
+      });
     }
   }
 
