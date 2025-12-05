@@ -74,7 +74,7 @@ class seed_finder : public reader_adapter_delegate {
    * @return True, if extension from a to b is valid
    */
   template <bool debug = false>
-  bool do_extend([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
+  bool validate_extension([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
                  double a_sig, double a_bg, double b_sig, double b_bg,
                  double a_r, double b_r) {
     if (a_bg <= 1.00001 && b_bg <= 1.00001) {
@@ -284,7 +284,7 @@ class seed_finder : public reader_adapter_delegate {
           return;
         }
         double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
-        if (do_extend(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
+        if (validate_extension(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[offset + v] = true;
         } else {
@@ -466,7 +466,7 @@ class seed_finder : public reader_adapter_delegate {
           }
 
           double const rr{error_suppressed_beta_inc(sc, bc, x_)};
-          if (do_extend<false>(p.first, o, p.second.sig_count,
+          if (validate_extension<false>(p.first, o, p.second.sig_count,
                                p.second.bg_count, sc, bc, p.second.p, rr)) {
             b[o] = {o, rr, uint64_t(sc), uint64_t(bc)};
           }
@@ -559,7 +559,7 @@ class seed_finder : public reader_adapter_delegate {
                 o = o.reverse_complement();
               }
               if (b.contains(o)) {
-                if (do_extend(p.first, o, p.second.sig_count, p.second.bg_count,
+                if (validate_extension(p.first, o, p.second.sig_count, p.second.bg_count,
                               b[o].sig_count, b[o].bg_count, p.second.p,
                               b[o].p)) {
                   keep = false;
@@ -687,6 +687,7 @@ class seed_finder : public reader_adapter_delegate {
         }
       }
     }
+
     // Partial count with extensions when we can no longer count everything
     partial_count<gapmer_type> p_counter(*this);
     for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
