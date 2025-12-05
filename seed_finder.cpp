@@ -261,7 +261,8 @@ int main(int argc, char const* argv[]) {
     // figure out how big lookup tables will fit in memory.
     sf::call_with_constant(middle_gap_only, [&](auto const middle_gap_only) {
       while (sf::gapmer_count<middle_gap_only, max_gap>::lookup_bytes(
-                 lookup_k) < mem_limit && lookup_k <= 10) {
+                 lookup_k) < mem_limit &&
+             lookup_k <= 10) {
         ++lookup_k;
       }
     });
@@ -281,13 +282,10 @@ int main(int argc, char const* argv[]) {
     std::filesystem::create_directory(prefix);
   }
 
-  // Run the algorithm.
-  auto const run([&]<typename t_middle_gap_only, typename t_enable_smoothing>(
-                     t_middle_gap_only const,
-                     t_enable_smoothing const) -> void {
-    constexpr auto const middle_gap_only{t_middle_gap_only::value};
-    constexpr auto const enable_smoothing{t_enable_smoothing::value};
-
+  // Run the algorithm. The parameters are std::bool_constants and hence can be
+  // used as non-type template parameters.
+  auto const run([&](auto const middle_gap_only,
+                     auto const enable_smoothing) -> void {
     typedef sf::seed_finder<middle_gap_only, max_gap, enable_smoothing, false>
         seed_finder_type;
     typedef typename seed_finder_type::gapmer_type gapmer_type;
