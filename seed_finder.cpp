@@ -163,35 +163,35 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
                                     {'V', "version"});
     args::CompletionFlag completion_(parser, {"complete"});
     sf::args::value_flag bg_path_(
-        parser, "background_path", "Background FASTA file, required for now.",
+        parser, "path", "Background FASTA file, required for now.",
         {'b', "background"}, retval.bg_path, args::Options::Required);
     args::Positional<std::string> sig_path_(
         parser, "signal_path", "Signal FASTA file.", retval.sig_path,
         args::Options::Required);
     sf::args::value_flag dot_path_(
-        parser, "dot_path",
+        parser, "path",
         "Compute huddinge graph and output to dot file path.", {"dot"},
         retval.dot_output);
     args::Flag gap_any_(parser, "gap_any",
                         "Allow gaps at any location, not just in the middle.",
                         {'a', "gap-at-any-location"});
     sf::args::value_flag p_sig_(
-        parser, "p_signal",
+        parser, "p_value",
         "p value to use for signal to background comparison.",
         {'p', "p-signal"}, retval.p);
     sf::args::value_flag p_ext_(
-        parser, "p_extension",
+        parser, "p_value",
         "p value to use for extension when background counts are zero.",
         {"p-ext"}, retval.p_ext);
     sf::args::value_flag log_fold_(
-        parser, "lf",
+        parser, "fold_change",
         "Discard all mers with log fold change smaller than this.", {"lf"},
         retval.log_fold);
-    sf::args::value_flag max_k_(parser, "mk",
+    sf::args::value_flag max_k_(parser, "length",
                                 "Maximum mer length in [6, 24] range.", {"mk"},
                                 retval.max_k);
     sf::args::value_flag lookup_k_(
-        parser, "lookup_k",
+        parser, "length",
         "Limit for lookup table-based k-mer counting in [5, max_k] range.",
         {"lookup-k"}, retval.lookup_k);
     sf::args::value_flag threads_(parser, "threads",
@@ -202,11 +202,11 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
                                  "no alignments will be output.",
                                  {"pref"}, retval.prefix);
     sf::args::value_flag print_lim_(
-        parser, "max_s",
+        parser, "count",
         "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
         retval.print_lim);
     sf::args::value_flag max_aligns_(
-        parser, "max_a",
+        parser, "count",
         "Maximum number of alignments to output. (0 -> max_s).", {"max-a"},
         retval.max_aligns);
     args::Flag should_output_all_matches_(
@@ -220,11 +220,11 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         parser, "enable pruning",
         "Enable pruning of extendable mers for partial counting.", {"pruning"});
     sf::args::value_flag mem_limit_(
-        parser, "memory_limit",
+        parser, "gigabytes",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
         retval.mem_limit);
     sf::args::value_flag h1_weight_(
-        parser, "h1_weight",
+        parser, "weight",
         "Relative impact of H1 neighbourhood enrichment on mer priority. (0 -> "
         "no impact, 1 -> 0.5 h1 neighbourhod 0.5 mer enrichment)",
         {"h1-weight"}, retval.h1_weight);
