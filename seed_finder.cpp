@@ -193,7 +193,7 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     sf::args::value_flag lookup_k_(
         parser, "lookup_k",
         "Limit for lookup table-based k-mer counting in [5, max_k] range.",
-        {"lookup_k"}, retval.lookup_k);
+        {"lookup-k"}, retval.lookup_k);
     sf::args::value_flag threads_(parser, "threads",
                                   "Number of threads to use.", {'t', "threads"},
                                   retval.threads);
@@ -227,7 +227,7 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         parser, "h1_weight",
         "Relative impact of H1 neighbourhood enrichment on mer priority. (0 -> "
         "no impact, 1 -> 0.5 h1 neighbourhod 0.5 mer enrichment)",
-        {"h1_weight"}, retval.h1_weight);
+        {"h1-weight"}, retval.h1_weight);
 
     // Parse and check.
     try {
