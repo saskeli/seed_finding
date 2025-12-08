@@ -191,7 +191,7 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
                                 "Maximum mer length in [6, 24] range.", {"mk"},
                                 retval.max_k);
     sf::args::value_flag lookup_k_(
-        parser, "lokup_k",
+        parser, "lookup_k",
         "Limit for lookup table-based k-mer counting in [5, max_k] range.",
         {"lookup_k"}, retval.lookup_k);
     sf::args::value_flag threads_(parser, "threads",
