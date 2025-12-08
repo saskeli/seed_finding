@@ -5,7 +5,6 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
-#include <type_traits>
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -16,6 +15,7 @@
 
 #include "include/args.hpp"
 #include "include/dot_writer.hpp"
+#include "include/gapmer_count.hpp"
 #include "include/seed_clusterer.hpp"
 #include "include/seed_finder.hpp"
 #include "include/util.hpp"
