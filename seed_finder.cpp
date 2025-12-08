@@ -169,9 +169,8 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         parser, "signal_path", "Signal FASTA file.", retval.sig_path,
         args::Options::Required);
     sf::args::value_flag dot_path_(
-        parser, "path",
-        "Compute Huddinge graph and output to dot file path.", {"dot"},
-        retval.dot_output);
+        parser, "path", "Compute Huddinge graph and output to dot file path.",
+        {"dot"}, retval.dot_output);
     args::Flag gap_any_(parser, "gap_any",
                         "Allow gaps at any location, not just in the middle.",
                         {'a', "gap-at-any-location"});
@@ -192,7 +191,8 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
                                 retval.max_k);
     sf::args::value_flag lookup_k_(
         parser, "length",
-        "Limit for lookup table-based k-mer counting in [5, max_k] range.",
+        "Limit for lookup table-based k-mer counting in [5, max_k] range. Use "
+        "zero to calculate automatically from available memory.",
         {"lookup-k"}, retval.lookup_k);
     sf::args::value_flag threads_(parser, "threads",
                                   "Number of threads to use.", {'t', "threads"},
@@ -202,11 +202,11 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
                                  "no alignments will be output.",
                                  {"pref"}, retval.prefix);
     sf::args::value_flag print_lim_(
-        parser, "count",
+        parser, "max_s",
         "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
         retval.print_lim);
     sf::args::value_flag max_aligns_(
-        parser, "count",
+        parser, "max_a",
         "Maximum number of alignments to output. (0 -> max_s).", {"max-a"},
         retval.max_aligns);
     args::Flag should_output_all_matches_(
