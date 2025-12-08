@@ -29,6 +29,8 @@
 #define SF_STRINGIFY(X) SF_STRINGIFY_(X)
 
 
+namespace {
+
 inline uint64_t available_gigs() {
   uint64_t mem = sysconf(_SC_PHYS_PAGES);
   mem *= sysconf(_SC_PAGE_SIZE);
@@ -42,9 +44,11 @@ inline uint64_t available_gigs() {
   return gigs;
 }
 
+
 // We use uint16_t since it is easier to output correctly than uint8_t (i.e. not
 // as a character).
 const constexpr uint16_t max_gap = MAX_GAP;
+
 
 void filter_seeds(auto& seeds, auto callback) {
   std::cerr << "Filtering.." << std::endl;
@@ -77,6 +81,7 @@ void print_invocation(int argc, char const* argv[]) {
   for (int i{}; i < argc; ++i) std::cerr << ' ' << argv[i];
   std::cerr << '\n';
 }
+} // namespace
 
 
 int main(int argc, char const* argv[]) {
@@ -255,6 +260,7 @@ int main(int argc, char const* argv[]) {
   mem_limit *= 1000;
   mem_limit *= 1000;
 
+  // Calculate lookup_k from the available memory if set to zero.
   if (lookup_k == 0) {
     lookup_k = 5;
 
