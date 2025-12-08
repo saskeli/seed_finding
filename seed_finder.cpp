@@ -81,33 +81,64 @@ void print_invocation(int argc, char const* argv[]) {
   for (int i{}; i < argc; ++i) std::cerr << ' ' << argv[i];
   std::cerr << '\n';
 }
-} // namespace
 
 
-int main(int argc, char const* argv[]) {
-  print_invocation(argc, argv);
-  std::string bg_path = "";
-  std::string sig_path = "";
-  std::string prefix = "";
-  std::string dot_output = "";
-  bool middle_gap_only = true;
-  bool prune = false;
-  bool should_output_all_matches = false;
-  double p = 0.0001;
-  double p_ext = 0.01;
-  double log_fold = 2;
-  double h1_weight = 1;
-  size_t print_lim = 20;
-  size_t lookup_k = 0;
-  size_t max_aligns = 0;
+struct configuration {
+  std::string bg_path{};
+  std::string sig_path{};
+  std::string prefix{};
+  std::string dot_output{};
+  bool middle_gap_only{true};
+  bool prune{false};
+  bool should_output_all_matches{false};
+  double p{0.0001};
+  double p_ext{0.01};
+  double log_fold{2};
+  double h1_weight{1};
+  size_t print_lim{20};
+  size_t lookup_k{};
+  size_t max_aligns{};
+  int threads{1};
+  uint16_t max_k{20};
+  double mem_limit{};
+  bool enable_smoothing{true};
+
+  configuration()
+      :
 #ifdef _OPENMP
-  uint64_t threads = omp_get_max_threads();
-#else
-  uint64_t threads = 1;
+        threads{omp_get_max_threads()},
 #endif
-  uint16_t max_k = 20;
-  double mem_limit = available_gigs();
-  bool enable_smoothing = true;
+        mem_limit(available_gigs()) {
+  }
+};
+
+
+std::ostream& operator<<(std::ostream& os, configuration const& conf) {
+  os << "bg_path:                   " << conf.bg_path << '\n';
+  os << "sig_path:                  " << conf.sig_path << '\n';
+  os << "prefix:                    " << conf.prefix << '\n';
+  os << "dot_output:                " << conf.dot_output << '\n';
+  os << "middle_gap_only:           " << conf.middle_gap_only << '\n';
+  os << "prune:                     " << conf.prune << '\n';
+  os << "should_output_all_matches: " << conf.should_output_all_matches << '\n';
+  os << "p:                         " << conf.p << '\n';
+  os << "p_ext:                     " << conf.p_ext << '\n';
+  os << "log_fold:                  " << conf.log_fold << '\n';
+  os << "h1_weight:                 " << conf.h1_weight << '\n';
+  os << "print_lim:                 " << conf.print_lim << '\n';
+  os << "lookup_k:                  " << conf.lookup_k << '\n';
+  os << "max_aligns:                " << conf.max_aligns << "\n";
+  os << "threads:                   " << conf.threads << '\n';
+  os << "max_k:                     " << conf.max_k << '\n';
+  os << "mem_limit:                 " << conf.mem_limit << '\n';
+  os << "enable_smoothing:          " << conf.enable_smoothing << '\n';
+
+  return os;
+}
+
+
+configuration parse_command_line_arguments(int argc, char const* argv[]) {
+  configuration retval;
 
   {
     args::ArgumentParser parser(
@@ -133,50 +164,51 @@ int main(int argc, char const* argv[]) {
     args::CompletionFlag completion_(parser, {"complete"});
     sf::args::value_flag bg_path_(
         parser, "background_path", "Background FASTA file, required for now.",
-        {'b', "background"}, bg_path, args::Options::Required);
-    args::Positional<std::string> sig_path_(parser, "signal_path",
-                                            "Signal FASTA file.", sig_path,
-                                            args::Options::Required);
+        {'b', "background"}, retval.bg_path, args::Options::Required);
+    args::Positional<std::string> sig_path_(
+        parser, "signal_path", "Signal FASTA file.", retval.sig_path,
+        args::Options::Required);
     sf::args::value_flag dot_path_(
         parser, "dot_path",
         "Compute huddinge graph and output to dot file path.", {"dot"},
-        dot_output);
+        retval.dot_output);
     args::Flag gap_any_(parser, "gap_any",
                         "Allow gaps at any location, not just in the middle.",
                         {'a', "gap-at-any-location"});
     sf::args::value_flag p_sig_(
         parser, "p_signal",
         "p value to use for signal to background comparison.",
-        {'p', "p-signal"}, p);
+        {'p', "p-signal"}, retval.p);
     sf::args::value_flag p_ext_(
         parser, "p_extension",
         "p value to use for extension when background counts are zero.",
-        {"p-ext"}, p_ext);
+        {"p-ext"}, retval.p_ext);
     sf::args::value_flag log_fold_(
         parser, "lf",
         "Discard all mers with log fold change smaller than this.", {"lf"},
-        log_fold);
-    sf::args::value_flag max_k_(
-        parser, "mk", "Maximum mer length in [6, 24] range.", {"mk"}, max_k);
+        retval.log_fold);
+    sf::args::value_flag max_k_(parser, "mk",
+                                "Maximum mer length in [6, 24] range.", {"mk"},
+                                retval.max_k);
     sf::args::value_flag lookup_k_(
         parser, "lokup_k",
         "Limit for lookup table-based k-mer counting in [5, max_k] range.",
-        {"lookup_k"}, lookup_k);
+        {"lookup_k"}, retval.lookup_k);
     sf::args::value_flag threads_(parser, "threads",
                                   "Number of threads to use.", {'t', "threads"},
-                                  threads);
+                                  retval.threads);
     sf::args::value_flag prefix_(parser, "output_prefix",
                                  "Prefix for alignment output, If not given, "
                                  "no alignments will be output.",
-                                 {"pref"}, prefix);
+                                 {"pref"}, retval.prefix);
     sf::args::value_flag print_lim_(
         parser, "max_s",
         "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
-        print_lim);
+        retval.print_lim);
     sf::args::value_flag max_aligns_(
         parser, "max_a",
         "Maximum number of alignments to output. (0 -> max_s).", {"max-a"},
-        max_aligns);
+        retval.max_aligns);
     args::Flag should_output_all_matches_(
         parser, "output_all_matches",
         "Output also matches that are substrings of other matches.",
@@ -190,12 +222,12 @@ int main(int argc, char const* argv[]) {
     sf::args::value_flag mem_limit_(
         parser, "memory_limit",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
-        mem_limit);
+        retval.mem_limit);
     sf::args::value_flag h1_weight_(
         parser, "h1_weight",
         "Relative impact of H1 neighbourhood enrichment on mer priority. (0 -> "
         "no impact, 1 -> 0.5 h1 neighbourhod 0.5 mer enrichment)",
-        {"h1_weight"}, h1_weight);
+        {"h1_weight"}, retval.h1_weight);
 
     // Parse and check.
     try {
@@ -214,78 +246,71 @@ int main(int argc, char const* argv[]) {
       std::exit(1);
     }
 
-    sig_path = args::get(sig_path_);
-    if (gap_any_) middle_gap_only = true;
-    if (should_output_all_matches_) should_output_all_matches = true;
-    if (disable_smoothing_) enable_smoothing = false;
-    if (enable_pruning_) prune = true;
-
-    if (print_lim == 0) {
-      print_lim = ~print_lim;
-    }
-    if (max_aligns == 0) {
-      max_aligns = print_lim;
-    }
+    retval.sig_path = args::get(sig_path_);
+    if (gap_any_) retval.middle_gap_only = false;
+    if (should_output_all_matches_) retval.should_output_all_matches = true;
+    if (disable_smoothing_) retval.enable_smoothing = false;
+    if (enable_pruning_) retval.prune = true;
   }
 
-  if (max_k < 6 || max_k > 24) {
-    std::cerr << "invalid value for maximum k: " << max_k
+  if (retval.print_lim == 0) {
+    retval.print_lim = ~retval.print_lim;
+  }
+
+  if (retval.max_aligns == 0) {
+    retval.max_aligns = retval.print_lim;
+  }
+
+  if (retval.max_k < 6 || retval.max_k > 24) {
+    std::cerr << "invalid value for maximum k: " << retval.max_k
               << ", should be in [6, 24] range." << std::endl;
     exit(1);
   }
 
+  return retval;
+}
+}  // namespace
+
+
+int main(int argc, char const* argv[]) {
+  print_invocation(argc, argv);
+  configuration conf{parse_command_line_arguments(argc, argv)};
+
 #ifdef DEBUG
-  {
-    std::cerr << "bg_path:                   " << bg_path << '\n';
-    std::cerr << "sig_path:                  " << sig_path << '\n';
-    std::cerr << "prefix:                    " << prefix << '\n';
-    std::cerr << "middle_gap_only:           " << middle_gap_only << '\n';
-    std::cerr << "should_output_all_matches: " << should_output_all_matches
-              << '\n';
-    std::cerr << "p:                         " << p << '\n';
-    std::cerr << "p_ext:                     " << p_ext << '\n';
-    std::cerr << "log_fold:                  " << log_fold << '\n';
-    std::cerr << "print_lim:                 " << print_lim << '\n';
-    std::cerr << "max_aligns:                " << max_aligns << "\n";
-    std::cerr << "threads:                   " << threads << '\n';
-    std::cerr << "max_k:                     " << max_k << '\n';
-    std::cerr << "lookup_k:                  " << lookup_k << '\n';
-    std::cerr << "mem_limit:                 " << mem_limit << '\n';
-    std::cerr << "enable_smoothing:          " << enable_smoothing << '\n';
-    std::cerr << "prune:                     " << prune << "\n";
-  }
+  std::cerr << conf;
 #endif
 
-  mem_limit *= 1000;
-  mem_limit *= 1000;
-  mem_limit *= 1000;
+  conf.mem_limit *= 1000;
+  conf.mem_limit *= 1000;
+  conf.mem_limit *= 1000;
 
   // Calculate lookup_k from the available memory if set to zero.
-  if (lookup_k == 0) {
-    lookup_k = 5;
+  if (conf.lookup_k == 0) {
+    conf.lookup_k = 5;
 
-    // figure out how big lookup tables will fit in memory.
-    sf::call_with_constant(middle_gap_only, [&](auto const middle_gap_only) {
-      while (sf::gapmer_count<middle_gap_only, max_gap>::lookup_bytes(
-                 lookup_k) < mem_limit &&
-             lookup_k <= 10) {
-        ++lookup_k;
-      }
-    });
+    // Figure out how big lookup tables will fit in memory.
+    sf::call_with_constant(
+        conf.middle_gap_only, [&](auto const middle_gap_only) {
+          while (sf::gapmer_count<middle_gap_only, max_gap>::lookup_bytes(
+                     conf.lookup_k) < conf.mem_limit &&
+                 conf.lookup_k <= 10) {
+            ++conf.lookup_k;
+          }
+        });
   }
 
-  if (lookup_k < 5 || lookup_k > max_k) {
-    std::cerr << "Invalid lookup_k value (" << lookup_k << " not in [" << 5
-              << ", " << max_k << "]).";
+  if (conf.lookup_k < 5 || conf.lookup_k > conf.max_k) {
+    std::cerr << "Invalid lookup_k value (" << conf.lookup_k << " not in [" << 5
+              << ", " << conf.max_k << "]).";
     exit(1);
   }
 
 #ifdef _OPENMP
-  omp_set_num_threads(threads);
+  omp_set_num_threads(conf.threads);
 #endif
 
-  if (prefix.length() > 0) {
-    std::filesystem::create_directory(prefix);
+  if (conf.prefix.length() > 0) {
+    std::filesystem::create_directory(conf.prefix);
   }
 
   // Run the algorithm. The parameters are std::bool_constants and hence can be
@@ -296,34 +321,37 @@ int main(int argc, char const* argv[]) {
         seed_finder_type;
     typedef typename seed_finder_type::gapmer_type gapmer_type;
 
-    seed_finder_type finder(sig_path, bg_path, p, log_fold, max_k, mem_limit,
-                            p_ext, lookup_k, prune);
+    seed_finder_type finder(conf.sig_path, conf.bg_path, conf.p, conf.log_fold,
+                            conf.max_k, conf.mem_limit, conf.p_ext,
+                            conf.lookup_k, conf.prune);
 
     finder.find_seeds();
-    if (!dot_output.empty()) {
-      sf::Dot_Writer::write_dot<gapmer_type>(dot_output, finder.get_seeds(),
-                                             max_k);
+    if (!conf.dot_output.empty()) {
+      sf::Dot_Writer::write_dot<gapmer_type>(conf.dot_output,
+                                             finder.get_seeds(), conf.max_k);
     }
 
     auto sc{make_seed_clusterer<middle_gap_only, max_gap>(
-        finder.get_seeds(), sig_path, bg_path, p_ext, h1_weight, finder.x())};
+        finder.get_seeds(), conf.sig_path, conf.bg_path, conf.p_ext,
+        conf.h1_weight, finder.x())};
     std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
-    for (size_t i = 0; i < print_lim; ++i) {
+    for (size_t i = 0; i < conf.print_lim; ++i) {
       if (not sc.has_next()) {
         break;
       }
-      if (max_aligns == i) {
-        prefix = "";
+      if (conf.max_aligns == i) {
+        conf.prefix = "";
       }
-      sc.output_cluster(prefix, should_output_all_matches);
+      sc.output_cluster(conf.prefix, conf.should_output_all_matches);
     }
   });
 
   // Convert runtime parameters to constants.
-  sf::call_with_constant(middle_gap_only, [&](auto const middle_gap_only) {
-    sf::call_with_constant(enable_smoothing, [&](auto const enable_smoothing) {
-      run(middle_gap_only, enable_smoothing);
-    });
+  sf::call_with_constant(conf.middle_gap_only, [&](auto const middle_gap_only) {
+    sf::call_with_constant(conf.enable_smoothing,
+                           [&](auto const enable_smoothing) {
+                             run(middle_gap_only, enable_smoothing);
+                           });
   });
 
   return 0;
