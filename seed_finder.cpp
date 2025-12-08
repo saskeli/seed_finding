@@ -170,7 +170,7 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         args::Options::Required);
     sf::args::value_flag dot_path_(
         parser, "path",
-        "Compute huddinge graph and output to dot file path.", {"dot"},
+        "Compute Huddinge graph and output to dot file path.", {"dot"},
         retval.dot_output);
     args::Flag gap_any_(parser, "gap_any",
                         "Allow gaps at any location, not just in the middle.",
