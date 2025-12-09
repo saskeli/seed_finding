@@ -62,6 +62,10 @@ class reader_adapter {
   /// Access the current read.
   read_buffer_type const& read_buffer() const { return m_read_buffer; }
 
+  void set_delegate(reader_adapter_delegate& delegate) {
+    m_delegate = &delegate;
+  }
+
   /// Iterate the characters of the current read.
   template <typename t_cb>
   void iterate_characters(std::uint64_t start_pos, t_cb&& cb) const {
@@ -75,5 +79,14 @@ class reader_adapter {
     iterate_packed_character_pairs(m_read_buffer, m_read_length, lhs_start,
                                    rhs_start, cb);
   }
+};
+
+
+// Helper for calling finish() automatically.
+template <typename t_reader_adapter>
+struct reader_adapter_guard {
+  t_reader_adapter& adapter;
+
+  ~reader_adapter_guard() { adapter.finish(); }
 };
 }  // namespace sf
