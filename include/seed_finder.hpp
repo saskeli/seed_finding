@@ -7,9 +7,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <libbio/utility.hh>
-#include <set>
-#include <string>
 #include <string_view>
 #include <tuple>
 #include <unordered_map>
@@ -19,23 +16,21 @@
 #include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
+#include "pack_characters.hpp"
 #include "partial_count.hpp"
-#include "reader_adapter.hpp"
-#include "seqio_reader_adapter.hpp"
 #include "util.hpp"
 
 namespace sf {
 
 template <bool middle_gap_only, uint8_t max_gap, bool enable_smoothing = true,
           bool filter_mers = true>
-class seed_finder : public reader_adapter_delegate {
+class seed_finder {
  public:
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
  private:
   typedef gapmer_count<middle_gap_only, max_gap> gapmer_count_type;
   typedef typename gapmer_count_type::value_type gapmer_count_value_type;
-  typedef std::set<std::string, libbio::compare_strings_transparent> path_set;
 
   struct Res {
     gapmer_type g;
@@ -44,10 +39,9 @@ class seed_finder : public reader_adapter_delegate {
     uint64_t bg_count;
   };
 
-  std::string sig_path_;
-  std::string bg_path_;
+  packed_read_vector const& signal_reads_;
+  packed_read_vector const& background_reads_;
   std::vector<Res> seeds_;
-  path_set paths_with_errors_;
   uint64_t sig_size_;
   uint64_t bg_size_;
   double p_;
@@ -378,14 +372,14 @@ class seed_finder : public reader_adapter_delegate {
   void counted_seeds_and_candidates(gapmer_count_type& sig_bg_c) {
     std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
     // Initialize by counting 5-mers
-    gapmer_count_type sig_bg_a(sig_path_, bg_path_, 5, *this);
+    gapmer_count_type sig_bg_a(signal_reads_, background_reads_, 5);
     if constexpr (enable_smoothing) {
       sig_bg_a.smooth();
     }
 
     for (uint8_t k = 6; k <= lookup_k_; ++k) {
       // Initialize the k + 1 to compute extensions
-      gapmer_count_type sig_bg_b(sig_path_, bg_path_, k, *this);
+      gapmer_count_type sig_bg_b(signal_reads_, background_reads_, k);
       if constexpr (enable_smoothing) {
         sig_bg_b.smooth();
       }
@@ -526,8 +520,8 @@ class seed_finder : public reader_adapter_delegate {
         if (p_counter.fill_rate() >= fill_limit) {
           std::cerr << "\tLoad factor >= " << fill_limit << " ("
                     << p_counter.fill_rate() << ") counting.." << std::endl;
-          p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_,
-                                                                  bg_path_, k);
+          p_counter.template count_mers<middle_gap_only, max_gap>(signal_reads_,
+                                                                  background_reads_, k);
           std::cerr << "\tFiltering extension..." << std::endl;
           extend_counted(a, b, p_counter);
           p_counter.clear();
@@ -537,8 +531,7 @@ class seed_finder : public reader_adapter_delegate {
 
     std::cerr << "\tFinal load factor " << p_counter.fill_rate()
               << " counting.." << std::endl;
-    p_counter.template count_mers<middle_gap_only, max_gap>(sig_path_, bg_path_,
-                                                            k);
+    p_counter.template count_mers<middle_gap_only, max_gap>(signal_reads_, background_reads_, k);
     std::cerr << "\tFiltering extension..." << std::endl;
     extend_counted(a, b, p_counter);
     p_counter.clear();
@@ -575,7 +568,7 @@ class seed_finder : public reader_adapter_delegate {
       for (auto d : del_set) {
         a.erase(d);
       }
-    } // if constexpr (filter_mers)
+    }  // if constexpr (filter_mers)
   }
 
   /**
@@ -615,28 +608,14 @@ class seed_finder : public reader_adapter_delegate {
     std::cerr << "    filtered to " << m.size() << " mers" << std::endl;
   }
 
-  /**
-   * Calculate the sum of the lengths of the reads and their reverse complements
-   * in the input.
-   *
-   * @param path input path
-   */
-  std::uint64_t read_length_sum_with_rc(std::string const& path) {
-    std::uint64_t retval{};
-    reader_adapter_type reader(*this);
-    reader.read_from_path(path);
-    while (reader.retrieve_next_read()) retval += reader.read_length();
-    reader.finish();
-    return retval;
-  }
-
  public:
-  seed_finder(const std::string& sig_path, const std::string& bg_path, double p,
+  seed_finder(packed_read_vector const& signal_reads,
+              packed_read_vector const& background_reads, double p,
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01,
               uint8_t lookup_k = 10, bool prune = false)
-      : sig_path_(sig_path),
-        bg_path_(bg_path),
+      : signal_reads_(signal_reads),
+        background_reads_(background_reads),
         seeds_(),
         sig_size_(),
         bg_size_(),
@@ -647,16 +626,24 @@ class seed_finder : public reader_adapter_delegate {
         k_lim_(max_k),
         lookup_k_(lookup_k),
         prune_(prune) {
+
+    // For calculating the sum of the read lengths.
+    auto const read_length_sum{[](packed_read_vector const& reads) {
+      return std::accumulate(reads.begin(), reads.end(), std::uint64_t{},
+                             [](auto const acc, packed_read const& rr) {
+                               return acc + rr.length;
+                             });
+    }};
+
     gsl_set_error_handler_off();
-    sig_size_ = read_length_sum_with_rc(sig_path_);
-    bg_size_ = read_length_sum_with_rc(bg_path_);
+    sig_size_ = read_length_sum(signal_reads_);
+    bg_size_ = read_length_sum(background_reads_);
     x_ = double(sig_size_) / (sig_size_ + bg_size_);
-    std::cerr << "Background " << bg_path_ << " with length " << bg_size_
-              << std::endl;
-    std::cerr << "Signal " << sig_path_ << " with length " << sig_size_
-              << std::endl;
-    std::cerr << "X = " << x_ << std::endl;
+    std::cerr << "Background length " << bg_size_ << '\n';
+    std::cerr << "Signal length " << sig_size_ << '\n';
+    std::cerr << "X = " << x_ << '\n';
   }
+
 
   /**
    * Does the heavy lifting of counting increasingly long gapmers to find seed
@@ -670,13 +657,13 @@ class seed_finder : public reader_adapter_delegate {
     {
       gapmer_count_type sig_bg_c;
       counted_seeds_and_candidates(sig_bg_c);
-      uint64_t v_lim = gapmer_count_type::ONE << (lookup_k_ * 2);
+      uint64_t const v_lim{gapmer_count_type::ONE << (lookup_k_ * 2)};
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
         filter_count(lookup_k_, v, 0, 0, 0, sig_bg_c, aa);
       }
       uint8_t gap_s = middle_gap_only ? lookup_k_ / 2 : 1;
-      uint8_t gap_lim = middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1;
+      uint8_t const gap_lim(middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1);
       for (; gap_s <= gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
           uint64_t offset = sig_bg_c.offset(gap_s, gap_l);
@@ -689,7 +676,7 @@ class seed_finder : public reader_adapter_delegate {
     }
 
     // Partial count with extensions when we can no longer count everything
-    partial_count<gapmer_type> p_counter(*this);
+    partial_count<gapmer_type> p_counter;
     for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
       extend(aa, bb, p_counter, k, prune_);
@@ -722,23 +709,5 @@ class seed_finder : public reader_adapter_delegate {
   const std::vector<Res>& get_seeds() const { return seeds_; }
 
   double x() const { return x_; }
-
- private:
-  bool should_report_errors_for_path(reader_adapter&,
-                                     std::string_view path) override {
-    return !paths_with_errors_.contains(path);
-  }
-
-  void found_first_read_with_unexpected_character(
-      reader_adapter&, std::string_view path, std::uint64_t lineno) override {
-    std::cerr << "WARNING: Skipping reads with unexpected characters in "
-              << path << "; first one on line " << lineno << ".\n";
-  }
-
-  void found_total_reads_with_unexpected_characters(
-      reader_adapter&, std::string_view path, std::uint64_t count) override {
-    paths_with_errors_.emplace(path);
-    std::cerr << "WARNING: Skipped " << count << " reads in " << path << ".\n";
-  }
 };
 }  // namespace sf

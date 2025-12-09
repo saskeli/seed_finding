@@ -5,10 +5,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <libbio/algorithm.hh>
-#include <string>
 #include <utility>
-
-#include "configuration.hpp"
+#include "packed_read.hpp"
 
 namespace sf {
 
@@ -23,7 +21,6 @@ class partial_count {
     uint64_t bg_count;
   };
 
-  reader_adapter_type reader_adapter;
   elem* data_;
   uint64_t size_;
 
@@ -40,8 +37,7 @@ class partial_count {
   }
 
  public:
-  explicit partial_count(reader_adapter_delegate& delegate)
-      : reader_adapter(delegate), size_(0) {
+  partial_count(): size_(0) {
     data_ = (elem*)calloc(MOD, sizeof(elem));
   }
 
@@ -84,38 +80,31 @@ class partial_count {
   }
 
   template <bool middle_gap_only, uint16_t max_gap>
-  void count_mers(const std::string& sig_path, const std::string& bg_path,
+  void count_mers(packed_read_vector const &sig_reads, packed_read_vector const &bg_reads,
                   uint16_t k) {
-    auto const do_count([&](std::string const& fasta_path, bool should_check_k, auto&& inc) {
-      reader_adapter.read_from_path(fasta_path);
+    auto const do_count([&](packed_read_vector const &reads, bool should_check_k, auto&& inc) {
+      // OpenMP’s parallel for should work with the range b.c. it is essentially a
+      // memory range and the iterator is a pointer.
+#pragma omp parallel for
+      for (auto const &read : reads) {
+        if (should_check_k && read.length < k) continue;
 
-#pragma omp parallel
-      while (true) {
-        bool should_continue{};
-#pragma omp critical
-        should_continue = reader_adapter.retrieve_next_read();
-
-        if (!should_continue) break;
-
-        if (should_check_k && reader_adapter.read_length() < k) continue;
-
-        auto const& read_buffer{reader_adapter.read_buffer()};
-        gapmer_t g(read_buffer.front() >> (64U - 2U * k), k);
+        gapmer_t g(read.packed_characters.front() >> (64U - 2U * k), k);
         inc(g);
-        reader_adapter.iterate_characters(k, [&](std::uint8_t const cc) {
+        read.iterate_characters(k, [&](std::uint8_t const cc) {
           g = g.next_(cc);
           inc(g);
         });
 
         uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-        auto gap_lim = libbio::min_ct(reader_adapter.read_length(),
+        auto gap_lim = libbio::min_ct(read.length,
                                       middle_gap_only ? (k + 3) / 2 : k);
 
         for (; gap_s < gap_lim; ++gap_s) {
           for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-            g = gapmer_t(read_buffer, k, gap_s, gap_l);
+            g = gapmer_t(read.packed_characters.front(), k, gap_s, gap_l);
             inc(g);
-            reader_adapter.iterate_character_pairs(
+            read.iterate_character_pairs(
                 gap_s, k + gap_l,
                 [&](std::uint8_t const lhsc, std::uint8_t const rhsc) {
                   g = g.next_(lhsc, rhsc);
@@ -123,12 +112,11 @@ class partial_count {
                 });
           }
         }
-      }
-      reader_adapter.finish();
+      } // for (auto const &read : reads)
     });
 
-    do_count(sig_path, true, [this](auto const gg) { inc_sig(gg); });
-    do_count(bg_path, false, [this](auto const gg) { inc_bg(gg); });
+    do_count(sig_reads, true, [this](auto const gg) { inc_sig(gg); });
+    do_count(bg_reads, false, [this](auto const gg) { inc_bg(gg); });
   }
 
   std::pair<uint64_t, uint64_t> count(gapmer_t g) const {
