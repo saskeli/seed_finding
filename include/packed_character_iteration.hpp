@@ -89,6 +89,14 @@ inline void iterate_packed_characters(packed_word_vector const& src,
 
 
 template <typename t_cb>
+inline void iterate_packed_characters(packed_read const& read,
+                                      std::uint64_t const start_pos,
+                                      t_cb&& cb) {
+  iterate_packed_characters(read.packed_characters, read.length, start_pos, cb);
+}
+
+
+template <typename t_cb>
 inline void iterate_packed_character_pairs(packed_word_vector const& src,
                                            std::uint64_t length,
                                            std::uint64_t const lhs_start_pos,
@@ -130,5 +138,15 @@ inline void iterate_packed_character_pairs(packed_word_vector const& src,
     rhs_ctx.rotate_current_word();
     cb(lhs_ctx.current_word() & 0x3, rhs_ctx.current_word() & 0x3);
   }
+}
+
+
+template <typename t_cb>
+inline void iterate_packed_character_pairs(packed_read const& read,
+                                           std::uint64_t const lhs_start_pos,
+                                           std::uint64_t const rhs_start_pos,
+                                           t_cb&& cb) {
+  iterate_packed_character_pairs(read.packed_characters, read.length,
+                                 lhs_start_pos, rhs_start_pos, cb);
 }
 }  // namespace sf
