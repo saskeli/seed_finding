@@ -257,7 +257,7 @@ class seed_finder : public reader_adapter_delegate {
         uint64_t o_v = oo.value();
         double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
         double o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1; // FIXME: should use from bg_counts instead of sig_counts?
-        if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) { // FIXME: should sig_size_ and bg_size_ be swapped?
+        if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[o_offset + o_v] = true;
           return;
@@ -278,7 +278,7 @@ class seed_finder : public reader_adapter_delegate {
         uint64_t o_v = oo.value();
         double o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
         double o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
-        if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) { // FIXME: should sig_size_ and bg_size_ be swapped?
+        if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
 #pragma omp critical(o_bv)
           sig_bg_b.discarded[o_offset + o_v] = true;
           return;
@@ -345,7 +345,7 @@ class seed_finder : public reader_adapter_delegate {
                      1;  // FIXME: should o_v be used in place of v?
         double o_b = sig_bg_c.bg_counts[o_offset + v] +
                      1;  // FIXME: should o_v be used in place of v?
-        if (o_a * sig_size_ <= fold_lim_ * o_b * bg_size_) { // FIXME: should sig_size_ and bg_size_ be swapped?
+        if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
 #pragma omp critical(d_bv)
           sig_bg_c.discarded[o_offset + o_v] = true;
           return;
