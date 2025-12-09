@@ -74,9 +74,10 @@ class seed_finder : public reader_adapter_delegate {
    * @return True, if extension from a to b is valid
    */
   template <bool debug = false>
-  bool validate_extension([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
-                 double a_sig, double a_bg, double b_sig, double b_bg,
-                 double a_r, double b_r) {
+  bool validate_extension([[maybe_unused]] gapmer_type a,
+                          [[maybe_unused]] gapmer_type b, double a_sig,
+                          double a_bg, double b_sig, double b_bg, double a_r,
+                          double b_r) {
     if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (a_sig > b_sig * 4) {
         return false;
@@ -256,7 +257,7 @@ class seed_finder : public reader_adapter_delegate {
         uint64_t o_offset = sig_bg_a.offset(oo.gap_start(), oo.gap_length());
         uint64_t o_v = oo.value();
         double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
-        double o_b = sig_bg_a.sig_counts[o_offset + o_v] + 1; // FIXME: should use from bg_counts instead of sig_counts?
+        double o_b = sig_bg_a.bg_counts[o_offset + o_v] + 1;
         if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
 #pragma omp critical(a_bv)
           sig_bg_a.discarded[o_offset + o_v] = true;
@@ -341,10 +342,8 @@ class seed_finder : public reader_adapter_delegate {
       gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
         uint64_t o_offset = sig_bg_c.offset(oo.gap_start(), oo.gap_length());
         uint64_t o_v = oo.value();
-        double o_a = sig_bg_c.sig_counts[o_offset + v] +
-                     1;  // FIXME: should o_v be used in place of v?
-        double o_b = sig_bg_c.bg_counts[o_offset + v] +
-                     1;  // FIXME: should o_v be used in place of v?
+        double o_a = sig_bg_c.sig_counts[o_offset + o_v] + 1;
+        double o_b = sig_bg_c.bg_counts[o_offset + o_v] + 1;
         if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
 #pragma omp critical(d_bv)
           sig_bg_c.discarded[o_offset + o_v] = true;
@@ -467,7 +466,8 @@ class seed_finder : public reader_adapter_delegate {
 
           double const rr{error_suppressed_beta_inc(sc, bc, x_)};
           if (validate_extension<false>(p.first, o, p.second.sig_count,
-                               p.second.bg_count, sc, bc, p.second.p, rr)) {
+                                        p.second.bg_count, sc, bc,
+                                        p.second.p, rr)) {
             b[o] = {o, rr, uint64_t(sc), uint64_t(bc)};
           }
         }
@@ -559,9 +559,9 @@ class seed_finder : public reader_adapter_delegate {
                 o = o.reverse_complement();
               }
               if (b.contains(o)) {
-                if (validate_extension(p.first, o, p.second.sig_count, p.second.bg_count,
-                              b[o].sig_count, b[o].bg_count, p.second.p,
-                              b[o].p)) {
+                if (validate_extension(p.first, o, p.second.sig_count,
+                                       p.second.bg_count, b[o].sig_count,
+                                       b[o].bg_count, p.second.p, b[o].p)) {
                   keep = false;
                 }
               }
