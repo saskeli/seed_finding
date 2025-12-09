@@ -14,6 +14,7 @@
 #include <utility>
 #include <vector>
 
+#include "pack_characters.hpp"
 #include "util.hpp"
 
 namespace sf {
@@ -22,9 +23,9 @@ template <bool middle_gap_only, uint16_t max_gap, class Res_vec_T>
 class seed_clusterer {
  private:
   const Res_vec_T& seeds_;
+  packed_read_vector const &sig_reads_;
+  packed_read_vector const &bg_reads_;
   std::vector<std::pair<size_t, double>> local_optima_;
-  std::string sig_path_;
-  std::string bg_path_;
   size_t opt_idx_;
   double p_ext_;
   double h1_weight_;
@@ -58,40 +59,35 @@ class seed_clusterer {
         std::vector<size_t>(2 * margin + m_string.size())};
 
     /* Cout match locations to the pfm */
-    seq_io::Reader_x sr(sig_path_);
-    sr.enable_reverse_complements();
-    while (true) {
-      uint64_t len = sr.get_next_read_to_buffer();
-      if (len == 0) {
-        break;
-      }
-      std::string read(sr.read_buf, len);
+    std::string unpacked_read;
+    for (auto const &read : sig_reads_) {
+      read.unpack(unpacked_read);
       for (size_t p_i = 0; p_i < patterns.size(); ++p_i) {
         if (m_string[p_i] == '.') {
           continue;
         }
         auto e = std::sregex_iterator();
-        auto m = std::sregex_iterator(read.begin(), read.end(), patterns[p_i]);
+        auto m = std::sregex_iterator(unpacked_read.begin(), unpacked_read.end(), patterns[p_i]);
         for (; m != e; ++m) {
           size_t pos = m->position();
           size_t i = pos < 6 ? margin - pos : 0;
           for (; i < margin; ++i) {
-            ++pfm[nuc_to_v[read[pos - (margin - i)]]][i];
+            ++pfm[nuc_to_v[unpacked_read[pos - (margin - i)]]][i];
           }
           if (m_string[p_i] != '.') {
-            ++pfm[nuc_to_v[read[pos + p_i]]][margin + p_i];
+            ++pfm[nuc_to_v[unpacked_read[pos + p_i]]][margin + p_i];
           }
           for (i = 1; i < m_string.size() - 1; ++i) {
             if (m_string[i] == '.') {
-              ++pfm[nuc_to_v[read[pos + i]]][margin + i];
+              ++pfm[nuc_to_v[unpacked_read[pos + i]]][margin + i];
             }
           }
           size_t e_i = 2 * margin + p_len;
           for (i = margin + p_len; i < e_i; ++i) {
-            if (pos + i >= read.size()) {
+            if (pos + i >= read.length) {
               break;
             }
-            ++pfm[nuc_to_v[read[pos + i]]][i];
+            ++pfm[nuc_to_v[unpacked_read[pos + i]]][i];
           }
         }
       }
@@ -116,13 +112,13 @@ class seed_clusterer {
    * @param bg_path  Path to backgroud `.fast(a|q)(.gz)?`.
    * @param pext     P-value to filter extensions with binomial tests.
    */
-  seed_clusterer(const Res_vec_T& seeds, std::string_view sig_path,
-                 std::string_view bg_path, double pext, double h1_weight,
+  seed_clusterer(const Res_vec_T& seeds, packed_read_vector const &sig_reads,
+                 packed_read_vector const &bg_reads, double pext, double h1_weight,
                  double x)
       : seeds_(seeds),
+        sig_reads_{sig_reads},
+        bg_reads_{bg_reads},
         local_optima_(),
-        sig_path_(sig_path),
-        bg_path_(bg_path),
         opt_idx_(),
         p_ext_(pext),
         h1_weight_(h1_weight),
@@ -259,12 +255,13 @@ class seed_clusterer {
 // deduction and this is the second-best option.)
 template <bool t_middle_gap_only, uint16_t t_max_gap, typename t_result_vector>
 auto make_seed_clusterer(t_result_vector const& seeds,
-                         std::string_view sig_path, std::string_view bg_path,
+                         packed_read_vector const &sig_reads,
+                         packed_read_vector const &bg_reads,
                          double const pext, double const h1_weight,
                          double const x)
     -> seed_clusterer<t_middle_gap_only, t_max_gap,
                       std::remove_cvref_t<t_result_vector>> {
-  return {seeds, sig_path, bg_path, pext, h1_weight, x};
+  return {seeds, sig_reads, bg_reads, pext, h1_weight, x};
 }
 
 }  // namespace sf

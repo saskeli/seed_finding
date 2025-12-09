@@ -5,6 +5,10 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+
+#include "pack_characters.hpp"
+#include "reader_adapter.hpp"
 
 #ifdef _OPENMP
 #include <omp.h>
@@ -14,10 +18,12 @@
 #include <args.hxx>
 
 #include "include/args.hpp"
+#include "include/configuration.hpp"
 #include "include/dot_writer.hpp"
 #include "include/gapmer_count.hpp"
-#include "include/seed_clusterer.hpp"
+#include "include/reader_adapter.hpp"
 #include "include/seed_finder.hpp"
+#include "seed_clusterer.hpp"
 #include "include/util.hpp"
 #include "include/version.hpp"
 
@@ -269,6 +275,27 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
 
   return retval;
 }
+
+
+struct reader_adapter_delegate : public sf::reader_adapter_delegate {
+  bool should_report_errors_for_path(sf::reader_adapter&,
+                                     std::string_view path) override {
+    return true;
+  }
+
+  void found_first_read_with_unexpected_character(
+      sf::reader_adapter&, std::string_view path,
+      std::uint64_t lineno) override {
+    std::cerr << "WARNING: Skipping reads with unexpected characters in "
+              << path << "; first one on line " << lineno << ".\n";
+  }
+
+  void found_total_reads_with_unexpected_characters(
+      sf::reader_adapter&, std::string_view path,
+      std::uint64_t count) override {
+    std::cerr << "WARNING: Skipped " << count << " reads in " << path << ".\n";
+  }
+};
 }  // namespace
 
 
@@ -309,7 +336,28 @@ int main(int argc, char const* argv[]) {
   omp_set_num_threads(conf.threads);
 #endif
 
-  if (conf.prefix.length() > 0) {
+  sf::packed_read_vector signal_reads;
+  sf::packed_read_vector background_reads;
+
+  // Process the input reads.
+  {
+    reader_adapter_delegate delegate;
+    sf::reader_adapter_type reader{delegate};
+
+    auto const process_path{
+        [&](std::string const& path, sf::packed_read_vector& dst) {
+          sf::reader_adapter_guard guard{reader};
+          reader.read_from_path(path);
+          while (reader.retrieve_next_read())
+            dst.emplace_back(reader.read_buffer(), reader.read_length());
+        }};
+
+    process_path(conf.sig_path, signal_reads);
+    process_path(conf.bg_path, background_reads);
+  }
+
+  // Prepare to output the alignments if needed.
+  if (not conf.prefix.empty()) {
     std::filesystem::create_directory(conf.prefix);
   }
 
@@ -321,9 +369,9 @@ int main(int argc, char const* argv[]) {
         seed_finder_type;
     typedef typename seed_finder_type::gapmer_type gapmer_type;
 
-    seed_finder_type finder(conf.sig_path, conf.bg_path, conf.p, conf.log_fold,
-                            conf.max_k, conf.mem_limit, conf.p_ext,
-                            conf.lookup_k, conf.prune);
+    seed_finder_type finder(signal_reads, background_reads, conf.p,
+                            conf.log_fold, conf.max_k, conf.mem_limit,
+                            conf.p_ext, conf.lookup_k, conf.prune);
 
     finder.find_seeds();
     if (!conf.dot_output.empty()) {
@@ -332,7 +380,7 @@ int main(int argc, char const* argv[]) {
     }
 
     auto sc{make_seed_clusterer<middle_gap_only, max_gap>(
-        finder.get_seeds(), conf.sig_path, conf.bg_path, conf.p_ext,
+        finder.get_seeds(), signal_reads, background_reads, conf.p_ext,
         conf.h1_weight, finder.x())};
     std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
     for (size_t i = 0; i < conf.print_lim; ++i) {

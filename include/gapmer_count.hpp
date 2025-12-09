@@ -9,13 +9,11 @@
 #include <cstring>
 #include <libbio/algorithm.hh>
 #include <sdsl/bit_vectors.hpp>
-#include <string>
 #include <string_view>
 #include <utility>
 
-#include "configuration.hpp"
 #include "gapmer.hpp"
-#include "reader_adapter.hpp"
+#include "packed_read.hpp"
 
 namespace sf {
 
@@ -53,33 +51,26 @@ class gapmer_count {
     return ret;
   }
 
-  reader_adapter_type reader_adapter;
   value_type* sig_counts;
   value_type* bg_counts;
   sdsl::bit_vector discarded;
   uint8_t k_;
 
  private:
-  void count_mers(const std::string& fasta_path, value_type* counts, uint8_t k) {
-    reader_adapter.read_from_path(fasta_path);
-#pragma omp parallel
-    while (true) {
-      bool should_continue{};
-#pragma omp critical
-      should_continue = reader_adapter.retrieve_next_read();
+  void count_mers(packed_read_vector const& reads, value_type* counts, uint8_t k) {
+    // OpenMP’s parallel for should work with the range b.c. it is essentially a
+    // memory range and the iterator is a pointer.
+#pragma omp parallel for
+    for (auto const &read : reads) {
 
-      if (!should_continue)
-        break;
-
-      if (reader_adapter.read_length() < k)
+      if (read.length < k)
         continue;
 
-      auto const &read_buffer{reader_adapter.read_buffer()};
-      gapmer<middle_gap_only, max_gap> g(read_buffer.front() >> (64U - 2U * k), k);
+      gapmer<middle_gap_only, max_gap> g(read.packed_characters.front() >> (64U - 2U * k), k);
       uint64_t cv = g.value();
 #pragma omp atomic
       counts[cv] = counts[cv] + 1;
-      reader_adapter.iterate_characters(k, [&](std::uint8_t const cc){
+      read.iterate_characters(k, [&](std::uint8_t const cc){
         g = g.next_(cc);
         cv = g.value();
 #pragma omp atomic
@@ -87,17 +78,17 @@ class gapmer_count {
       });
 
       uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      auto gap_lim = libbio::min_ct(reader_adapter.read_length(), middle_gap_only ? (k + 3) / 2 : k);
+      auto gap_lim = libbio::min_ct(read.length, middle_gap_only ? (k + 3) / 2 : k);
 
       for (; gap_s < gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
           uint64_t off = offset(k, gap_s, gap_l);
-          g = gapmer<middle_gap_only, max_gap>(read_buffer, k, gap_s, gap_l);
+          g = gapmer<middle_gap_only, max_gap>(read.packed_characters, k, gap_s, gap_l);
           cv = off + g.value();
 #pragma omp atomic
           counts[cv] = counts[cv] + 1;
 
-          reader_adapter.iterate_character_pairs(gap_s, k + gap_l, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
+          read.iterate_character_pairs(gap_s, k + gap_l, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
             g = g.next_(lhsc, rhsc);
             cv = off + g.value();
 #pragma omp atomic
@@ -105,22 +96,19 @@ class gapmer_count {
           });
         }
       }
-    } // while (true)
-
-    reader_adapter.finish();
+    } // for (auto const &read in reads)
   }
 
  public:
-  gapmer_count(const std::string& sig_fasta_path,
-               const std::string& bg_fasta_path, uint8_t k,
-               reader_adapter_delegate &delegate)
-      : reader_adapter(delegate),
-        sig_counts((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
+  gapmer_count(packed_read_vector const &sig_reads,
+               packed_read_vector const &bg_reads,
+               uint8_t k)
+      : sig_counts((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
         bg_counts((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
         discarded(lookup_elems(k)),
         k_(k) {
-    count_mers(sig_fasta_path, sig_counts, k_);
-    count_mers(bg_fasta_path, bg_counts, k_);
+    count_mers(sig_reads, sig_counts, k_);
+    count_mers(bg_reads, bg_counts, k_);
   }
 
   gapmer_count()
