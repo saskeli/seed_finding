@@ -180,8 +180,8 @@ class seed_finder {
     }
 
     // Narrows the count value type (double).
-    uint64_t const sc(counts.sig_counts[offset + vv] + 1);
-    uint64_t const bc(counts.bg_counts[offset + vv] + 1);
+    uint64_t const sc(counts.sig_counts_[offset + vv] + 1);
+    uint64_t const bc(counts.bg_counts_[offset + vv] + 1);
 
     // Check the enrichment w.r.t. background by requiring that
     // the logarithmic fold change is greater than log_fold passed

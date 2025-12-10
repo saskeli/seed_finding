@@ -51,9 +51,9 @@ class gapmer_count {
     return ret;
   }
 
-  value_type* sig_counts;
-  value_type* bg_counts;
-  sdsl::bit_vector discarded;
+  value_type* sig_counts_;
+  value_type* bg_counts_;
+  sdsl::bit_vector discarded_;
   uint8_t k_;
 
  private:
@@ -103,31 +103,31 @@ class gapmer_count {
   gapmer_count(packed_read_vector const &sig_reads,
                packed_read_vector const &bg_reads,
                uint8_t k)
-      : sig_counts((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
-        bg_counts((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
-        discarded(lookup_elems(k)),
+      : sig_counts_((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
+        bg_counts_((value_type*)calloc(lookup_elems(k), sizeof(value_type))),
+        discarded_(lookup_elems(k)),
         k_(k) {
-    count_mers(sig_reads, sig_counts, k_);
-    count_mers(bg_reads, bg_counts, k_);
+    count_mers(sig_reads, sig_counts_, k_);
+    count_mers(bg_reads, bg_counts_, k_);
   }
 
   gapmer_count()
-      : sig_counts(nullptr), bg_counts(nullptr), discarded(0), k_(0) {}
+      : sig_counts_(nullptr), bg_counts_(nullptr), discarded_(0), k_(0) {}
 
-  gapmer_count(gapmer_count&& other) : discarded(0) {
+  gapmer_count(gapmer_count&& other) : discarded_(0) {
     k_ = std::exchange(other.k_, 0);
-    sig_counts = std::exchange(other.sig_counts, nullptr);
-    bg_counts = std::exchange(other.bg_counts, nullptr);
-    discarded = std::exchange(other.discarded, discarded);
+    sig_counts_ = std::exchange(other.sig_counts_, nullptr);
+    bg_counts_ = std::exchange(other.bg_counts_, nullptr);
+    discarded_ = std::exchange(other.discarded_, discarded_);
   }
 
   gapmer_count(const gapmer_count&) = delete;
 
   gapmer_count& operator=(gapmer_count&& other) {
     std::swap(other.k_, k_);
-    std::swap(other.sig_counts, sig_counts);
-    std::swap(other.bg_counts, bg_counts);
-    std::swap(other.discarded, discarded);
+    std::swap(other.sig_counts_, sig_counts_);
+    std::swap(other.bg_counts_, bg_counts_);
+    std::swap(other.discarded_, discarded_);
     return *this;
   }
 
@@ -171,16 +171,16 @@ class gapmer_count {
     uint64_t v_lim = ONE << (k_ * 2);
     value_type* sig_scratch = (value_type*)calloc(v_lim, sizeof(value_type));
     value_type* bg_scratch = (value_type*)calloc(v_lim, sizeof(value_type));
-    smooth(sig_counts, bg_counts, sig_scratch, bg_scratch, v_lim);
-    std::memcpy(sig_counts, sig_scratch, v_lim * sizeof(value_type));
-    std::memcpy(bg_counts, bg_scratch, v_lim * sizeof(value_type));
+    smooth(sig_counts_, bg_counts_, sig_scratch, bg_scratch, v_lim);
+    std::memcpy(sig_counts_, sig_scratch, v_lim * sizeof(value_type));
+    std::memcpy(bg_counts_, bg_scratch, v_lim * sizeof(value_type));
     uint8_t gap_s = middle_gap_only ? k_ / 2 : 1;
     uint8_t gap_lim = middle_gap_only ? (k_ + 3) / 2 : k_;
     for (; gap_s < gap_lim; ++gap_s) {
       for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
         uint64_t off = offset(gap_s, gap_l);
-        value_type* l_count = sig_counts + off;
-        value_type* r_count = bg_counts + off;
+        value_type* l_count = sig_counts_ + off;
+        value_type* r_count = bg_counts_ + off;
         std::memset(sig_scratch, 0, v_lim * sizeof(value_type));
         std::memset(bg_scratch, 0, v_lim * sizeof(value_type));
         smooth(l_count, r_count, sig_scratch, bg_scratch, v_lim);
@@ -196,7 +196,7 @@ class gapmer_count {
   std::pair<value_type, value_type> count(gapmer g) const {
     uint64_t off = offset(g.gap_start(), g.gap_length());
     off += g.value();
-    return {sig_counts[off], bg_counts[off]};
+    return {sig_counts_[off], bg_counts_[off]};
   }
 
   uint64_t offset(uint8_t gap_s, uint8_t gap_l) const {
@@ -204,11 +204,11 @@ class gapmer_count {
   }
 
   ~gapmer_count() {
-    if (sig_counts != nullptr) {
-      free(sig_counts);
+    if (sig_counts_ != nullptr) {
+      free(sig_counts_);
     }
-    if (bg_counts != nullptr) {
-      free(bg_counts);
+    if (bg_counts_ != nullptr) {
+      free(bg_counts_);
     }
   }
 };
