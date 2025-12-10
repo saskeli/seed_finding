@@ -11,16 +11,22 @@
 #include <utility>
 #include <vector>
 
-#include "gapmer.hpp"
+#include "count_base.hpp"
 #include "packed_read.hpp"
 
 namespace sf {
 
-template <bool middle_gap_only, uint8_t max_gap>
-class gapmer_count {
+template <typename t_gapmer, typename t_base = count_base <t_gapmer>>
+class gapmer_count final : public t_base {
  public:
+  typedef t_base base_type;
   typedef double value_type;
   const static constexpr uint64_t ONE = 1;
+
+  typedef base_type::gapmer_type gapmer_type;
+  using base_type::max_gap;
+  using base_type::middle_gap_only;
+  using base_type::count_mers;
 
   static constexpr uint64_t lookup_elems(uint8_t k) {
     uint64_t ret = ONE << (k * 2);
@@ -50,64 +56,46 @@ class gapmer_count {
     return ret;
   }
 
-private:
-  typedef std::vector <value_type> value_vector;
+ private:
+  typedef std::vector<value_type> value_vector;
 
-public:
+ public:
   value_vector sig_counts_;
   value_vector bg_counts_;
   sdsl::bit_vector discarded_;
   uint8_t k_{};
 
  private:
-  void count_mers(packed_read_vector const& reads, value_vector &counts, uint8_t k) {
-    // OpenMP’s parallel for should work with the range b.c. it is essentially a
-    // memory range and the iterator is a pointer.
-#pragma omp parallel for
-    for (auto const &read : reads) {
+  void increment_signal_count(gapmer_type gg) override {
+    uint64_t cv{gg.value()};
+#pragma omp atomic relaxed
+    ++sig_counts_[cv];
+  }
 
-      if (read.length < k)
-        continue;
+  void increment_background_count(gapmer_type gg) override {
+    uint64_t cv{gg.value()};
+#pragma omp atomic relaxed
+    ++bg_counts_[cv];
+  }
 
-      gapmer<middle_gap_only, max_gap> g(read.packed_characters.front() >> (64U - 2U * k), k);
-      uint64_t cv = g.value();
-#pragma omp atomic
-      counts[cv] = counts[cv] + 1;
-      read.iterate_characters(k, [&](std::uint8_t const cc){
-        g = g.next_(cc);
-        cv = g.value();
-#pragma omp atomic
-        counts[cv] = counts[cv] + 1;
-      });
+  void increment_signal_count_gapped(gapmer_type gg, uint64_t off) override {
+    uint64_t cv{off + gg.value()};
+#pragma omp atomic relaxed
+    ++sig_counts_[cv];
+  }
 
-      uint8_t gap_s = middle_gap_only ? k / 2 : 1;
-      auto gap_lim = libbio::min_ct(read.length, middle_gap_only ? (k + 3) / 2 : k);
-
-      for (; gap_s < gap_lim; ++gap_s) {
-        for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-          uint64_t off = offset(k, gap_s, gap_l);
-          g = gapmer<middle_gap_only, max_gap>(read.packed_characters, k, gap_s, gap_l);
-          cv = off + g.value();
-#pragma omp atomic
-          counts[cv] = counts[cv] + 1;
-
-          read.iterate_character_pairs(gap_s, k + gap_l, [&](std::uint8_t const lhsc, std::uint8_t const rhsc){
-            g = g.next_(lhsc, rhsc);
-            cv = off + g.value();
-#pragma omp atomic
-            counts[cv] = counts[cv] + 1;
-          });
-        }
-      }
-    } // for (auto const &read in reads)
+  void increment_background_count_gapped(gapmer_type gg,
+                                         uint64_t off) override {
+    uint64_t cv{off + gg.value()};
+#pragma omp atomic relaxed
+    ++bg_counts_[cv];
   }
 
   private:
    gapmer_count(packed_read_vector const& sig_reads,
                 packed_read_vector const& bg_reads, uint64_t size, uint8_t k)
        : sig_counts_(size), bg_counts_(size), discarded_(size), k_(k) {
-     count_mers(sig_reads, sig_counts_, k_);
-     count_mers(bg_reads, bg_counts_, k_);
+     count_mers(sig_reads, bg_reads, k_);
    }
 
   public:
@@ -183,7 +171,7 @@ public:
     return {sig_counts_[off], bg_counts_[off]};
   }
 
-  uint64_t offset(uint8_t gap_s, uint8_t gap_l) const {
+  uint64_t offset(uint8_t gap_s, uint8_t gap_l) const override {
     return offset(k_, gap_s, gap_l);
   }
 };

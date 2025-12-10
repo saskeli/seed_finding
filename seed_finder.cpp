@@ -20,10 +20,11 @@
 #include "include/args.hpp"
 #include "include/configuration.hpp"
 #include "include/dot_writer.hpp"
+#include "include/gapmer.hpp"
 #include "include/gapmer_count.hpp"
 #include "include/reader_adapter.hpp"
 #include "include/seed_finder.hpp"
-#include "seed_clusterer.hpp"
+#include "include/seed_clusterer.hpp"
 #include "include/util.hpp"
 #include "include/version.hpp"
 
@@ -318,7 +319,8 @@ int main(int argc, char const* argv[]) {
     // Figure out how big lookup tables will fit in memory.
     sf::call_with_constant(
         conf.middle_gap_only, [&](auto const middle_gap_only) {
-          while (sf::gapmer_count<middle_gap_only, max_gap>::lookup_bytes(
+          typedef sf::gapmer <middle_gap_only, max_gap> gapmer_type;
+          while (sf::gapmer_count<gapmer_type>::lookup_bytes(
                      conf.lookup_k) < conf.mem_limit &&
                  conf.lookup_k <= 10) {
             ++conf.lookup_k;

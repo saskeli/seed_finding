@@ -16,7 +16,7 @@
 #include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
-#include "pack_characters.hpp"
+#include "packed_read.hpp"
 #include "partial_count.hpp"
 #include "util.hpp"
 
@@ -29,7 +29,8 @@ class seed_finder {
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
  private:
-  typedef gapmer_count<middle_gap_only, max_gap> gapmer_count_type;
+  typedef gapmer_count<gapmer_type> gapmer_count_type;
+  typedef partial_count<gapmer_type> partial_count_type;
   typedef typename gapmer_count_type::value_type gapmer_count_value_type;
 
   struct Res {
@@ -520,8 +521,7 @@ class seed_finder {
         if (p_counter.fill_rate() >= fill_limit) {
           std::cerr << "\tLoad factor >= " << fill_limit << " ("
                     << p_counter.fill_rate() << ") counting.." << std::endl;
-          p_counter.template count_mers<middle_gap_only, max_gap>(signal_reads_,
-                                                                  background_reads_, k);
+          p_counter.count_mers(signal_reads_, background_reads_, k);
           std::cerr << "\tFiltering extension..." << std::endl;
           extend_counted(a, b, p_counter);
           p_counter.clear();
@@ -531,7 +531,7 @@ class seed_finder {
 
     std::cerr << "\tFinal load factor " << p_counter.fill_rate()
               << " counting.." << std::endl;
-    p_counter.template count_mers<middle_gap_only, max_gap>(signal_reads_, background_reads_, k);
+    p_counter.count_mers(signal_reads_, background_reads_, k);
     std::cerr << "\tFiltering extension..." << std::endl;
     extend_counted(a, b, p_counter);
     p_counter.clear();
@@ -676,7 +676,7 @@ class seed_finder {
     }
 
     // Partial count with extensions when we can no longer count everything
-    partial_count<gapmer_type> p_counter;
+    partial_count_type p_counter;
     for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
       std::cerr << int(k) - 1 << " -> " << std::endl;
       extend(aa, bb, p_counter, k, prune_);
