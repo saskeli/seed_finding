@@ -234,18 +234,21 @@ class seed_finder {
    * @param sig_bg_k  Length k gapmer count tables
    * @param sig_bg_k1 Length k + 1 gapmer count tables
    */
-  void check_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                   uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_k,
+  void check_count(gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
                    gapmer_count_type& sig_bg_k1) {
 #ifdef DEBUG
-    if (offset + v >= gapmer_count_type::lookup_elems(k)) {
-      std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
-                << " of " << gapmer_count_type::lookup_elems(k)
-                << " element table" << std::endl;
-      exit(1);
+    {
+      auto const v{gg.value()};
+      auto const k{gg.length()};
+      if (offset + v >= gapmer_count_type::lookup_elems(k)) {
+        std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
+                  << " of " << gapmer_count_type::lookup_elems(k)
+                  << " element table" << std::endl;
+        exit(1);
+      }
     }
 #endif
-    gapmer_type const gg(v, k, gap_s, gap_l);
+
     auto const& [rr, sc, bc, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_a_bv{});
     if (not should_continue) return;
@@ -265,7 +268,7 @@ class seed_finder {
         double o_r{};
         if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(a_bv)
-          sig_bg_k.mark_discarded_(v, offset);
+          sig_bg_k.mark_discarded(gg, offset);
         } else {
 #pragma omp critical(a_bv)
           sig_bg_k.mark_discarded(oo, o_offset);
@@ -287,14 +290,14 @@ class seed_finder {
         double const o_r = error_suppressed_beta_inc(osc, obc, x_);
         if (validate_extension(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(a_bv)
-          sig_bg_k.mark_discarded_(v, offset);
+          sig_bg_k.mark_discarded(gg, offset);
         } else {
 #pragma omp critical(o_bv)
           sig_bg_k1.mark_discarded(oo, o_offset);
         }
       });
 
-      if (not sig_bg_k.is_discarded_(v, offset)) {
+      if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
         seeds_.push_back({gg, rr, sc, bc});
       }
@@ -321,19 +324,22 @@ class seed_finder {
    * @param mm       Map to add candidate seeds to.
    */
   template <class M>
-  void filter_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                    uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_k,
+  void filter_count(gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
                     M& mm) {
 #ifdef DEBUG
-    if (offset + v >= gapmer_count_type::lookup_elems(k)) {
-      std::cerr << "k = " << int(k) << " & sig_bg_c.k_ = " << int(sig_bg_k.k_)
-                << " :\n accessing " << offset << " + " << v << " = "
-                << offset + v << " of " << gapmer_count_type::lookup_elems(k)
-                << " element table" << std::endl;
-      exit(1);
+    {
+      auto const v{gg.value()};
+      auto const k{gg.length()};
+      if (offset + v >= gapmer_count_type::lookup_elems(k)) {
+        std::cerr << "k = " << int(k) << " & sig_bg_k.k_ = " << int(sig_bg_k.k_)
+                  << " :\n accessing " << offset << " + " << v << " = "
+                  << offset + v << " of " << gapmer_count_type::lookup_elems(k)
+                  << " element table" << std::endl;
+        exit(1);
+      }
     }
 #endif
-    gapmer_type const gg(v, k, gap_s, gap_l);
+
     auto const& [rr, sc, bc, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
     if (not should_continue) return;
@@ -352,14 +358,14 @@ class seed_finder {
         double o_r{};
         if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(d_bv)
-          sig_bg_k.mark_discarded_(v, offset);
+          sig_bg_k.mark_discarded(gg, offset);
         } else {
 #pragma omp critical(d_bv)
           sig_bg_k.mark_discarded(oo, o_offset);
         }
       });
 
-      if (not sig_bg_k.is_discarded_(v, offset)) {
+      if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
         mm[gg] = {gg, rr, sc, bc};
       }
@@ -392,7 +398,8 @@ class seed_finder {
       uint64_t v_lim = gapmer_count_type::ONE << ((k - 1) * 2);
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
-        check_count(k - 1, v, 0, 0, 0, sig_bg_a, sig_bg_b);
+        gapmer_type const gg(v, k - 1, 0, 0);
+        check_count(gg, 0, sig_bg_a, sig_bg_b);
       }
       uint8_t gap_s = middle_gap_only ? (k - 1) / 2 : 1;
       uint8_t gap_lim = middle_gap_only ? k - gap_s - 1 : k - 2;
@@ -409,7 +416,8 @@ class seed_finder {
 #endif
 #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
-            check_count(k - 1, v, gap_s, gap_l, offset, sig_bg_a, sig_bg_b);
+            gapmer_type gg(v, k - 1, gap_s, gap_l);
+            check_count(gg, offset, sig_bg_a, sig_bg_b);
           }
         }
       }
@@ -665,7 +673,8 @@ class seed_finder {
       uint64_t const v_lim{gapmer_count_type::ONE << (lookup_k_ * 2)};
 #pragma omp parallel for
       for (uint64_t v = 0; v < v_lim; ++v) {
-        filter_count(lookup_k_, v, 0, 0, 0, sig_bg_c, aa);
+        gapmer_type const gg(v, lookup_k_, 0, 0);
+        filter_count(gg, 0, sig_bg_c, aa);
       }
       uint8_t gap_s = middle_gap_only ? lookup_k_ / 2 : 1;
       uint8_t const gap_lim(middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1);
@@ -674,7 +683,8 @@ class seed_finder {
           uint64_t offset = sig_bg_c.offset(gap_s, gap_l);
 #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
-            filter_count(lookup_k_, v, gap_s, gap_l, offset, sig_bg_c, aa);
+            gapmer_type const gg(v, lookup_k_, 0, 0);
+            filter_count(gg, offset, sig_bg_c, aa);
           }
         }
       }
