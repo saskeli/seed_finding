@@ -8,7 +8,6 @@
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
-#include <tuple>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -151,8 +150,12 @@ class seed_finder {
   }
 
 
-  typedef std::tuple<bool, uint64_t, uint64_t, double>
-      check_enrichment_return_type;
+  struct check_enrichment_result {
+    double ac_test_result{};
+    uint64_t signal_count{};
+    uint64_t background_count{};
+    bool did_pass{};
+  };
 
   /**
    * Check the enrichment of gg in the given signal and background.
@@ -162,14 +165,14 @@ class seed_finder {
    * @param critical OpenMP’s critical section wrapper.
    */
   template <typename t_critical>
-  [[nodiscard]] check_enrichment_return_type check_enrichment(
+  [[nodiscard]] check_enrichment_result check_enrichment(
       gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
       t_critical&& critical) {
     auto const vv{gg.value()};
 
     if constexpr (filter_mers) {
       if (counts.is_discarded_(vv, offset)) {
-        return {false, 0, 0, 0};
+        return {0, 0, 0, false};
       }
     }
 
@@ -177,7 +180,7 @@ class seed_finder {
       if constexpr (filter_mers) {
         critical([&] { counts.mark_discarded_(vv, offset); });
       }
-      return {false, 0, 0, 0};
+      return {0, 0, 0, false};
     }
 
     // Narrows the count value type (double).
@@ -195,7 +198,7 @@ class seed_finder {
       if constexpr (filter_mers) {
         critical([&] { counts.mark_discarded_(vv, offset); });
       }
-      return {false, sc, bc, 0};
+      return {0, sc, bc, false};
     }
 
     // Check the enrichment w.r.t. background by using the Audic-Claverie test.
@@ -209,10 +212,10 @@ class seed_finder {
       if constexpr (filter_mers) {
         critical([&] { counts.mark_discarded_(vv, offset); });
       }
-      return {false, sc, bc, rr};
+      return {rr, sc, bc, false};
     }
 
-    return {true, sc, bc, rr};
+    return {rr, sc, bc, true};
   }
 
 
@@ -243,7 +246,7 @@ class seed_finder {
     }
 #endif
     gapmer_type const gg(v, k, gap_s, gap_l);
-    auto const& [should_continue, sc, bc, rr] =
+    auto const& [rr, sc, bc, should_continue] =
         check_enrichment(gg, offset, sig_bg_a, critical_a_bv{});
     if (not should_continue) return;
 
@@ -331,7 +334,7 @@ class seed_finder {
     }
 #endif
     gapmer_type const gg(v, k, gap_s, gap_l);
-    auto const& [should_continue, sc, bc, rr] =
+    auto const& [rr, sc, bc, should_continue] =
         check_enrichment(gg, offset, sig_bg_c, critical_d_bv{});
     if (not should_continue) return;
 
