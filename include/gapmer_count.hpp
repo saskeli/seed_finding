@@ -164,10 +164,9 @@ class gapmer_count final : public t_base {
     free(bg_scratch);
   }
 
-  template <class gapmer>
-  std::pair<value_type, value_type> count(gapmer g) const {
-    uint64_t off = offset(g.gap_start(), g.gap_length());
-    off += g.value();
+  std::pair<value_type, value_type> count(gapmer_type gg) const {
+    uint64_t off = offset(gg.gap_start(), gg.gap_length());
+    off += gg.value();
     return {sig_counts_[off], bg_counts_[off]};
   }
 
