@@ -226,17 +226,17 @@ class seed_finder {
    *
    * Surviving mers get added to candidate list.
    *
-   * @param k        Gapmer length
-   * @param v        Gapmer value as uint64_t
-   * @param gap_s    Start location of gap
-   * @param gap_l    Length of gap
-   * @param offset   Offset value for table access
-   * @param sig_bg_a Length k gapmer count tables
-   * @param sig_bg_b Length k + 1 gapmer count tables
+   * @param k         Gapmer length
+   * @param v         Gapmer value as uint64_t
+   * @param gap_s     Start location of gap
+   * @param gap_l     Length of gap
+   * @param offset    Offset value for table access
+   * @param sig_bg_k  Length k gapmer count tables
+   * @param sig_bg_k1 Length k + 1 gapmer count tables
    */
   void check_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                   uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_a,
-                   gapmer_count_type& sig_bg_b) {
+                   uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_k,
+                   gapmer_count_type& sig_bg_k1) {
 #ifdef DEBUG
     if (offset + v >= gapmer_count_type::lookup_elems(k)) {
       std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
@@ -247,54 +247,54 @@ class seed_finder {
 #endif
     gapmer_type const gg(v, k, gap_s, gap_l);
     auto const& [rr, sc, bc, should_continue] =
-        check_enrichment(gg, offset, sig_bg_a, critical_a_bv{});
+        check_enrichment(gg, offset, sig_bg_k, critical_a_bv{});
     if (not should_continue) return;
 
     if constexpr (filter_mers) {
       // Length k mers.
       gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
-        auto const o_offset{sig_bg_a.offset(oo.gap_start(), oo.gap_length())};
-        auto const o_counts{sig_bg_a.count(oo, o_offset)};
+        auto const o_offset{sig_bg_k.offset(oo.gap_start(), oo.gap_length())};
+        auto const o_counts{sig_bg_k.count(oo, o_offset)};
         double const osc{o_counts.signal_count + 1};
         double const obc{o_counts.background_count + 1};
         if (osc * bg_size_ <= fold_lim_ * obc * sig_size_) {
 #pragma omp critical(a_bv)
-          sig_bg_a.mark_discarded(oo, o_offset);
+          sig_bg_k.mark_discarded(oo, o_offset);
           return;
         }
         double o_r{};
         if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(a_bv)
-          sig_bg_a.mark_discarded_(v, offset);
+          sig_bg_k.mark_discarded_(v, offset);
         } else {
 #pragma omp critical(a_bv)
-          sig_bg_a.mark_discarded(oo, o_offset);
+          sig_bg_k.mark_discarded(oo, o_offset);
         }
       });
 
       // Length k + 1 mers.
       gg.template huddinge_neighbours<true, true, false>([&](gapmer_type oo) {
-        uint64_t const o_offset{sig_bg_b.offset(oo.gap_start(), oo.gap_length())};
-        auto const o_counts{sig_bg_b.count(oo, o_offset)};
+        uint64_t const o_offset{sig_bg_k1.offset(oo.gap_start(), oo.gap_length())};
+        auto const o_counts{sig_bg_k1.count(oo, o_offset)};
         double const osc{o_counts.signal_count + 1};
         double const obc{o_counts.background_count + 1};
         if (osc * bg_size_ <= fold_lim_ * obc * sig_size_) {
 #pragma omp critical(o_bv)
-          sig_bg_b.mark_discarded(oo, o_offset);
+          sig_bg_k1.mark_discarded(oo, o_offset);
           return;
         }
 
         double const o_r = error_suppressed_beta_inc(osc, obc, x_);
         if (validate_extension(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(a_bv)
-          sig_bg_a.mark_discarded_(v, offset);
+          sig_bg_k.mark_discarded_(v, offset);
         } else {
 #pragma omp critical(o_bv)
-          sig_bg_b.mark_discarded(oo, o_offset);
+          sig_bg_k1.mark_discarded(oo, o_offset);
         }
       });
 
-      if (not sig_bg_a.is_discarded_(v, offset)) {
+      if (not sig_bg_k.is_discarded_(v, offset)) {
 #pragma omp critical
         seeds_.push_back({gg, rr, sc, bc});
       }
@@ -317,16 +317,16 @@ class seed_finder {
    * @param gap_s    Start location of gap
    * @param gap_l    Length of gap
    * @param offset   Offset value for table access
-   * @param sig_bg_c Length k gapmer count tables
+   * @param sig_bg_k Length k gapmer count tables
    * @param mm       Map to add candidate seeds to.
    */
   template <class M>
   void filter_count(const uint8_t k, const uint64_t v, uint8_t gap_s,
-                    uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_c,
+                    uint8_t gap_l, uint64_t offset, gapmer_count_type& sig_bg_k,
                     M& mm) {
 #ifdef DEBUG
     if (offset + v >= gapmer_count_type::lookup_elems(k)) {
-      std::cerr << "k = " << int(k) << " & sig_bg_c.k_ = " << int(sig_bg_c.k_)
+      std::cerr << "k = " << int(k) << " & sig_bg_c.k_ = " << int(sig_bg_k.k_)
                 << " :\n accessing " << offset << " + " << v << " = "
                 << offset + v << " of " << gapmer_count_type::lookup_elems(k)
                 << " element table" << std::endl;
@@ -335,31 +335,31 @@ class seed_finder {
 #endif
     gapmer_type const gg(v, k, gap_s, gap_l);
     auto const& [rr, sc, bc, should_continue] =
-        check_enrichment(gg, offset, sig_bg_c, critical_d_bv{});
+        check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
     if (not should_continue) return;
 
     if constexpr (filter_mers) {
       gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
-        auto const o_offset{sig_bg_c.offset(oo.gap_start(), oo.gap_length())};
-        auto const o_counts{sig_bg_c.count(oo, offset)};
+        auto const o_offset{sig_bg_k.offset(oo.gap_start(), oo.gap_length())};
+        auto const o_counts{sig_bg_k.count(oo, offset)};
         double const osc{o_counts.signal_count + 1};
         double const obc{o_counts.background_count + 1};
         if (osc * bg_size_ <= fold_lim_ * obc * sig_size_) {
 #pragma omp critical(d_bv)
-          sig_bg_c.mark_discarded(oo, o_offset);
+          sig_bg_k.mark_discarded(oo, o_offset);
           return;
         }
         double o_r{};
         if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(d_bv)
-          sig_bg_c.mark_discarded_(v, offset);
+          sig_bg_k.mark_discarded_(v, offset);
         } else {
 #pragma omp critical(d_bv)
-          sig_bg_c.mark_discarded(oo, o_offset);
+          sig_bg_k.mark_discarded(oo, o_offset);
         }
       });
 
-      if (not sig_bg_c.is_discarded_(v, offset)) {
+      if (not sig_bg_k.is_discarded_(v, offset)) {
 #pragma omp critical
         mm[gg] = {gg, rr, sc, bc};
       }
