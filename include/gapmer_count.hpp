@@ -183,7 +183,7 @@ class gapmer_count final : public t_base {
   }
 
   bool is_discarded(gapmer_type gg, uint64_t off) const {
-    return is_discarded(gg.value(), off);
+    return is_discarded_(gg.value(), off);
   }
 
   void mark_discarded(gapmer_type gg, uint64_t off) {
