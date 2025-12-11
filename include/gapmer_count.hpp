@@ -8,7 +8,6 @@
 #include <cstring>
 #include <libbio/algorithm.hh>
 #include <sdsl/bit_vectors.hpp>
-#include <utility>
 #include <vector>
 
 #include "count_base.hpp"
@@ -27,6 +26,11 @@ class gapmer_count final : public t_base {
   using base_type::max_gap;
   using base_type::middle_gap_only;
   using base_type::count_mers;
+
+  struct count_pair {
+    value_type signal_count{};
+    value_type background_count{};
+  };
 
   static constexpr uint64_t lookup_elems(uint8_t k) {
     uint64_t ret = ONE << (k * 2);
@@ -164,7 +168,7 @@ class gapmer_count final : public t_base {
     free(bg_scratch);
   }
 
-  std::pair<value_type, value_type> count(gapmer_type gg) const {
+  count_pair count(gapmer_type gg) const {
     uint64_t off = offset(gg.gap_start(), gg.gap_length());
     off += gg.value();
     return {sig_counts_[off], bg_counts_[off]};
