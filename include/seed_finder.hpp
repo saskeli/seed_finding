@@ -131,9 +131,9 @@ class seed_finder {
    * == false, else output parameter.
    */
   template <bool calc_b_r>
-  bool do_filter([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
+  bool should_filter([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
                  double a_sig, double a_bg, double b_sig, double b_bg,
-                 double a_r, double& b_r) {
+                 double a_r, double& b_r) const {
     if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (b_sig > a_sig) {
         if constexpr (calc_b_r) {
@@ -263,7 +263,7 @@ class seed_finder {
           return;
         }
         double o_r{};
-        if (do_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
+        if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(a_bv)
           sig_bg_a.mark_discarded_(v, offset);
         } else {
@@ -350,7 +350,7 @@ class seed_finder {
           return;
         }
         double o_r{};
-        if (do_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
+        if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(d_bv)
           sig_bg_c.mark_discarded_(v, offset);
         } else {
