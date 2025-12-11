@@ -10,6 +10,7 @@
 
 namespace sf {
 
+// t_base used only for having a type name for the base class.
 template <class t_gapmer, typename t_base = count_base <t_gapmer>>
 class partial_count final : public t_base {
  public:

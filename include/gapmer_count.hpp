@@ -15,6 +15,7 @@
 
 namespace sf {
 
+// t_base used only for having a type name for the base class.
 template <typename t_gapmer, typename t_base = count_base <t_gapmer>>
 class gapmer_count final : public t_base {
  public:
@@ -63,7 +64,6 @@ class gapmer_count final : public t_base {
  private:
   typedef std::vector<value_type> value_vector;
 
- public:
   value_vector sig_counts_;
   value_vector bg_counts_;
   sdsl::bit_vector discarded_;
@@ -170,12 +170,34 @@ class gapmer_count final : public t_base {
 
   count_pair count(gapmer_type gg) const {
     uint64_t off = offset(gg.gap_start(), gg.gap_length());
-    off += gg.value();
-    return {sig_counts_[off], bg_counts_[off]};
+    return count(gg, off);
+  }
+
+  count_pair count(gapmer_type gg, uint64_t off) const {
+    uint64_t cv{off + gg.value()};
+    return {sig_counts_[cv], bg_counts_[cv]};
   }
 
   uint64_t offset(uint8_t gap_s, uint8_t gap_l) const override {
     return offset(k_, gap_s, gap_l);
+  }
+
+  bool is_discarded(gapmer_type gg, uint64_t off) const {
+    return is_discarded(gg.value(), off);
+  }
+
+  void mark_discarded(gapmer_type gg, uint64_t off) {
+    mark_discarded_(gg.value(), off);
+  }
+
+  // gapmer_type is implicitly convertible to uint64_t, so
+  // we refrain from overloading is_discarded() and mark_discarded().
+  bool is_discarded_(uint64_t vv, uint64_t off) const {
+    return discarded_[vv + off];
+  }
+
+  void mark_discarded_(uint64_t vv, uint64_t off) {
+    discarded_[vv + off] = true;
   }
 };
 }  // namespace sf

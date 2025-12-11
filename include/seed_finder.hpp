@@ -168,21 +168,22 @@ class seed_finder {
     auto const vv{gg.value()};
 
     if constexpr (filter_mers) {
-      if (counts.discarded[offset + vv]) {
+      if (counts.is_discarded_(vv, offset)) {
         return {false, 0, 0, 0};
       }
     }
 
     if (not gg.is_canonical()) {
       if constexpr (filter_mers) {
-        critical([&] { counts.discarded[offset + vv] = true; });
+        critical([&] { counts.mark_discarded_(vv, offset); });
       }
       return {false, 0, 0, 0};
     }
 
     // Narrows the count value type (double).
-    uint64_t const sc(counts.sig_counts_[offset + vv] + 1);
-    uint64_t const bc(counts.bg_counts_[offset + vv] + 1);
+    auto const [sc_, bc_] = counts.count(gg, offset);
+    uint64_t const sc(sc_);
+    uint64_t const bc(bc_);
 
     // Check the enrichment w.r.t. background by requiring that
     // the logarithmic fold change is greater than log_fold passed
@@ -192,7 +193,7 @@ class seed_finder {
     // but with the logarithm and divisions removed.
     if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
       if constexpr (filter_mers) {
-        critical([&] { counts.discarded[offset + vv] = true; });
+        critical([&] { counts.mark_discarded_(vv, offset); });
       }
       return {false, sc, bc, 0};
     }
@@ -206,7 +207,7 @@ class seed_finder {
     double const rr{error_suppressed_beta_inc(sc, bc, x_)};
     if (rr > p_) {
       if constexpr (filter_mers) {
-        critical([&] { counts.discarded[offset + vv] = true; });
+        critical([&] { counts.mark_discarded_(vv, offset); });
       }
       return {false, sc, bc, rr};
     }
@@ -249,47 +250,48 @@ class seed_finder {
     if constexpr (filter_mers) {
       // Length k mers.
       gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
-        uint64_t o_offset = sig_bg_a.offset(oo.gap_start(), oo.gap_length());
-        uint64_t o_v = oo.value();
-        double o_a = sig_bg_a.sig_counts[o_offset + o_v] + 1;
-        double o_b = sig_bg_a.bg_counts[o_offset + o_v] + 1;
-        if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
+        auto const o_offset{sig_bg_a.offset(oo.gap_start(), oo.gap_length())};
+        auto const o_counts{sig_bg_a.count(oo, o_offset)};
+        double const osc{o_counts.signal_count + 1};
+        double const obc{o_counts.background_count + 1};
+        if (osc * bg_size_ <= fold_lim_ * obc * sig_size_) {
 #pragma omp critical(a_bv)
-          sig_bg_a.discarded[o_offset + o_v] = true;
+          sig_bg_a.mark_discarded(oo, o_offset);
           return;
         }
         double o_r{};
-        if (do_filter<true>(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
+        if (do_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(a_bv)
-          sig_bg_a.discarded[offset + v] = true;
+          sig_bg_a.mark_discarded_(v, offset);
         } else {
 #pragma omp critical(a_bv)
-          sig_bg_a.discarded[o_offset + o_v] = true;
+          sig_bg_a.mark_discarded(oo, o_offset);
         }
       });
 
       // Length k + 1 mers.
       gg.template huddinge_neighbours<true, true, false>([&](gapmer_type oo) {
-        uint64_t o_offset = sig_bg_b.offset(oo.gap_start(), oo.gap_length());
-        uint64_t o_v = oo.value();
-        double o_a = sig_bg_b.sig_counts[o_offset + o_v] + 1;
-        double o_b = sig_bg_b.bg_counts[o_offset + o_v] + 1;
-        if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
+        uint64_t const o_offset{sig_bg_b.offset(oo.gap_start(), oo.gap_length())};
+        auto const o_counts{sig_bg_b.count(oo, o_offset)};
+        double const osc{o_counts.signal_count + 1};
+        double const obc{o_counts.background_count + 1};
+        if (osc * bg_size_ <= fold_lim_ * obc * sig_size_) {
 #pragma omp critical(o_bv)
-          sig_bg_b.discarded[o_offset + o_v] = true;
+          sig_bg_b.mark_discarded(oo, o_offset);
           return;
         }
-        double o_r = error_suppressed_beta_inc(o_a, o_b, x_);
-        if (validate_extension(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
+
+        double const o_r = error_suppressed_beta_inc(osc, obc, x_);
+        if (validate_extension(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(a_bv)
-          sig_bg_a.discarded[offset + v] = true;
+          sig_bg_a.mark_discarded_(v, offset);
         } else {
 #pragma omp critical(o_bv)
-          sig_bg_b.discarded[o_offset + o_v] = true;
+          sig_bg_b.mark_discarded(oo, o_offset);
         }
       });
 
-      if (sig_bg_a.discarded[offset + v] == false) {
+      if (not sig_bg_a.is_discarded_(v, offset)) {
 #pragma omp critical
         seeds_.push_back({gg, rr, sc, bc});
       }
@@ -335,26 +337,26 @@ class seed_finder {
 
     if constexpr (filter_mers) {
       gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
-        uint64_t o_offset = sig_bg_c.offset(oo.gap_start(), oo.gap_length());
-        uint64_t o_v = oo.value();
-        double o_a = sig_bg_c.sig_counts[o_offset + o_v] + 1;
-        double o_b = sig_bg_c.bg_counts[o_offset + o_v] + 1;
-        if (o_a * bg_size_ <= fold_lim_ * o_b * sig_size_) {
+        uint64_t const o_offset{sig_bg_c.offset(oo.gap_start(), oo.gap_length())};
+        auto const o_counts{sig_bg_c.count(oo, offset)};
+        double const osc{o_counts.signal_count + 1};
+        double const obc{o_counts.background_count + 1};
+        if (osc * bg_size_ <= fold_lim_ * obc * sig_size_) {
 #pragma omp critical(d_bv)
-          sig_bg_c.discarded[o_offset + o_v] = true;
+          sig_bg_c.mark_discarded(oo, o_offset);
           return;
         }
         double o_r{};
-        if (do_filter<true>(gg, oo, sc, bc, o_a, o_b, rr, o_r)) {
+        if (do_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
 #pragma omp critical(d_bv)
-          sig_bg_c.discarded[offset + v] = true;
+          sig_bg_c.mark_discarded_(v, offset);
         } else {
 #pragma omp critical(d_bv)
-          sig_bg_c.discarded[o_offset + o_v] = true;
+          sig_bg_c.mark_discarded(oo, o_offset);
         }
       });
 
-      if (sig_bg_c.discarded[offset + v] == false) {
+      if (not sig_bg_c.is_discarded_(v, offset)) {
 #pragma omp critical
         mm[gg] = {gg, rr, sc, bc};
       }
