@@ -337,7 +337,7 @@ class seed_finder {
 
     if constexpr (filter_mers) {
       gg.template huddinge_neighbours<true, false, true>([&](gapmer_type oo) {
-        uint64_t const o_offset{sig_bg_c.offset(oo.gap_start(), oo.gap_length())};
+        auto const o_offset{sig_bg_c.offset(oo.gap_start(), oo.gap_length())};
         auto const o_counts{sig_bg_c.count(oo, offset)};
         double const osc{o_counts.signal_count + 1};
         double const obc{o_counts.background_count + 1};
