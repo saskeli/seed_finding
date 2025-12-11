@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-#include "pack_characters.hpp"
+#include "packed_read.hpp"
 #include "reader_adapter.hpp"
 
 #ifdef _OPENMP
