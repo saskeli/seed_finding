@@ -183,10 +183,11 @@ class seed_finder {
       return {0, 0, 0, false};
     }
 
+    // Add pseudocounts.
     // Narrows the count value type (double).
     auto const [sc_, bc_] = counts.count(gg, offset);
-    uint64_t const sc(sc_);
-    uint64_t const bc(bc_);
+    uint64_t const sc(sc_ + 1);
+    uint64_t const bc(bc_ + 1);
 
     // Check the enrichment w.r.t. background by requiring that
     // the logarithmic fold change is greater than log_fold passed
