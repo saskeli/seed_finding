@@ -38,7 +38,7 @@ INCLUDE += \
 	-isystem deps/libbio/include \
 	-isystem deps/libbio/lib/range-v3/include
 
-LIBS += -lz -lgsl -lgslcblas -lm
+LIBS += -lboost_iostreams -lz -lgsl -lgslcblas -lm
 
 ## Used directly
 CPPFLAGS				= -DMAX_GAP=$(MAX_GAP) $(INCLUDE)
@@ -76,9 +76,9 @@ HEADERS =	include/args.hpp \
 
 # FIXME: A library-based design could be a good idea.
 SEED_FINDER_OBJECTS = \
+			libbio_reader_adapter.o \
 			pack_characters.o \
-			seed_finder.o \
-			seqio_reader_adapter.o
+			seed_finder.o
 
 SEED_FINDER_DEBUG_OBJECTS = $(SEED_FINDER_OBJECTS:.o=.debug.o)
 
