@@ -33,6 +33,13 @@ class seed_finder {
   typedef partial_count<gapmer_type> partial_count_type;
   typedef typename gapmer_count_type::value_type gapmer_count_value_type;
 
+  typedef std::unordered_set<gapmer_type, typename gapmer_type::hash>
+      gapmer_set;
+
+  template <typename t_value>
+  using gapmer_map =
+      std::unordered_map<gapmer_type, t_value, typename gapmer_type::hash>;
+
   struct Res {
     gapmer_type g;
     double p;
@@ -470,8 +477,7 @@ class seed_finder {
     std::cerr << "    Extend " << a.size() << " mers." << std::endl;
 
     const constexpr double fill_limit = 0.4;
-    auto hash = [](const gapmer_type g) { return uint64_t(g); };
-    std::unordered_set<gapmer_type, decltype(hash)> del_set;
+    gapmer_set del_set;
 
     auto const init_counters{[&](gapmer_type oo) {
       if (not b.contains(oo)) {
@@ -563,8 +569,7 @@ class seed_finder {
    */
   template <class M>
   void filter(M& m) {
-    auto hash = [](const gapmer_type& g) { return uint64_t(g); };
-    std::unordered_set<gapmer_type, decltype(hash)> del_set;
+    gapmer_set del_set;
     auto e = m.end();
     for (auto it = m.begin(); it != e; ++it) {
       bool keep = true;
@@ -633,9 +638,10 @@ class seed_finder {
    * candidates
    */
   void find_seeds() {
-    auto hash = [](const gapmer_type g) { return uint64_t(g); };
-    std::unordered_map<gapmer_type, Res, decltype(hash)> aa;
-    std::unordered_map<gapmer_type, Res, decltype(hash)> bb;
+    typedef gapmer_map <Res> map_type;
+    map_type aa;
+    map_type bb;
+
     // full k-mer couting as long as memory is sufficient.
     {
       gapmer_count_type sig_bg_c;

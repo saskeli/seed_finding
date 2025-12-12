@@ -80,6 +80,10 @@ class gapmer {
   gapmer hamming(uint64_t v, auto&& callback) const;
 
  public:
+  struct hash {
+    uint64_t operator()(gapmer gg) const { return uint64_t(gg); }
+  };
+
   // FIXME: Consider making all_gap_neighbours, middle_gap_neighbours private.
   // For now they are public so that unit tests can access them.
 
