@@ -47,6 +47,8 @@ class seed_finder {
     uint64_t bg_count;
   };
 
+  typedef gapmer_map <Res> gapmer_res_map;
+
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
   std::vector<Res> seeds_;
@@ -329,8 +331,6 @@ class seed_finder {
    *
    * Surviving mers get added to candidate set m.
    *
-   * @tparam M       Type of m.
-   *
    * @param k        Gapmer length
    * @param v        Gapmer value as uint64_t
    * @param gap_s    Start location of gap
@@ -339,9 +339,8 @@ class seed_finder {
    * @param sig_bg_k Length k gapmer count tables
    * @param mm       Map to add candidate seeds to.
    */
-  template <class M>
   void filter_count(gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
-                    M& mm) {
+                    gapmer_res_map &mm) {
     auto const& [enrichment_res, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
     if (not should_continue) return;
@@ -414,16 +413,12 @@ class seed_finder {
    * Newly found valid extensions from a to elements found in p_counter are
    * added to b
    *
-   * @tparam M Type of the k-mer maps
-   * @tparam P Type of the partial k-mer count data structure
-   *
    * @param a  Shorter mers to extend
    * @param b  Valid extended mers
    * @param p_counter  Partial k-mer counts that may contain valid mer
    * extensions
    */
-  template <class M, class P>
-  void extend_counted(M& a, M& b, P& p_counter) {
+  void extend_counted(gapmer_res_map& a, gapmer_res_map& b, partial_count_type& p_counter) {
     for (auto p : a) {
 #ifdef DEBUG
       std::cerr << "        " << p.first.to_string() << ": "
@@ -464,17 +459,14 @@ class seed_finder {
   /**
    * Find k length extensions from a, and store valid extensions in b.
    *
-   * @tparam M  K-mer map type.
-   * @tparam P  Partial k-mer counting data structure type.
-   *
    * @param a  k - 1 length mers to extend.
    * @param b  storage for valid k-mers.
    * @param p_counter  Structure to use with partial counting.
    * @param k  length of k-mers to find.
    * @param prune  Should only one pass of extensions be done.
    */
-  template <class M, class P>
-  void extend(M& a, M& b, P& p_counter, uint16_t k, bool prune) {
+   void extend(gapmer_res_map& a, gapmer_res_map& b,
+               partial_count_type& p_counter, uint16_t k, bool prune) {
     std::cerr << "    Extend " << a.size() << " mers." << std::endl;
 
     const constexpr double fill_limit = 0.4;
@@ -565,11 +557,9 @@ class seed_finder {
    * Filter found mers of the same lengths. Keep only the best within H1
    * distance among same length gapmers.
    *
-   * @tparam M  gapmer map type
    * @param m   gapmers to filter
    */
-  template <class M>
-  void filter(M& m) {
+  void filter(gapmer_res_map &m) {
     gapmer_set del_set;
     auto e = m.end();
     for (auto it = m.begin(); it != e; ++it) {
@@ -639,11 +629,10 @@ class seed_finder {
    * candidates
    */
   void find_seeds() {
-    typedef gapmer_map <Res> map_type;
     using std::swap;
 
-    map_type aa;
-    map_type bb;
+    gapmer_res_map aa;
+    gapmer_res_map bb;
 
     // full k-mer couting as long as memory is sufficient.
     {
