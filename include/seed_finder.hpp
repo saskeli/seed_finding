@@ -454,8 +454,8 @@ class seed_finder {
           }());
 
           // Potentially narrowing conversion.
-          double const sc(counts.first + 1);
-          double const bc(counts.second + 1);
+          double const sc(counts.signal_count + 1);
+          double const bc(counts.background_count + 1);
 
           if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
             return;

@@ -5,8 +5,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <libbio/algorithm.hh>
-#include <utility>
 #include "count_base.hpp"
+#include "lossy_hash_map.hpp"
 
 namespace sf {
 
@@ -20,70 +20,39 @@ class partial_count final : public t_base {
   using base_type::middle_gap_only;
   using base_type::count_mers;
 
- private:
-  static const constexpr uint64_t MOD = 59999999;
-  static const constexpr uint64_t STEP = 40960001;
-  struct elem {
-    t_gapmer mer;
-    uint64_t sig_count;
-    uint64_t bg_count;
+  typedef uint64_t value_type;
+
+  struct count_pair {
+    value_type signal_count{};
+    value_type background_count{};
   };
 
-  elem* data_;
-  uint64_t size_;
+  struct smooth_count_pair {
+    double signal_count{};
+    double background_count{};
+  };
 
-  uint64_t find(t_gapmer g) const {
-    uint64_t g_val(g);
-    uint64_t idx = g_val % MOD;
-    uint64_t val(data_[idx].mer);
-    while (val > 0 && val != g_val) [[unlikely]] {
-      idx += STEP;
-      idx -= idx >= MOD ? MOD : 0;
-      val = data_[idx].mer;
-    }
-    return idx;
-  }
+ private:
+  typedef lossy_hash_map <gapmer_type, count_pair, typename gapmer_type::hash> count_map;
+  count_map counts_;
 
  public:
-  partial_count(): size_(0) {
-    data_ = (elem*)calloc(MOD, sizeof(elem));
-  }
+  partial_count(): counts_(typename count_map::allocate_tag{}) {}
 
-  ~partial_count() {
-    if (data_ != nullptr) {
-      free(data_);
-    }
-  }
-
-  void init(gapmer_type g) {
-    uint64_t idx = find(g);
-    if (data_[idx].mer != g) {
-      data_[idx] = {g, 0, 0};
-      ++size_;
-    }
-  }
-
-  void clear() {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wclass-memaccess"
-    std::memset(data_, 0, MOD * sizeof(elem));
-#pragma GCC diagnostic pop
-    size_ = 0;
-  }
+  void init(gapmer_type gg) { counts_.init(gg); }
+  void clear() { counts_.clear(); }
 
   void increment_signal_count(gapmer_type gg) override {
-    uint64_t idx = find(gg);
-    if (data_[idx].mer == gg) {
+    if (auto vp{counts_.find(gg)}; vp) {
 #pragma omp atomic relaxed
-      ++data_[idx].sig_count;
+      ++vp->signal_count;
     }
   }
 
   void increment_background_count(gapmer_type gg) override {
-    uint64_t idx = find(gg);
-    if (data_[idx].mer == gg) {
+    if (auto vp{counts_.find(gg)}; vp) {
 #pragma omp atomic relaxed
-      ++data_[idx].bg_count;
+      ++vp->background_count;
     }
   }
 
@@ -97,34 +66,33 @@ class partial_count final : public t_base {
     increment_background_count(gg);
   }
 
-  std::pair<uint64_t, uint64_t> count(t_gapmer g) const {
-    uint64_t idx = find(g);
-    if (data_[idx].mer == g) {
-      return {data_[idx].sig_count, data_[idx].bg_count};
+  count_pair count(gapmer_type gg) const {
+    if (auto vp{counts_.find(gg)}; vp) {
+      return {vp->signal_count, vp->background_count};
     }
     return {0, 0};
   }
 
-  std::pair<double, double> smooth_count(t_gapmer g) const {
-    uint64_t idx = find(g);
-    double sig_val = data_[idx].sig_count;
-    double bg_val = data_[idx].bg_count;
+  smooth_count_pair smooth_count(gapmer_type gg) const {
+    auto const counts{count(gg)};
+    double sig_val(counts.signal_count);
+    double bg_val(counts.background_count);
     std::array<uint64_t, 10> addables{};
     std::array<uint64_t, 10> bddables{};
     uint16_t smallest = 0;
-    auto callback = [&](t_gapmer o) {
-      uint64_t o_idx = find(o);
-      uint64_t o_sig = data_[o_idx].sig_count;
-      if (addables[smallest] < o_sig) {
-        addables[smallest] = o_sig;
-        bddables[smallest] = data_[o_idx].bg_count;
+
+    gg.hamming_neighbours([&](gapmer_type oo) {
+      auto const o_counts{count(oo)};
+      if (addables[smallest] < o_counts.signal_count) {
+        addables[smallest] = o_counts.signal_count;
+        bddables[smallest] = o_counts.background_count;
         smallest = 0;
         for (uint16_t i = 1; i < 10; ++i) {
           smallest = addables[i] < addables[smallest] ? i : smallest;
         }
       }
-    };
-    g.hamming_neighbours(callback);
+    });
+
     for (uint16_t i = 0; i < 10; ++i) {
       sig_val += addables[i];
       bg_val += bddables[i];
@@ -132,7 +100,7 @@ class partial_count final : public t_base {
     return {sig_val / 11, bg_val / 11};
   }
 
-  double fill_rate() const { return double(size_) / MOD; }
+  double fill_rate() const { return counts_.fill_rate(); }
 };
 
 }  // namespace sf
