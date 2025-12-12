@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <libbio/algorithm.hh>
+#include <libbio/assert.hh>
 #include <sdsl/bit_vectors.hpp>
 #include <vector>
 
@@ -169,12 +170,14 @@ class gapmer_count final : public t_base {
   }
 
   count_pair count(gapmer_type gg) const {
-    uint64_t off = offset(gg.gap_start(), gg.gap_length());
+    auto const off{offset(gg.gap_start(), gg.gap_length())};
     return count(gg, off);
   }
 
   count_pair count(gapmer_type gg, uint64_t off) const {
     uint64_t cv{off + gg.value()};
+    libbio_assert_lt(cv, sig_counts_.size());
+    libbio_assert_lt(cv, bg_counts_.size());
     return {sig_counts_[cv], bg_counts_[cv]};
   }
 
@@ -193,10 +196,12 @@ class gapmer_count final : public t_base {
   // gapmer_type is implicitly convertible to uint64_t, so
   // we refrain from overloading is_discarded() and mark_discarded().
   bool is_discarded_(uint64_t vv, uint64_t off) const {
+    libbio_assert_lt(vv + off, discarded_.size());
     return discarded_[vv + off];
   }
 
   void mark_discarded_(uint64_t vv, uint64_t off) {
+    libbio_assert_lt(vv + off, discarded_.size());
     discarded_[vv + off] = true;
   }
 };

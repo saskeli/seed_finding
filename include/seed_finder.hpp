@@ -295,19 +295,6 @@ class seed_finder {
    */
   void check_count(gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
                    gapmer_count_type& sig_bg_k1) {
-#ifdef DEBUG
-    {
-      auto const v{gg.value()};
-      auto const k{gg.length()};
-      if (offset + v >= gapmer_count_type::lookup_elems(k)) {
-        std::cerr << "accessing " << offset << " + " << v << " = " << offset + v
-                  << " of " << gapmer_count_type::lookup_elems(k)
-                  << " element table" << std::endl;
-        exit(1);
-      }
-    }
-#endif
-
     auto const& [enrichment_res, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_a_bv{});
     if (not should_continue) return;
@@ -349,20 +336,6 @@ class seed_finder {
   template <class M>
   void filter_count(gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
                     M& mm) {
-#ifdef DEBUG
-    {
-      auto const v{gg.value()};
-      auto const k{gg.length()};
-      if (offset + v >= gapmer_count_type::lookup_elems(k)) {
-        std::cerr << "k = " << int(k) << " & sig_bg_k.k_ = " << int(sig_bg_k.k_)
-                  << " :\n accessing " << offset << " + " << v << " = "
-                  << offset + v << " of " << gapmer_count_type::lookup_elems(k)
-                  << " element table" << std::endl;
-        exit(1);
-      }
-    }
-#endif
-
     auto const& [enrichment_res, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
     if (not should_continue) return;
@@ -411,14 +384,6 @@ class seed_finder {
       for (; gap_s <= gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
           uint64_t offset = sig_bg_a.offset(gap_s, gap_l);
-#ifdef DEBUG
-          if (offset >= gapmer_count_type::lookup_elems(k + 1)) {
-            std::cerr << "invalid offset " << offset << " for gap start "
-                      << int(gap_s) << " and gap length " << int(gap_l)
-                      << std::endl;
-            exit(1);
-          }
-#endif
 #pragma omp parallel for
           for (uint64_t v = 0; v < v_lim; ++v) {
             gapmer_type gg(v, k - 1, gap_s, gap_l);
