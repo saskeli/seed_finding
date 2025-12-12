@@ -190,4 +190,12 @@ struct critical_d_bv {
   }
 };
 
+struct critical_o_bv {
+  template <typename t_cb>
+  void operator()(t_cb&& cb) {
+#pragma omp critical(o_bv)
+    cb();
+  }
+};
+
 }  // namespace sf
