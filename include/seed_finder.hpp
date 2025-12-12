@@ -164,7 +164,6 @@ class seed_finder {
     uint64_t background_count{};
   };
 
-
   struct check_enrichment_result {
     enrichment_result result{};
     bool did_pass{};
@@ -367,6 +366,8 @@ class seed_finder {
    * mers
    */
   void counted_seeds_and_candidates(gapmer_count_type& sig_bg_c) {
+    using std::swap;
+
     std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
     // Initialize by counting 5-mers
     gapmer_count_type sig_bg_a(signal_reads_, background_reads_, 5);
@@ -400,11 +401,11 @@ class seed_finder {
       }
 
       // k -> k + 1
-      std::swap(sig_bg_a, sig_bg_b);
+      swap(sig_bg_a, sig_bg_b);
       std::cerr << int(k - 1) << " -> " << seeds_.size() << " candidates."
                 << std::endl;
     }
-    std::swap(sig_bg_a, sig_bg_c);
+    swap(sig_bg_a, sig_bg_c);
   }
 
   /**
@@ -639,6 +640,8 @@ class seed_finder {
    */
   void find_seeds() {
     typedef gapmer_map <Res> map_type;
+    using std::swap;
+
     map_type aa;
     map_type bb;
 
@@ -681,7 +684,7 @@ class seed_finder {
       if constexpr (filter_mers) {
         filter(bb);
       }
-      aa.swap(bb);
+      swap(aa, bb);
       std::cerr << int(k) - 1 << " -> " << seeds_.size() << " candidates."
                 << std::endl;
       if (aa.size() == 0) {
