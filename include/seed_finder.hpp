@@ -380,7 +380,7 @@ class seed_finder {
    * mers
    */
   void counted_seeds_and_candidates(gapmer_count_type& sig_bg_c) {
-    using std::swap;
+    using std::swap; // For ADL.
 
     std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
     // Initialize by counting 5-mers
@@ -645,7 +645,7 @@ class seed_finder {
    * candidates
    */
   void find_seeds() {
-    using std::swap;
+    using std::swap; // For ADL.
 
     seed_meta_map aa;
     seed_meta_map bb;
