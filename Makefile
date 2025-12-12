@@ -123,8 +123,8 @@ motivating: motivating.o
 huddinge: huddinge.o include/util.hpp include/gapmer.hpp
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
 
-seed_finder: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS_HXX) | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
-	$(CXX) $(CXXFLAGS) $(SEED_FINDER_OBJECTS) -o $@ $(LDFLAGS)
+seed_finder: $(SEED_FINDER_OBJECTS) $(HEADERS) $(ARGS_HXX) $(LIBBIO_DIR)/src/libbio.a | $(SDSL_DIR) $(ARGS_DIR) $(LIBBIO_DIR)
+	$(CXX) $(CXXFLAGS) $(SEED_FINDER_OBJECTS) -o $@ $(LIBBIO_DIR)/src/libbio.a $(LDFLAGS)
 
 comp: comp.o include/util.hpp
 	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
@@ -164,7 +164,7 @@ $(LIBBIO_DIR)/local.mk: local.mk
 	cp local.mk deps/libbio/
 
 local.mk:
-	bash -c "[ -e local.mk ] || echo -n "" > local.mk"
+	bash -c "[ -e local.mk ] || echo '# Generated automatically according to Makefile.' > local.mk"
 
 $(GTEST_DIR)/build/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
 	(mkdir -p $(GTEST_DIR)/build && cd $(GTEST_DIR)/build && $(CMAKE) -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF .. && $(MAKE))
