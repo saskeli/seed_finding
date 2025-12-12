@@ -180,8 +180,8 @@ class seed_finder {
    */
   template <typename t_critical>
   [[nodiscard]] check_enrichment_result check_enrichment(
-      gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
-      t_critical&& critical) {
+      gapmer_type const gg, uint64_t const offset, gapmer_count_type &counts,
+      t_critical&& critical) const {
     auto const vv{gg.value()};
 
     if constexpr (filter_mers) {
@@ -339,8 +339,8 @@ class seed_finder {
    * @param sig_bg_k Length k gapmer count tables
    * @param mm       Map to add candidate seeds to.
    */
-  void filter_count(gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
-                    gapmer_res_map &mm) {
+  void filter_count(gapmer_type const gg, uint64_t offset, gapmer_count_type &sig_bg_k,
+                    gapmer_res_map &mm) const {
     auto const& [enrichment_res, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
     if (not should_continue) return;
@@ -418,7 +418,7 @@ class seed_finder {
    * @param p_counter  Partial k-mer counts that may contain valid mer
    * extensions
    */
-  void extend_counted(gapmer_res_map& a, gapmer_res_map& b, partial_count_type& p_counter) {
+  void extend_counted(gapmer_res_map const &a, gapmer_res_map &b, partial_count_type const &p_counter) const {
     for (auto p : a) {
 #ifdef DEBUG
       std::cerr << "        " << p.first.to_string() << ": "
@@ -465,15 +465,15 @@ class seed_finder {
    * @param k  length of k-mers to find.
    * @param prune  Should only one pass of extensions be done.
    */
-   void extend(gapmer_res_map& a, gapmer_res_map& b,
-               partial_count_type& p_counter, uint16_t k, bool prune) {
-    std::cerr << "    Extend " << a.size() << " mers." << std::endl;
+   void extend(gapmer_res_map &aa, gapmer_res_map &bb,
+               partial_count_type &p_counter, uint16_t k, bool prune) const {
+    std::cerr << "    Extend " << aa.size() << " mers." << std::endl;
 
     const constexpr double fill_limit = 0.4;
     gapmer_set del_set;
 
     auto const init_counters{[&](gapmer_type oo) {
-      if (not b.contains(oo)) {
+      if (not bb.contains(oo)) {
         p_counter.init(oo);
         if constexpr (enable_smoothing) {
           oo.hamming_neighbours([&](gapmer_type h_n) { p_counter.init(h_n); });
@@ -483,7 +483,7 @@ class seed_finder {
 
     if (prune) {
       std::vector<Res> prio;
-      for (auto p : a) {
+      for (auto p : aa) {
         prio.push_back(p.second);
       }
       // Sort by fold change.
@@ -498,14 +498,14 @@ class seed_finder {
         }
       }
     } else {
-      for (auto p : a) {
+      for (auto p : aa) {
         p.first.template huddinge_neighbours<true, true, false>(init_counters);
         if (p_counter.fill_rate() >= fill_limit) {
           std::cerr << "\tLoad factor >= " << fill_limit << " ("
                     << p_counter.fill_rate() << ") counting.." << std::endl;
           p_counter.count_mers(signal_reads_, background_reads_, k);
           std::cerr << "\tFiltering extension..." << std::endl;
-          extend_counted(a, b, p_counter);
+          extend_counted(aa, bb, p_counter);
           p_counter.clear();
         }
       }
@@ -515,12 +515,12 @@ class seed_finder {
               << " counting.." << std::endl;
     p_counter.count_mers(signal_reads_, background_reads_, k);
     std::cerr << "\tFiltering extension..." << std::endl;
-    extend_counted(a, b, p_counter);
+    extend_counted(aa, bb, p_counter);
     p_counter.clear();
 
     if constexpr (filter_mers) {
       std::cerr << "\tFiltering sources..." << std::endl;
-      for (auto p : a) {
+      for (auto p : aa) {
 #ifdef DEBUG
         std::cerr << "        " << p.first.to_string() << ": "
                   << p.second.sig_count << ", " << p.second.bg_count << ", "
@@ -533,10 +533,10 @@ class seed_finder {
               if (not o.is_canonical()) {
                 o = o.reverse_complement();
               }
-              if (b.contains(o)) {
+              if (bb.contains(o)) {
                 if (validate_extension(p.first, o, p.second.sig_count,
-                                       p.second.bg_count, b[o].sig_count,
-                                       b[o].bg_count, p.second.p, b[o].p)) {
+                                       p.second.bg_count, bb[o].sig_count,
+                                       bb[o].bg_count, p.second.p, bb[o].p)) {
                   keep = false;
                 }
               }
@@ -548,7 +548,7 @@ class seed_finder {
       }
 
       for (auto d : del_set) {
-        a.erase(d);
+        aa.erase(d);
       }
     }  // if constexpr (filter_mers)
   }
@@ -559,10 +559,10 @@ class seed_finder {
    *
    * @param m   gapmers to filter
    */
-  void filter(gapmer_res_map &m) {
+  void filter(gapmer_res_map &mm) const {
     gapmer_set del_set;
-    auto e = m.end();
-    for (auto it = m.begin(); it != e; ++it) {
+    auto e = mm.end();
+    for (auto it = mm.begin(); it != e; ++it) {
       bool keep = true;
       if (it->second.p > p_) {
         del_set.insert(it->first);
@@ -582,9 +582,9 @@ class seed_finder {
       }
     }
     for (auto d : del_set) {
-      m.erase(d);
+      mm.erase(d);
     }
-    std::cerr << "    filtered to " << m.size() << " mers" << std::endl;
+    std::cerr << "    filtered to " << mm.size() << " mers" << std::endl;
   }
 
  public:
