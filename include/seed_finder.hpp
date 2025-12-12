@@ -418,23 +418,24 @@ class seed_finder {
    * @param p_counter  Partial k-mer counts that may contain valid mer
    * extensions
    */
-  void extend_counted(gapmer_res_map const &a, gapmer_res_map &b, partial_count_type const &p_counter) const {
-    for (auto p : a) {
+  void extend_counted(gapmer_res_map const &aa, gapmer_res_map &bb, partial_count_type const &p_counter) const {
+    for (auto p : aa) {
 #ifdef DEBUG
       std::cerr << "        " << p.first.to_string() << ": "
                 << p.second.sig_count << ", " << p.second.bg_count << ", "
                 << p.second.p << std::endl;
 #endif
-      p.first.template huddinge_neighbours<true, true, false>([&](gapmer_type o) {
-        if (not o.is_canonical()) {
-          o = o.reverse_complement();
+      p.first.template huddinge_neighbours<true, true, false>([&](gapmer_type oo) {
+        if (not oo.is_canonical()) {
+          oo = oo.reverse_complement();
         }
-        if (not b.contains(o)) {
+
+        if (not bb.contains(oo)) {
           auto const counts([&]{
             if constexpr (enable_smoothing)
-              return p_counter.smooth_count(o);
+              return p_counter.smooth_count(oo);
             else
-              return p_counter.count(o);
+              return p_counter.count(oo);
           }());
 
           // Potentially narrowing conversion.
@@ -446,10 +447,10 @@ class seed_finder {
           }
 
           double const rr{error_suppressed_beta_inc(sc, bc, x_)};
-          if (validate_extension<false>(p.first, o, p.second.sig_count,
+          if (validate_extension<false>(p.first, oo, p.second.sig_count,
                                         p.second.bg_count, sc, bc,
                                         p.second.p, rr)) {
-            b[o] = {o, rr, uint64_t(sc), uint64_t(bc)};
+            bb[oo] = {oo, rr, uint64_t(sc), uint64_t(bc)};
           }
         }
       });
@@ -483,23 +484,23 @@ class seed_finder {
 
     if (prune) {
       std::vector<Res> prio;
-      for (auto p : aa) {
-        prio.push_back(p.second);
+      for (auto res : aa) {
+        prio.push_back(res.second);
       }
       // Sort by fold change.
       std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
         return (lhs.sig_count / lhs.bg_count) > (rhs.sig_count / rhs.bg_count);
       });
 
-      for (auto km : prio) {
-        km.g.template huddinge_neighbours<true, true, false>(init_counters);
+      for (auto res : prio) {
+        res.g.template huddinge_neighbours<true, true, false>(init_counters);
         if (p_counter.fill_rate() >= fill_limit) {
           break;
         }
       }
     } else {
-      for (auto p : aa) {
-        p.first.template huddinge_neighbours<true, true, false>(init_counters);
+      for (auto res : aa) {
+        res.first.template huddinge_neighbours<true, true, false>(init_counters);
         if (p_counter.fill_rate() >= fill_limit) {
           std::cerr << "\tLoad factor >= " << fill_limit << " ("
                     << p_counter.fill_rate() << ") counting.." << std::endl;
@@ -520,30 +521,30 @@ class seed_finder {
 
     if constexpr (filter_mers) {
       std::cerr << "\tFiltering sources..." << std::endl;
-      for (auto p : aa) {
+      for (auto res : aa) {
 #ifdef DEBUG
-        std::cerr << "        " << p.first.to_string() << ": "
-                  << p.second.sig_count << ", " << p.second.bg_count << ", "
-                  << p.second.p << std::endl;
+        std::cerr << "        " << res.first.to_string() << ": "
+                  << res.second.sig_count << ", " << res.second.bg_count << ", "
+                  << res.second.p << std::endl;
 #endif
         bool keep = true;
 
-        p.first.template huddinge_neighbours<true, true, false>(
+        res.first.template huddinge_neighbours<true, true, false>(
             [&](gapmer_type o) {
               if (not o.is_canonical()) {
                 o = o.reverse_complement();
               }
               if (bb.contains(o)) {
-                if (validate_extension(p.first, o, p.second.sig_count,
-                                       p.second.bg_count, bb[o].sig_count,
-                                       bb[o].bg_count, p.second.p, bb[o].p)) {
+                if (validate_extension(res.first, o, res.second.sig_count,
+                                       res.second.bg_count, bb[o].sig_count,
+                                       bb[o].bg_count, res.second.p, bb[o].p)) {
                   keep = false;
                 }
               }
             });
 
         if (not keep) {
-          del_set.insert(p.first);
+          del_set.insert(res.first);
         }
       }
 
