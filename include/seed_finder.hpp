@@ -29,6 +29,28 @@ class seed_finder {
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
  private:
+  struct seed_meta {
+    double p{};
+    uint64_t sig_count{};
+    uint64_t bg_count{};
+  };
+
+ public:
+  struct seed {
+    friend seed_finder;
+
+    gapmer_type g{};
+    double p{};
+    uint64_t sig_count{};
+    uint64_t bg_count{};
+
+   private:
+    static seed from_seed_meta(gapmer_type g_, seed_meta mm) {
+      return {g_, mm.p, mm.sig_count, mm.bg_count};
+    }
+  };
+
+ private:
   typedef gapmer_count<gapmer_type> gapmer_count_type;
   typedef partial_count<gapmer_type> partial_count_type;
   typedef typename gapmer_count_type::value_type gapmer_count_value_type;
@@ -40,18 +62,11 @@ class seed_finder {
   using gapmer_map =
       std::unordered_map<gapmer_type, t_value, typename gapmer_type::hash>;
 
-  struct Res {
-    gapmer_type g;
-    double p;
-    uint64_t sig_count;
-    uint64_t bg_count;
-  };
-
-  typedef gapmer_map <Res> gapmer_res_map;
+  typedef gapmer_map <seed_meta> seed_meta_map;
 
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
-  std::vector<Res> seeds_;
+  std::vector<seed> seeds_;
   uint64_t sig_size_;
   uint64_t bg_size_;
   double p_;
@@ -340,7 +355,7 @@ class seed_finder {
    * @param mm       Map to add candidate seeds to.
    */
   void filter_count(gapmer_type const gg, uint64_t offset, gapmer_count_type &sig_bg_k,
-                    gapmer_res_map &mm) const {
+                    seed_meta_map &mm) const {
     auto const& [enrichment_res, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
     if (not should_continue) return;
@@ -350,11 +365,11 @@ class seed_finder {
       filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k, critical_d_bv{});
       if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
-        mm[gg] = {gg, rr, sc, bc};
+        mm[gg] = {rr, sc, bc};
       }
     } else {
 #pragma omp critical
-      mm[gg] = {gg, rr, sc, bc};
+      mm[gg] = {rr, sc, bc};
     }
   }
 
@@ -418,7 +433,7 @@ class seed_finder {
    * @param p_counter  Partial k-mer counts that may contain valid mer
    * extensions
    */
-  void extend_counted(gapmer_res_map const &aa, gapmer_res_map &bb, partial_count_type const &p_counter) const {
+  void extend_counted(seed_meta_map const &aa, seed_meta_map &bb, partial_count_type const &p_counter) const {
     for (auto p : aa) {
 #ifdef DEBUG
       std::cerr << "        " << p.first.to_string() << ": "
@@ -450,7 +465,7 @@ class seed_finder {
           if (validate_extension<false>(p.first, oo, p.second.sig_count,
                                         p.second.bg_count, sc, bc,
                                         p.second.p, rr)) {
-            bb[oo] = {oo, rr, uint64_t(sc), uint64_t(bc)};
+            bb[oo] = {rr, uint64_t(sc), uint64_t(bc)};
           }
         }
       });
@@ -466,7 +481,7 @@ class seed_finder {
    * @param k  length of k-mers to find.
    * @param prune  Should only one pass of extensions be done.
    */
-   void extend(gapmer_res_map &aa, gapmer_res_map &bb,
+   void extend(seed_meta_map &aa, seed_meta_map &bb,
                partial_count_type &p_counter, uint16_t k, bool prune) const {
     std::cerr << "    Extend " << aa.size() << " mers." << std::endl;
 
@@ -483,9 +498,9 @@ class seed_finder {
     }};
 
     if (prune) {
-      std::vector<Res> prio;
-      for (auto res : aa) {
-        prio.push_back(res.second);
+      std::vector<seed> prio;
+      for (auto kv : aa) {
+        prio.emplace_back(seed::from_seed_meta(kv.first, kv.second));
       }
       // Sort by fold change.
       std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
@@ -499,8 +514,8 @@ class seed_finder {
         }
       }
     } else {
-      for (auto res : aa) {
-        res.first.template huddinge_neighbours<true, true, false>(init_counters);
+      for (auto kv : aa) {
+        kv.first.template huddinge_neighbours<true, true, false>(init_counters);
         if (p_counter.fill_rate() >= fill_limit) {
           std::cerr << "\tLoad factor >= " << fill_limit << " ("
                     << p_counter.fill_rate() << ") counting.." << std::endl;
@@ -521,30 +536,30 @@ class seed_finder {
 
     if constexpr (filter_mers) {
       std::cerr << "\tFiltering sources..." << std::endl;
-      for (auto res : aa) {
+      for (auto kv : aa) {
 #ifdef DEBUG
-        std::cerr << "        " << res.first.to_string() << ": "
-                  << res.second.sig_count << ", " << res.second.bg_count << ", "
-                  << res.second.p << std::endl;
+        std::cerr << "        " << kv.first.to_string() << ": "
+                  << kv.second.sig_count << ", " << kv.second.bg_count << ", "
+                  << kv.second.p << std::endl;
 #endif
         bool keep = true;
 
-        res.first.template huddinge_neighbours<true, true, false>(
+        kv.first.template huddinge_neighbours<true, true, false>(
             [&](gapmer_type o) {
               if (not o.is_canonical()) {
                 o = o.reverse_complement();
               }
               if (bb.contains(o)) {
-                if (validate_extension(res.first, o, res.second.sig_count,
-                                       res.second.bg_count, bb[o].sig_count,
-                                       bb[o].bg_count, res.second.p, bb[o].p)) {
+                if (validate_extension(kv.first, o, kv.second.sig_count,
+                                       kv.second.bg_count, bb[o].sig_count,
+                                       bb[o].bg_count, kv.second.p, bb[o].p)) {
                   keep = false;
                 }
               }
             });
 
         if (not keep) {
-          del_set.insert(res.first);
+          del_set.insert(kv.first);
         }
       }
 
@@ -560,7 +575,7 @@ class seed_finder {
    *
    * @param m   gapmers to filter
    */
-  void filter(gapmer_res_map &mm) const {
+  void filter(seed_meta_map &mm) const {
     gapmer_set del_set;
     auto e = mm.end();
     for (auto it = mm.begin(); it != e; ++it) {
@@ -632,8 +647,8 @@ class seed_finder {
   void find_seeds() {
     using std::swap;
 
-    gapmer_res_map aa;
-    gapmer_res_map bb;
+    seed_meta_map aa;
+    seed_meta_map bb;
 
     // full k-mer couting as long as memory is sufficient.
     {
@@ -667,8 +682,8 @@ class seed_finder {
       std::cerr << "    " << aa.size() << " " << int(k) - 1 << " candidates\n"
                 << "    " << bb.size() << " " << int(k) << " potentials"
                 << std::endl;
-      for (auto p : aa) {
-        seeds_.push_back(p.second);
+      for (auto pp : aa) {
+        seeds_.emplace_back(seed::from_seed_meta(pp.first, pp.second));
       }
       aa.clear();
       if constexpr (filter_mers) {
@@ -682,15 +697,15 @@ class seed_finder {
       }
     }
     if (aa.size() > 0) {
-      for (auto p : aa) {
-        seeds_.push_back(p.second);
+      for (auto pp : aa) {
+        seeds_.emplace_back(seed::from_seed_meta(pp.first, pp.second));
       }
       std::cerr << int(k_lim_) << " -> " << seeds_.size() << " candidates."
                 << std::endl;
     }
   }
 
-  const std::vector<Res>& get_seeds() const { return seeds_; }
+  const std::vector<seed>& get_seeds() const { return seeds_; }
 
   double x() const { return x_; }
 };
