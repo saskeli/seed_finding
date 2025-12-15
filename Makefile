@@ -4,6 +4,7 @@ ifndef MAX_GAP
 MAX_GAP = 15
 endif
 
+AUTORECONF ?= autoreconf
 CMAKE ?= cmake
 GCOV ?= gcov
 
@@ -157,14 +158,14 @@ $(ARGS_HXX):
 $(LIBBIO_DIR):
 	git submodule update --init --recursive
 
-$(LIBBIO_DIR)/src/libbio.a: deps/libbio/local.mk
+$(LIBBIO_DIR)/src/libbio.a: $(LIBBIO_DIR)/local.mk
 	$(MAKE) -C deps/libbio src/libbio.a
 
-$(LIBBIO_DIR)/local.mk: local.mk
-	cp local.mk deps/libbio/
+$(LIBBIO_DIR)/local.mk: $(LIBBIO_DIR)/configure $(wildcard local.mk) # ./local.mk is optional.
+	cd $(LIBBIO_DIR) && CC=$(CC) CXX=$(CXX) ./configure
 
-local.mk:
-	bash -c "[ -e local.mk ] || echo '# Generated automatically according to Makefile.' > local.mk"
+$(LIBBIO_DIR)/configure:
+	cd $(LIBBIO_DIR) && $(AUTORECONF)
 
 $(GTEST_DIR)/build/lib/libgtest_main.a: | $(GTEST_DIR)/googletest
 	(mkdir -p $(GTEST_DIR)/build && cd $(GTEST_DIR)/build && $(CMAKE) -DCMAKE_C_COMPILER="$(CC)" -DCMAKE_CXX_COMPILER="$(CXX)" -DBUILD_SHARED_LIBS=OFF .. && $(MAKE))
