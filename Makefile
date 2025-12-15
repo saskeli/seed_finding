@@ -18,6 +18,7 @@ WARNING_FLAGS = \
 	-Wno-gnu-conditional-omitted-operand \
 	-Wno-unused-parameter \
 	-Wno-unused-function \
+	-Wno-error=unknown-pragmas \
 	$(WARNING_FLAGS_)
 
 PERF_FLAGS = -O3 -g -DNDEBUG -fopenmp -march=native
