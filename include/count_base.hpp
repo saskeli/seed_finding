@@ -93,7 +93,7 @@ void count_base<t_gapmer>::count_mers(packed_read_vector const& reads,
     for (; gap_s < gap_lim; ++gap_s) {
       for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
         auto const off{offset(gap_s, gap_l)};
-        gg = gapmer_type(read.packed_characters.front(), kk, gap_s, gap_l);
+        gg = gapmer_type(read.packed_characters, kk, gap_s, gap_l);
         increment_gapped_count(gg, off);
         read.iterate_character_pairs(
             gap_s, kk + gap_l,

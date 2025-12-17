@@ -73,18 +73,21 @@ class gapmer_count final : public t_base {
  private:
   void increment_signal_count(gapmer_type gg) override {
     uint64_t cv{gg.value()};
+    libbio_assert_lt(cv, sig_counts_.size());
 #pragma omp atomic relaxed
     ++sig_counts_[cv];
   }
 
   void increment_background_count(gapmer_type gg) override {
     uint64_t cv{gg.value()};
+    libbio_assert_lt(cv, bg_counts_.size());
 #pragma omp atomic relaxed
     ++bg_counts_[cv];
   }
 
   void increment_signal_count_gapped(gapmer_type gg, uint64_t off) override {
     uint64_t cv{off + gg.value()};
+    libbio_assert_lt(cv, sig_counts_.size());
 #pragma omp atomic relaxed
     ++sig_counts_[cv];
   }
@@ -92,6 +95,7 @@ class gapmer_count final : public t_base {
   void increment_background_count_gapped(gapmer_type gg,
                                          uint64_t off) override {
     uint64_t cv{off + gg.value()};
+    libbio_assert_lt(cv, bg_counts_.size());
 #pragma omp atomic relaxed
     ++bg_counts_[cv];
   }
