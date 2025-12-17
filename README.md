@@ -8,8 +8,10 @@ To clone the repository with submodules, please use `git clone --recursive https
 
 A conda package can be built with Conda-build as follows. The build script has been tested with Conda-build 25.11.1.
 
-1. `cd conda`
-2. `./conda-build.sh`
+1. `mamba create -n conda-build -c conda-forge conda-build conda-verify` (Conda-verify is not strictly required.)
+2. `mamba activate conda-build`
+3. `cd conda`
+4. `./conda-build.sh`
 
 Conda-build will then report the location of the package. An environment can be created with e.g. the following command:
 ```
