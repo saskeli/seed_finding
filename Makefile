@@ -42,10 +42,14 @@ INCLUDE += \
 
 LIBS += -lboost_iostreams -lz -lgsl -lgslcblas -lm
 
-## Used directly
-CPPFLAGS				= -DMAX_GAP=$(MAX_GAP) $(INCLUDE)
-CXXFLAGS				= -std=c++23 $(WARNING_FLAGS) $(PERF_FLAGS)
-LDFLAGS					= $(LIBS)
+## Used directly.
+## Some tools such as conda-build set CPPFLAGS, etc. so we store their values for libbio before modifying.
+SYSTEM_CPPFLAGS			:= $(CPPFLAGS)
+SYSTEM_CXXFLAGS			:= $(CXXFLAGS)
+SYSTEM_LDFLAGS			:= $(LDFLAGS)
+CPPFLAGS				+= -DMAX_GAP=$(MAX_GAP) $(INCLUDE)
+CXXFLAGS				+= -std=c++23 $(WARNING_FLAGS) $(PERF_FLAGS)
+LDFLAGS					+= $(LIBS)
 DEBUG_CPPFLAGS			= $(CPPFLAGS) $(DEBUG_FLAGS)
 DEBUG_CXXFLAGS			= -std=c++23 $(WARNING_FLAGS) $(DEBUG_PERF_FLAGS)
 DEBUG_LDFLAGS			= $(LDFLAGS)
@@ -163,9 +167,9 @@ $(LIBBIO_DIR)/src/libbio.a: $(LIBBIO_DIR)/local.mk
 	$(MAKE) -C deps/libbio src/libbio.a
 
 $(LIBBIO_DIR)/local.mk: $(LIBBIO_DIR)/configure $(wildcard local.mk) # ./local.mk is optional.
-	cd $(LIBBIO_DIR) && CC=$(CC) CXX=$(CXX) ./configure
+	cd $(LIBBIO_DIR) && CC='$(CC)' CXX='$(CXX)' CPPFLAGS='$(SYSTEM_CPPFLAGS)' LDFLAGS='$(SYSTEM_LDFLAGS)' ./configure --disable-memory-logger-support --disable-bgzf-decompressor --disable-bam-parser
 
-$(LIBBIO_DIR)/configure:
+$(LIBBIO_DIR)/configure: $(LIBBIO_DIR)/configure.ac
 	cd $(LIBBIO_DIR) && $(AUTORECONF)
 
 $(GTEST_DIR)/build/lib/libgtest_main.a: | $(GTEST_DIR)/googletest

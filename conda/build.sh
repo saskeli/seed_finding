@@ -8,8 +8,11 @@ then
 	exit 1
 fi
 
+echo "Generating local.mk"
+m4 -D CONDA_BUILD_PREFIX="${BUILD_PREFIX}" conda/local.mk.m4 > local.mk
+
 echo "Running make"
-make -j ${CPU_COUNT}
+make -j "${CPU_COUNT}"
 
 echo "Copying build products"
 dst_bin="${PREFIX}/bin"
