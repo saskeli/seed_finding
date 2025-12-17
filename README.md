@@ -1,10 +1,42 @@
 # seed_finding
 
-Build instructions on linux system with conda, installed:
-```shell
-git clone git@github.com:saskeli/seed_finding.git
-conda create -n cxx14 -c conda-forge cxx-compiler gsl zlib gxx=14 make
-conda activate cxx14
-cd seed_finding
-make
+## Building
+
+To clone the repository with submodules, please use `git clone --recursive https://github.com/saskeli/seed_finding.git`.
+
+### With [Conda-build](https://docs.conda.io/projects/conda-build/)
+
+A conda package can be built with Conda-build as follows. The build script has been tested with conda-build 25.11.1.
+
+1. `cd conda`
+2. `./conda-build.sh`
+
+Conda-build will then report the location of the package. An environment can be created with e.g. the following command:
 ```
+mamba create -n seed-finding -c local -c conda-forge seed_finder
+```
+
+### By Running Make Directly
+
+The following software and libraries are required to build PanVC 3. The tested versions are also listed.
+
+- C and C++ compilers. The C++ compiler needs to support C++23. ([GCC 14.2.0](https://gcc.gnu.org/) on Linux, [LLVM 21](https://llvm.org/) on macOS.)
+- [autoconf 2.71](https://www.gnu.org/software/autoconf/)
+- [aclocal (part of automake 1.16.5)](https://www.gnu.org/software/automake/)
+- [Boost 1.83.0](https://www.boost.org)
+- [GNU Make 4.3](https://www.gnu.org/software/make/)
+- [GNU Scientific Library 2.8](https://www.gnu.org/software/gsl/)
+- [Ragel 6.10](http://www.colm.net/open-source/ragel/)
+- [zlib 1.2.13](https://zlib.net)
+
+After installing the prerequisites, the software can be built with e.g. `make -j16`.
+
+## Running
+
+Signal and background reads can be given as FASTA or FASTQ. Both (b)gzip-compressed and uncompressed inputs are accepted. Given *signal.fastq.gz* and *background.fastq.gz*, seed *k*-mers may be searched with a command similar to the following.
+
+```
+seed_finder -p 0.0001 --lf 2 -s --max-s 0 --pruning -b background.fastq.gz signal.fastq.gz
+```
+
+Please see `seed_finder --help` for all available command line parameters.
