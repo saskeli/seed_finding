@@ -301,7 +301,7 @@ struct reader_adapter_delegate : public sf::reader_adapter_delegate {
 
 
 int main(int argc, char const* argv[]) {
-  print_invocation(argc, argv);
+  //print_invocation(argc, argv);
   configuration conf{parse_command_line_arguments(argc, argv)};
 
 #ifdef DEBUG
