@@ -6,7 +6,7 @@ To clone the repository with submodules, please use `git clone --recursive https
 
 ### With [Conda-build](https://docs.conda.io/projects/conda-build/)
 
-A conda package can be built with Conda-build as follows. The build script has been tested with conda-build 25.11.1.
+A conda package can be built with Conda-build as follows. The build script has been tested with Conda-build 25.11.1.
 
 1. `cd conda`
 2. `./conda-build.sh`
