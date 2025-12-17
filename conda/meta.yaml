@@ -19,6 +19,7 @@ requirements:
     - libboost >=1.83.0
     - libboost-headers >=1.83.0
     - m4 >=1.4.18
+    - make >=4.3
     - ragel >=6.10
     - zlib >=1.2.13
   run:
