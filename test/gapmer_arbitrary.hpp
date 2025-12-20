@@ -1044,7 +1044,7 @@ RC_GTEST_PROP(gapmer_arbitrary, FromPackedCharacterStringConstructor,
     rhs = char(lhs);
 
   // Assign the input characters to packed_text.
-  auto const pack_res{sf::pack_characters(std::string_view{plain_text_}, packed_text, 0)};
+  auto const pack_res{sf::pack_characters(std::string_view{plain_text_}, packed_text)};
   EXPECT_EQ(pack_res, test_input.text.size());
 
   RC_LOG() << "Plain text: ";

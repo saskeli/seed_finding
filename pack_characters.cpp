@@ -39,11 +39,14 @@ void print_read(std::span<std::uint64_t const> span, std::uint64_t len) {
   }
   std::cerr << '\n';
 }
+}  // namespace sf
 
 
-std::uint64_t pack_characters(std::string_view sv,
-                              std::vector<std::uint64_t>& dst,
-                              std::uint64_t dst_pos) {
+namespace {
+template <bool t_is_lenient>
+std::uint64_t pack_characters_(std::string_view sv,
+                               std::vector<std::uint64_t>& dst,
+                               std::uint64_t dst_pos) {
   auto const push_packed([](char const cc, std::uint64_t& dst_word,
                             std::uint64_t const dst_pos_) -> bool {
     auto const chararcter_pos{dst_pos_ % 32U};
@@ -69,7 +72,10 @@ std::uint64_t pack_characters(std::string_view sv,
         break;
 
       [[unlikely]] default:
-        return false;
+        if constexpr (t_is_lenient)
+          break;
+        else
+          return false;
     }
 
     return true;
@@ -110,6 +116,22 @@ std::uint64_t pack_characters(std::string_view sv,
 
     if (it == end) return dst_pos;
   }
+}
+}  // namespace
+
+
+namespace sf {
+std::uint64_t pack_characters(std::string_view sv,
+                              std::vector<std::uint64_t>& dst,
+                              std::uint64_t dst_pos) {
+  return pack_characters_<false>(sv, dst, dst_pos);
+}
+
+
+std::uint64_t pack_characters_lenient(std::string_view sv,
+                                      std::vector<std::uint64_t>& dst,
+                                      std::uint64_t dst_pos) {
+  return pack_characters_<true>(sv, dst, dst_pos);
 }
 
 

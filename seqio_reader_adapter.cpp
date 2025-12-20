@@ -28,7 +28,7 @@ bool seqio_reader_adapter::retrieve_next_read() {
     if (0 == read_length()) return false;
 
     m_read_buffer.clear();
-    auto const res{pack_characters(m_reader->read_buf, m_read_buffer, 0)};
+    auto const res{pack_characters(m_reader->read_buf, m_read_buffer)};
 
     if (UINT64_MAX != res) return true;
 
