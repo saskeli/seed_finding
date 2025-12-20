@@ -1,9 +1,11 @@
 #pragma once
 
-#include <cstdint>
 #include <gtest/gtest.h>
+
+#include <cstdint>
 #include <string>
 #include <vector>
+
 #include "../include/gapmer.hpp"
 #include "../include/string_buffer.hpp"
 #include "../include/util.hpp"
@@ -13,7 +15,8 @@ namespace sf {
 std::vector<uint64_t> vec_from_string(const std::string& s) {
   if (s.empty()) return {};
 
-  std::vector<uint64_t> vec(8U * (s.length() - 1) + 1); // Causes the string to be not NUL-terminated.
+  std::vector<uint64_t> vec(8U * (s.length() - 1) +
+                            1);  // Causes the string to be not NUL-terminated.
   char* ptr = reinterpret_cast<char*>(vec.data());
   for (uint16_t i = 0; i < s.size(); ++i) {
     ptr[i] = s[i];
@@ -73,7 +76,7 @@ TEST(gapmer, StrConstructor5) {
 }
 
 TEST(gapmer, StrConstructor6) {
-  sf::string_buffer <uint64_t> str;
+  sf::string_buffer<uint64_t> str;
   str = "CCCCC";
   const gapmer<> gg(str.data(), str.size(), 0, 0);
   ASSERT_TRUE(gg.is_valid()) << gg.to_string() << " " << gg.bits();
@@ -82,7 +85,7 @@ TEST(gapmer, StrConstructor6) {
 }
 
 TEST(gapmer, StrConstructor7) {
-  sf::string_buffer <uint64_t> str;
+  sf::string_buffer<uint64_t> str;
   str = "C.CCC";
   const gapmer<> gg(str.data(), str.size() - 1, 1, 1);
   ASSERT_TRUE(gg.is_valid()) << gg.to_string() << " " << gg.bits();
@@ -91,7 +94,7 @@ TEST(gapmer, StrConstructor7) {
 }
 
 TEST(gapmer, StrConstructor8) {
-  sf::string_buffer <uint64_t> str;
+  sf::string_buffer<uint64_t> str;
   str = "AAAA.....A";
   const gapmer<> gg(str.data(), 5, 4, 5);
   ASSERT_TRUE(gg.is_valid()) << gg.to_string() << " " << gg.bits();
@@ -611,161 +614,173 @@ TEST(gapmer, Align5) {
 }
 
 TEST(gapmer, HuddingeDistance1) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const sb("ACGT");
-	gapmer_type const lhs_(sb.data(), sb.size(), 0, 0);
-	gapmer_type const rhs_(sb.data(), sb.size(), 0, 0);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const sb("ACGT");
+  gapmer_type const lhs_(sb.data(), sb.size(), 0, 0);
+  gapmer_type const rhs_(sb.data(), sb.size(), 0, 0);
   int out = 0;
-	ASSERT_EQ(0, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(0, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(0, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(0, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance2) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("ACGT");
-	string_buffer_type const rhs("A.GT");
-	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
-	gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 1, 1);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("ACGT");
+  string_buffer_type const rhs("A.GT");
+  gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+  gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 1, 1);
   int out = 0;
-	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance3) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("ACGT");
-	string_buffer_type const rhs("AC.T");
-	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
-	gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 2, 1);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("ACGT");
+  string_buffer_type const rhs("AC.T");
+  gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+  gapmer_type const rhs_(rhs.data(), rhs.size() - 1, 2, 1);
   int out = 0;
-	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance4) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("AAAAA");
-	string_buffer_type const rhs("AAAAAC");
-	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
-	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("AAAAA");
+  string_buffer_type const rhs("AAAAAC");
+  gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+  gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
   int out = 0;
-	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance5) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("CCCCC");
-	string_buffer_type const rhs("CCCCCG");
-	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
-	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("CCCCC");
+  string_buffer_type const rhs("CCCCCG");
+  gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+  gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
   int out = 0;
-	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance6) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("AAAAA");
-	string_buffer_type const rhs("AAAAA....A");
-	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
-	gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("AAAAA");
+  string_buffer_type const rhs("AAAAA....A");
+  gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+  gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
   int out = 0;
-	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance7) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("GGGGG");
-	string_buffer_type const rhs("GGGGG....G");
-	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
-	gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("GGGGG");
+  string_buffer_type const rhs("GGGGG....G");
+  gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+  gapmer_type const rhs_(rhs.data(), rhs.size() - 4, 5, 4);
   int out = 0;
-	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance8) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("AAAAAAAAAAAAAAAAAAAAAAA");
-	string_buffer_type const rhs("AAAAAAAAAAAAAAAAAAAAAAAC");
-	gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
-	gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("AAAAAAAAAAAAAAAAAAAAAAA");
+  string_buffer_type const rhs("AAAAAAAAAAAAAAAAAAAAAAAC");
+  gapmer_type const lhs_(lhs.data(), lhs.size(), 0, 0);
+  gapmer_type const rhs_(rhs.data(), rhs.size(), 0, 0);
   int out = 0;
-	ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(1, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(0, out);
-	ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(1, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(0, out);
 }
 
 TEST(gapmer, HuddingeDistance9) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<> gapmer_type;
-	string_buffer_type const lhs("TGTTTTGTGCATAATCG...TCGC");
-	string_buffer_type const rhs("CCATGTTTTGTGCATAAT...CGTCGC");
-	gapmer_type const lhs_(lhs.data(), lhs.size() - 3, 17, 3);
-	gapmer_type const rhs_(rhs.data(), rhs.size() - 3, 18, 3);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<> gapmer_type;
+  string_buffer_type const lhs("TGTTTTGTGCATAATCG...TCGC");
+  string_buffer_type const rhs("CCATGTTTTGTGCATAAT...CGTCGC");
+  gapmer_type const lhs_(lhs.data(), lhs.size() - 3, 17, 3);
+  gapmer_type const rhs_(rhs.data(), rhs.size() - 3, 18, 3);
   int out = 0;
-	ASSERT_EQ(5, lhs_.huddinge_distance(rhs_, out));
+  ASSERT_EQ(5, lhs_.huddinge_distance(rhs_, out));
   ASSERT_EQ(-3, out);
-	ASSERT_EQ(5, rhs_.huddinge_distance(lhs_, out));
+  ASSERT_EQ(5, rhs_.huddinge_distance(lhs_, out));
   ASSERT_EQ(3, out);
 }
 
 TEST(gapmer, HuddingeNeighbourhood1) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<true, 5> gapmer_type;
-	string_buffer_type const ss("AAAAAAAAAAAAAAAAAAAAAAA");
-	gapmer_type gg(ss.data(), 23, 0, 0);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<true, 5> gapmer_type;
+  string_buffer_type const ss("AAAAAAAAAAAAAAAAAAAAAAA");
+  gapmer_type gg(ss.data(), 23, 0, 0);
   int out = 0;
-	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
-		EXPECT_EQ(1, gg.huddinge_distance(gg_, out)) << gg.to_string() << " (length: " << gg.length() << "), " << gg_.to_string() << " (length: " << gg_.length() << ")\n" << gg.bits() << '\n' << gg_.bits();
-	});
+  gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_) {
+    EXPECT_EQ(1, gg.huddinge_distance(gg_, out))
+        << gg.to_string() << " (length: " << gg.length() << "), "
+        << gg_.to_string() << " (length: " << gg_.length() << ")\n"
+        << gg.bits() << '\n'
+        << gg_.bits();
+  });
 }
 
 TEST(gapmer, HuddingeNeighbourhood2) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<true, 5> gapmer_type;
-	string_buffer_type const ss("CCCCCCCCCCCCCCCCCCCCCCC");
-	gapmer_type gg(ss.data(), 23, 0, 0);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<true, 5> gapmer_type;
+  string_buffer_type const ss("CCCCCCCCCCCCCCCCCCCCCCC");
+  gapmer_type gg(ss.data(), 23, 0, 0);
   int out = 0;
-	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
-		EXPECT_EQ(1, gg.huddinge_distance(gg_, out)) << gg.to_string() << " (length: " << gg.length() << "), " << gg_.to_string() << " (length: " << gg_.length() << ")\n" << gg.bits() << '\n' << gg_.bits();
-	});
+  gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_) {
+    EXPECT_EQ(1, gg.huddinge_distance(gg_, out))
+        << gg.to_string() << " (length: " << gg.length() << "), "
+        << gg_.to_string() << " (length: " << gg_.length() << ")\n"
+        << gg.bits() << '\n'
+        << gg_.bits();
+  });
 }
 
 TEST(gapmer, HuddingeNeighbourhood3) {
-	typedef sf::string_buffer<uint64_t> string_buffer_type;
-	typedef sf::gapmer<true, 5> gapmer_type;
-	string_buffer_type const ss("TGCTCAT..TAGGAAGCCGCCTTGA");
-	gapmer_type gg(ss.data(), 23, 7, 2);
+  typedef sf::string_buffer<uint64_t> string_buffer_type;
+  typedef sf::gapmer<true, 5> gapmer_type;
+  string_buffer_type const ss("TGCTCAT..TAGGAAGCCGCCTTGA");
+  gapmer_type gg(ss.data(), 23, 7, 2);
   int out = 0;
-	gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_){
-		EXPECT_EQ(1, gg.huddinge_distance(gg_, out)) << gg.to_string() << " (length: " << gg.length() << "), " << gg_.to_string() << " (length: " << gg_.length() << ")\n" << gg.bits() << '\n' << gg_.bits();
-	});
+  gg.all_gap_neighbours<false, false, false>([&](gapmer_type const gg_) {
+    EXPECT_EQ(1, gg.huddinge_distance(gg_, out))
+        << gg.to_string() << " (length: " << gg.length() << "), "
+        << gg_.to_string() << " (length: " << gg_.length() << ")\n"
+        << gg.bits() << '\n'
+        << gg_.bits();
+  });
 }
 
 }  // namespace sf
