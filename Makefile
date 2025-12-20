@@ -166,7 +166,7 @@ $(LIBBIO_DIR):
 $(LIBBIO_DIR)/src/libbio.a: $(LIBBIO_DIR)/local.mk
 	$(MAKE) -C deps/libbio src/libbio.a
 
-$(LIBBIO_DIR)/local.mk: $(LIBBIO_DIR)/configure $(wildcard local.mk) # ./local.mk is optional.
+$(LIBBIO_DIR)/local.mk: $(LIBBIO_DIR)/configure
 	cd $(LIBBIO_DIR) && CC='$(CC)' CXX='$(CXX)' CPPFLAGS='$(SYSTEM_CPPFLAGS)' LDFLAGS='$(SYSTEM_LDFLAGS)' ./configure --disable-memory-logger-support --disable-bgzf-decompressor --disable-bam-parser
 
 $(LIBBIO_DIR)/configure: $(LIBBIO_DIR)/configure.ac
