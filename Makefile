@@ -21,7 +21,20 @@ WARNING_FLAGS = \
 	-Wno-error=unknown-pragmas \
 	$(WARNING_FLAGS_)
 
-PERF_FLAGS = -O3 -g -DNDEBUG -fopenmp -march=native
+# Determine a suitable value for -march.
+ARCH := $(shell uname -m)
+ifeq ($(ARCH),x86_64)
+	ARCHITECTURE_FLAGS ?= -march=haswell -maes # Enables AVX2.
+	#ARCHITECTURE_FLAGS ?= -march=skx # Enables AVX3.
+else ifeq($(ARCH),arm64) # Apple
+	ARCHITECTURE_FLAGS ?= -march=armv8.4a # M1; NEON is mandatory as of ARMv8-A.
+	#ARCHITECTURE_FLAGS ?= -march=armv8.6a # M2 and M3
+	#ARCHITECTURE_FLAGS ?= -march=armv8.7a # M4; the microarchitecture is ARMv9.2-A but if specified, GCC and Clang may enable SVE which is not available.
+else
+	ARCHITECTURE_FLAGS ?= -march=native
+endif
+
+PERF_FLAGS = -O3 -g -DNDEBUG -fopenmp $(ARCHITECTURE_FLAGS)
 DEBUG_PERF_FLAGS = -O0 -g -DDEBUG
 TEST_PERF_FLAGS = $(DEBUG_PERF_FLAGS)
 TEST_COVERAGE_PERF_FLAGS = -O1 -g
