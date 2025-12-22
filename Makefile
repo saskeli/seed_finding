@@ -47,11 +47,12 @@ endif
 
 INCLUDE += \
 	-Iinclude \
+	-isystem deps/args \
+	-isystem deps/highway \
+	-isystem deps/libbio/include \
+	-isystem deps/libbio/lib/range-v3/include \
 	-isystem deps/sdsl-lite/include \
 	-isystem deps/seqio/include \
-	-isystem deps/args \
-	-isystem deps/libbio/include \
-	-isystem deps/libbio/lib/range-v3/include
 
 LIBS += -lboost_iostreams -lz -lgsl -lgslcblas -lm
 
