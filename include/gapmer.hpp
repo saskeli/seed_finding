@@ -13,6 +13,7 @@
 #include <string>
 
 #include "bits.hpp"
+#include "huddinge_distance.hpp"
 #include "util.hpp"
 
 #ifdef DEBUG
@@ -97,8 +98,8 @@ class gapmer {
   /// When the span is dynamically sized, the caller is responsible for
   /// reserving enough memory.
   template <std::size_t t_n>
-  void write_2bit_coded_to_buffer(std::span<uint64_t, t_n> span) const
-    requires((2U * (max_k + max_gap) + 7U) / 8U <= t_n);
+  void write_2bit_coded_to_buffer(std::span<uint64_t, t_n> span,
+                                  std::span<uint64_t, t_n> mask_span) const;
 
  public:
   constexpr gapmer() = default;  //< Construct an empty value.
@@ -124,8 +125,8 @@ class gapmer {
   /// bytes.
   gapmer(std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
          uint8_t gap_length)
-      : gapmer(from_packed_characters(data, kk, gap_start, gap_length), kk, gap_start,
-               gap_length) {}
+      : gapmer(from_packed_characters(data, kk, gap_start, gap_length), kk,
+               gap_start, gap_length) {}
 
   uint64_t data() const { return data_; }  //< Get the packed data.
   operator uint64_t() const { return data(); }  //< Get the packed data.
@@ -178,7 +179,7 @@ class gapmer {
   void huddinge_neighbours(auto&& callback) const;
 
   /// Calculate the Huddinge distance.
-  uint16_t huddinge_distance(gapmer const other, int& out) const;
+  huddinge_distance_return_value huddinge_distance(gapmer const other) const;
   /// Returns the sequence as std::string.
   std::string to_string() const;
   /// Returns true iff. this is lexicographically equal or smaller
@@ -232,8 +233,7 @@ template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
     std::span<uint64_t const> data, uint8_t kk, uint8_t gap_start,
     uint8_t gap_length) {
-  [[unlikely]] if (data.empty())
-  {
+  [[unlikely]] if (data.empty()) {
     assert(0 == kk);
     assert(0 == gap_start);
     assert(0 == gap_length);
@@ -1572,104 +1572,91 @@ bool gapmer<middle_gap_only, t_max_gap>::is_valid() const {
   return valid;
 }
 
+
+/// Write the 2-bit coded sequence including the gap to the provided buffer
+/// and the corresponding mask (with ones in even bit positions indicating
+/// defined characters).
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <std::size_t t_n>
 void gapmer<middle_gap_only, t_max_gap>::write_2bit_coded_to_buffer(
-    std::span<uint64_t, t_n> span) const
-  requires((2U * (max_k + max_gap) + 7U) / 8U <= t_n)
-{
-  auto const ll(length());
-  auto const gs(gap_start());
-  auto const gl(gap_length());
-  span.front() = prefix();
-  bits::shift_left(span, 2U * (ll - gs + gl));  // Prefix length + gap length
-  span.front() |= suffix();
+    std::span<uint64_t, t_n> span, std::span<uint64_t, t_n> mask_span) const {
+  static_assert(max_k + max_gap <= 64U);
+
+  constexpr uint64_t even_bit_mask{UINT64_C(0x5555'5555'5555'5555)};
+  auto const ll{length()};
+  auto const gs{gap_start()};
+  auto const gl{gap_length()};
+  auto const total_length{ll + gl};
+  auto const suffix_length{ll - gs};
+
+  // Set the prefix and the mask in the most significant end of the
+  // first words.
+  auto const prefix_mask{~(uint64_t(-1) >> (2U * gap_start()))};
+  span.front() = data_ << (64U - 2U * ll) & prefix_mask;
+  mask_span.front() = even_bit_mask & prefix_mask;
+
+  // We cannot return at this point since for non-gapped gapmers,
+  // gap_start() returns zero.
+  // Move the suffix to the correct position. If we need two words,
+  // mask before using bitwise OR.
+  auto const suffix_right_anchored{suffix()};
+  auto const suffix_mask{~(uint64_t(-1) << (2U * suffix_length))};
+  auto const suffix_shift{2U * (total_length % 32U)};
+  auto const suffix_rotated{std::rotr(suffix_right_anchored, suffix_shift)};
+  if (total_length <= 32) {
+    span.front() |= suffix_rotated;
+    mask_span.front() |= even_bit_mask & std::rotr(suffix_mask, suffix_shift);
+  } else {
+    auto const lhs_suffix_mask{suffix_mask >> suffix_shift};
+    auto const rhs_suffix_mask{suffix_mask & ~lhs_suffix_mask};
+    span[0] |= suffix_rotated & lhs_suffix_mask;
+    span[1] |= suffix_rotated & rhs_suffix_mask;
+    mask_span[0] |= even_bit_mask & lhs_suffix_mask;
+    mask_span[1] |= even_bit_mask & rhs_suffix_mask;
+  }
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-uint16_t gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
-    gapmer const other, int& out) const {
-  out = 0;
-  // Given this's and other's (gapped) lengths l_1 and l_2, we iterate over the
-  // l_1 + l_2 - 1 alignments, check for matching characters with XOR and count
-  // them with PEXT and POPCOUNT. This could possibly be made faster by using
-  // large registers instead of arrays and applying SIMD.
-  auto const llen{length()};
-  auto const rlen{other.length()};
-  if (!(llen && rlen)) return std::max(llen, rlen);
+huddinge_distance_return_value
+gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
+    gapmer const other) const {
+  // Calculate the distance by writing the 2-bit representation of *this to a
+  // buffer and then calculate the distance.
 
-  // Set up the defined character masks.
-  auto const lplen{gap_start()};
-  auto const rplen{other.gap_start()};
-  auto const lglen{gap_length()};
-  auto const rglen{other.gap_length()};
-  auto const lslen{llen - lplen};
-  auto const rslen{rlen - rplen};
-  auto const lmask{~(~(~(uint64_t(-1) << lplen) << lglen) << lslen)};
-  auto const rmask{~(~(~(uint64_t(-1) << rplen) << rglen) << rslen)};
-
-  // Set up the buffers.
-  constexpr auto const max_aln_length(2 * (max_k + max_gap) - 1U);
-  uint64_t buf1[(2 * max_aln_length + 7) / 8]{};
-  uint64_t buf2[(2 * max_aln_length + 7) / 8]{};
-  uint64_t maskbuf2[(max_aln_length + 7) / 8]{};
-  std::span b1s{buf1};
-  std::span b2s{buf2};
-  std::span m2s{maskbuf2};
-
-  // The longer one goes to buf1.
-  auto const m1([&]() {
-    if (llen + lglen <= rlen + rglen) {
-      write_2bit_coded_to_buffer(b2s);
-      other.write_2bit_coded_to_buffer(b1s);
-      m2s.front() = lmask;
-      bits::shift_left(b2s, 2 * (rlen + rglen - 1U));
-      bits::shift_left(m2s, rlen + rglen - 1U);
-      return rmask;
+  // Since sf::huddinge_distance() makes use of the length of the passed span,
+  // we determine the correct word length here and proceed to calculate the
+  // distance.
+  auto const check_length([&](gapmer gg, auto&& cb) {
+    auto const total_length{gg.length() + gg.gap_length()};
+    if (total_length <= 32) {
+      std::array<uint64_t, 1> buffer;
+      std::array<uint64_t, 1> mask_buffer;
+      return cb(std::span{buffer}, std::span{mask_buffer}, total_length);
     } else {
-      write_2bit_coded_to_buffer(b1s);
-      other.write_2bit_coded_to_buffer(b2s);
-      m2s.front() = rmask;
-      bits::shift_left(b2s, 2 * (llen + lglen - 1U));
-      bits::shift_left(m2s, llen + lglen - 1U);
-      return lmask;
+      std::array<uint64_t, 2> buffer;
+      std::array<uint64_t, 2> mask_buffer;
+      return cb(std::span{buffer}, std::span{mask_buffer}, total_length);
     }
-  }());
+  });
 
-  constexpr auto const pm1{UINT64_C(0x5555'5555'5555'5555)};  // PEXT mask 1
-  constexpr auto const pm2{UINT64_C(0xAAAA'AAAA'AAAA'AAAA)};  // PEXT mask 2
-  std::size_t const count{llen + lglen + rlen + rglen - 1U};
-  uint16_t max_score{};
-  for (std::size_t i{}; i < count; ++i) {
-    // Compare.
-    auto const cm{b1s.front() ^ b2s.front()};
-    auto const p1{bits::pext(cm, pm1)};
-    auto const p2{bits::pext(cm, pm2)};
-    auto const cm_{p1 | p2};  // Get the non-matching character mask.
+  // Change the value type of the given span to const.
+  auto const constify(
+      []<typename t_type, std::size_t t_size>(std::span<t_type, t_size> span) {
+        return std::span<t_type const, t_size>{span};
+      });
 
-    // Get the relevant (aligned) characters.
-    auto const mm(m1 & m2s.front());
-    auto const cm__((~cm_) & mm);
-
-    // Update the score if needed.
-    uint16_t const score(std::popcount(cm__));
-    if (score > max_score) {
-      max_score = score;
-      out = i;
-    }
-
-    // Shift the buffers.
-    bits::shift_right(b2s, 2U);
-    bits::shift_right(m2s, 1U);
-  }
-  if (llen + lglen <= rlen + rglen) {
-    out -= llen + lglen - 1;
-    out *= -1;
-  } else {
-    out -= rlen + rglen - 1;
-  }
-
-  return std::max(llen, rlen) - max_score;
+  return check_length(*this, [&](auto&& buffer, auto&& mask_buffer,
+                                 uint16_t const total_length) {
+    write_2bit_coded_to_buffer(buffer, mask_buffer);
+    return check_length(
+        other, [&](auto&& other_buffer, auto&& other_mask_buffer,
+                   uint16_t const other_total_length) {
+          other.write_2bit_coded_to_buffer(other_buffer, other_mask_buffer);
+          return sf::huddinge_distance(
+              constify(buffer), constify(other_buffer), constify(mask_buffer),
+              constify(other_mask_buffer), total_length, other_total_length);
+        });
+  });
 }
-
 }  // namespace sf

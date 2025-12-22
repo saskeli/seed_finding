@@ -231,10 +231,9 @@ class seed_clusterer {
        */
       for (size_t i = ++opt_idx_; i < local_optima_.size(); ++i) {
         auto o_s = seeds_[local_optima_[i].first].g;
-        int out = 0;
         if (o_s.aligns_to(res.g) or res.g.aligns_to(o_s) or
-            o_s.huddinge_distance(res.g, out) <= 1 or
-            o_s.reverse_complement().huddinge_distance(res.g, out) <= 1) {
+            o_s.huddinge_distance(res.g).distance <= 1 or
+            o_s.reverse_complement().huddinge_distance(res.g).distance <= 1) {
           local_optima_[i].second = 3;
         }
       }

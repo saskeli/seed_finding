@@ -16,3 +16,6 @@
 [submodule "deps/libbio"]
 	path = deps/libbio
 	url = https://github.com/tsnorri/libbio.git
+[submodule "deps/highway"]
+	path = deps/highway
+	url = https://github.com/google/highway.git

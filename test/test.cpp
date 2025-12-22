@@ -22,3 +22,4 @@
 
 #include "packed_character_iteration_arbitrary.hpp"
 #include "pack_characters_arbitrary.hpp"
+#include "huddinge_distance_arbitrary.hpp"
