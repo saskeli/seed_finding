@@ -2,7 +2,6 @@
 
 #include <unistd.h>
 
-#include <algorithm>
 #include <array>
 #include <bit>
 #include <bitset>
@@ -95,8 +94,7 @@ class gapmer {
   void all_gap_neighbours(auto&& callback) const;
 
   /// Writes the 2-bit compressed string representation to the given buffer.
-  /// When the span is dynamically sized, the caller is responsible for
-  /// reserving enough memory.
+  /// The caller is responsible for reserving enough memory.
   template <std::size_t t_n>
   void write_2bit_coded_to_buffer(std::span<uint64_t, t_n> span,
                                   std::span<uint64_t, t_n> mask_span) const;
