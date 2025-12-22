@@ -1,0 +1,33 @@
+Bootstrap: docker
+From: ubuntu:24.04
+
+%labels
+	Author Tuukka Norri
+	Version 0.1
+	Description "Build environment for seed-finding"
+
+%environment
+	export CC=gcc-14
+	export CXX=g++-14
+
+%post
+	apt-get update
+	apt-get install -y --no-install-recommends \
+		autoconf \
+		automake \
+		build-essential \
+		gcc-14 \
+		g++-14 \
+		git \
+		libboost-all-dev \
+		libgsl-dev \
+		make \
+		pkg-config \
+		ragel \
+		zlib1g-dev
+	
+	apt-get clean
+
+%runscript
+	echo "This is a build environment container."
+	echo "Bind-mount your source tree and run make."
