@@ -8,13 +8,12 @@
 #include <iostream>
 #include <regex>
 #include <string>
-#include <string_view>
 #include <type_traits>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
-#include "pack_characters.hpp"
+#include "packed_read.hpp"
 #include "util.hpp"
 
 namespace sf {
@@ -229,6 +228,7 @@ class seed_clusterer {
        * Seeds to be skipped get priority 3, which is impossibly high for a true
        * seed
        */
+#pragma omp parallel for
       for (size_t i = ++opt_idx_; i < local_optima_.size(); ++i) {
         auto o_s = seeds_[local_optima_[i].first].g;
         if (o_s.aligns_to(res.g) or res.g.aligns_to(o_s) or
