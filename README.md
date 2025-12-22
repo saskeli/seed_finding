@@ -31,6 +31,12 @@ The following software and libraries are required to build PanVC 3. The tested 
 - [Ragel 6.10](http://www.colm.net/open-source/ragel/)
 - [zlib 1.2.13](https://zlib.net)
 
+On Ubuntu, the following command should install all the required packages.
+
+```
+apt-get install -y --no-install-recommends autoconf automake build-essential gcc-14 g++-14 git libboost-all-dev libgsl-dev make pkg-config ragel zlib1g-dev
+```
+
 After installing the prerequisites, the software can be built with e.g. `make -j16`.
 
 ## Running
