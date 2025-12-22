@@ -18,6 +18,16 @@ Conda-build will then report the location of the package. An environment can be 
 mamba create -n seed-finding -c local -c conda-forge seed_finder
 ```
 
+### By Creating a Build Environment with [Apptainer](https://apptainer.org/) (Singularity)
+
+Apptainer can be used to create a build environment as follows.
+
+1. `cd apptainer`
+2. `apptainer build seed-finding.sif seed-finding.def`
+3. `./build.sh`
+
+The resulting binaries may not necessarily execute on your system. To run `seed_finder` from the build environment, use `./run-seed-finder.sh`. Any command line parameters given to the script will be passed to `seed_finder`.
+
 ### By Running Make Directly
 
 The following software and libraries are required to build PanVC 3. The tested versions are also listed.
