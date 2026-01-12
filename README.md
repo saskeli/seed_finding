@@ -30,7 +30,7 @@ The resulting binaries may not necessarily execute on your system. To run `seed_
 
 ### By Running Make Directly
 
-The following software and libraries are required to build PanVC 3. The tested versions are also listed.
+The following software and libraries are required. The tested versions are also listed.
 
 - C and C++ compilers. The C++ compiler needs to support C++23. ([GCC 14.2.0](https://gcc.gnu.org/) on Linux, [LLVM 21](https://llvm.org/) on macOS.)
 - [autoconf 2.71](https://www.gnu.org/software/autoconf/)
