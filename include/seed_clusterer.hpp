@@ -200,9 +200,11 @@ class seed_clusterer {
    */
   void output_cluster(std::string prefix, bool should_output_all_matches) {
     auto res = seeds_[local_optima_[opt_idx_].first];
-    std::cout << res.g.to_string() << "\t(" << res.sig_count << ","
-              << res.bg_count << ")\t" << res.p << "\t"
-              << local_optima_[opt_idx_].second << std::endl;
+    std::cout << res.g.to_string() << '\t'
+              << res.sig_count << '\t'
+              << res.bg_count << '\t'
+              << res.p << '\t'
+              << local_optima_[opt_idx_].second << '\n';
     if (prefix.size() > 0) {
       if (not prefix.ends_with('/')) {
         prefix.push_back('/');

@@ -384,7 +384,7 @@ int main(int argc, char const* argv[]) {
     auto sc{make_seed_clusterer<middle_gap_only, max_gap>(
         finder.get_seeds(), signal_reads, background_reads, conf.p_ext,
         conf.h1_weight, finder.signal_to_total_length_ratio())};
-    std::cout << "Seed\tcounts\tp\tpriority" << std::endl;
+    std::cout << "seed\tsignal_count\tbackground_count\tp_value\tpriority" << std::endl;
     for (size_t i = 0; i < conf.print_lim; ++i) {
       if (not sc.has_next()) {
         break;
