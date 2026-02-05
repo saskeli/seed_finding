@@ -54,6 +54,8 @@ struct count_base {
 
   void count_mers(packed_read_vector const& signal_reads,
                   packed_read_vector const& background_reads, uint8_t kk);
+
+  void count_mers(packed_read_vector const &signal_reads, uint8_t kk);
 };
 
 
@@ -113,5 +115,12 @@ void count_base<t_gapmer>::count_mers(
     packed_read_vector const& background_reads, uint8_t kk) {
   count_mers<increment_signal_counts>(signal_reads, kk);
   count_mers<increment_background_counts>(background_reads, kk);
+}
+
+
+template <typename t_gapmer>
+void count_base<t_gapmer>::count_mers(packed_read_vector
+	const& signal_reads, uint8_t kk) {
+  count_mers<increment_signal_counts>(signal_reads, kk);
 }
 }  // namespace sf

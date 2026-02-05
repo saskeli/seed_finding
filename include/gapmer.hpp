@@ -13,6 +13,7 @@
 
 #include "bits.hpp"
 #include "huddinge_distance.hpp"
+#include "string_buffer.hpp"
 #include "util.hpp"
 
 #ifdef DEBUG
@@ -83,6 +84,9 @@ class gapmer {
   struct hash {
     uint64_t operator()(gapmer gg) const { return uint64_t(gg); }
   };
+
+  template <typename t_append>
+  void do_stringify(t_append &&append_cb) const;
 
   // FIXME: Consider making all_gap_neighbours, middle_gap_neighbours private.
   // For now they are public so that unit tests can access them.
@@ -1472,23 +1476,31 @@ void gapmer<middle_gap_only, t_max_gap>::huddinge_neighbours(
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-std::string gapmer<middle_gap_only, t_max_gap>::to_string() const {
-  std::string ret;
-  uint16_t i;
-  for (i = 0; i < gap_start(); ++i) {
-    uint16_t v = nuc(i);
+template <typename t_append_cb>
+void gapmer<middle_gap_only, t_max_gap>::do_stringify(t_append_cb &&append_cb) const {
+  uint16_t ii;
+  for (ii = 0; ii < gap_start(); ++ii) {
+    uint16_t v = nuc(ii);
     auto c = v_to_nuc[v];
-    ret.push_back(c);
+    append_cb(c);
   }
   for (uint16_t j = 0; j < gap_length(); ++j) {
-    ret.push_back('.');
+    append_cb('.');
   }
-  for (; i < length(); ++i) {
-    uint16_t v = nuc(i);
+  for (; ii < length(); ++ii) {
+    uint16_t v = nuc(ii);
     auto c = v_to_nuc[v];
-    ret.push_back(c);
+    append_cb(c);
   }
-  return ret;
+}
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+std::string gapmer<middle_gap_only, t_max_gap>::to_string() const {
+  std::string retval;
+  do_stringify([&retval](char cc){
+    retval.push_back(cc);
+  });
+  return retval;
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
@@ -1656,5 +1668,12 @@ gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
               constify(other_mask_buffer), total_length, other_total_length);
         });
   });
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+std::ostream &operator<<(std::ostream &os, gapmer<middle_gap_only, t_max_gap> gg) {
+  gg.do_stringify([&os](char cc){ os << cc; });
+  return os;
 }
 }  // namespace sf
