@@ -26,7 +26,7 @@ typedef sf::gapmer<true, 15> gapmer_type;
 
 struct configuration {
   std::string input_path;
-  std::uint8_t kk{};
+  std::uint16_t kk{};
 };
 
 
@@ -66,9 +66,8 @@ void parse_arguments(int const argc, char const* const* const argv,
 
   args::Positional kk_(parser, "lookup_k", "Number of defined characters",
                        conf.kk, args::Options::Required);
-  args::Positional<std::string> input_path_(
-      parser, "signal_path", "Signal FASTA file.", conf.input_path,
-      args::Options::Required);
+  args::Positional input_path_(parser, "signal_path", "Signal FASTA file.",
+                               conf.input_path, args::Options::Required);
 
   // Parse and check.
   try {
@@ -86,6 +85,9 @@ void parse_arguments(int const argc, char const* const* const argv,
     std::cerr << err.what() << '\n';
     std::exit(1);
   }
+
+  conf.kk = args::get(kk_);
+  conf.input_path = args::get(input_path_);
 }
 
 
