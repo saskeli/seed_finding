@@ -634,9 +634,9 @@ class seed_finder {
     sig_size_ = read_length_sum(signal_reads_);
     bg_size_ = read_length_sum(background_reads_);
     signal_to_total_length_ratio_ = double(sig_size_) / (sig_size_ + bg_size_);
-    std::cerr << "Background length " << bg_size_ << '\n';
-    std::cerr << "Signal length " << sig_size_ << '\n';
-    std::cerr << "Signal to total length ratio " << signal_to_total_length_ratio_ << '\n';
+    std::cout << "# Background length " << bg_size_ << '\n';
+    std::cout << "# Signal length " << sig_size_ << '\n';
+    std::cout << "# Signal to total length ratio " << signal_to_total_length_ratio_ << '\n';
   }
 
 
