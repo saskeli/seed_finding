@@ -72,7 +72,7 @@ class seed_finder {
   double p_;
   double p_ext_;
   double fold_lim_;
-  double x_;
+  double signal_to_total_length_ratio_;
   double memory_limit_;
   uint8_t k_lim_;
   uint8_t lookup_k_;
@@ -162,14 +162,14 @@ class seed_finder {
     if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (b_sig > a_sig) {
         if constexpr (calc_b_r) {
-          b_r = error_suppressed_beta_inc(b_sig, b_bg, x_);
+          b_r = error_suppressed_beta_inc(b_sig, b_bg, signal_to_total_length_ratio_);
         }
         return true;
       }
       return false;
     }
     if constexpr (calc_b_r) {
-      b_r = error_suppressed_beta_inc(b_sig, b_bg, x_);
+      b_r = error_suppressed_beta_inc(b_sig, b_bg, signal_to_total_length_ratio_);
     }
     return b_r < a_r;
   }
@@ -237,7 +237,7 @@ class seed_finder {
     // web-server for the generic analysis of large data sets of counts,
     // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
     // https://doi.org/10.1093/bioinformatics/bty640)
-    double const rr{error_suppressed_beta_inc(sc, bc, x_)};
+    double const rr{error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
     if (rr > p_) {
       if constexpr (filter_mers) {
         critical([&] { counts.mark_discarded_(vv, offset); });
@@ -283,7 +283,7 @@ class seed_finder {
           }
 
           if constexpr (t_should_extend) {
-            double const o_r{error_suppressed_beta_inc(osc, obc, x_)};
+            double const o_r{error_suppressed_beta_inc(osc, obc, signal_to_total_length_ratio_)};
             if (validate_extension(gg, oo, sc, bc, osc, obc, rr, o_r)) {
               prev_critical([&] { prev_counts->mark_discarded(gg, offset); });
             } else {
@@ -461,7 +461,7 @@ class seed_finder {
             return;
           }
 
-          double const rr{error_suppressed_beta_inc(sc, bc, x_)};
+          double const rr{error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
           if (validate_extension<false>(p.first, oo, p.second.sig_count,
                                         p.second.bg_count, sc, bc,
                                         p.second.p, rr)) {
@@ -633,10 +633,10 @@ class seed_finder {
     gsl_set_error_handler_off();
     sig_size_ = read_length_sum(signal_reads_);
     bg_size_ = read_length_sum(background_reads_);
-    x_ = double(sig_size_) / (sig_size_ + bg_size_);
+    signal_to_total_length_ratio_ = double(sig_size_) / (sig_size_ + bg_size_);
     std::cerr << "Background length " << bg_size_ << '\n';
     std::cerr << "Signal length " << sig_size_ << '\n';
-    std::cerr << "X = " << x_ << '\n';
+    std::cerr << "Signal to total length ratio " << signal_to_total_length_ratio_ << '\n';
   }
 
 
@@ -707,6 +707,6 @@ class seed_finder {
 
   const std::vector<seed>& get_seeds() const { return seeds_; }
 
-  double x() const { return x_; }
+  double signal_to_total_length_ratio() const { return signal_to_total_length_ratio_; }
 };
 }  // namespace sf

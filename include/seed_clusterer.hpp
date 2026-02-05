@@ -28,7 +28,7 @@ class seed_clusterer {
   size_t opt_idx_;
   double p_ext_;
   double h1_weight_;
-  double x_;
+  double signal_to_total_length_ratio_;
 
   /**
    * Looks for reads that confrom to the Hamming 1 neighbourhood
@@ -107,13 +107,11 @@ class seed_clusterer {
    *
    * @param seeds    Vector of seeds, with counts and p-value computed by
    *                 sf::seed_finder
-   * @param sig_path Path to signal `.fast(a|q)(.gz)?`.
-   * @param bg_path  Path to backgroud `.fast(a|q)(.gz)?`.
    * @param pext     P-value to filter extensions with binomial tests.
    */
   seed_clusterer(const Res_vec_T& seeds, packed_read_vector const &sig_reads,
                  packed_read_vector const &bg_reads, double pext, double h1_weight,
-                 double x)
+                 double signal_to_total_length_ratio)
       : seeds_(seeds),
         sig_reads_{sig_reads},
         bg_reads_{bg_reads},
@@ -121,7 +119,7 @@ class seed_clusterer {
         opt_idx_(),
         p_ext_(pext),
         h1_weight_(h1_weight),
-        x_(x) {
+        signal_to_total_length_ratio_(signal_to_total_length_ratio) {
     std::unordered_map<uint64_t, size_t> seed_map;
     for (size_t i = 0; i < seeds_.size(); ++i) {
       seed_map[uint64_t(seeds_[i].g)] = i;
@@ -134,7 +132,7 @@ class seed_clusterer {
       // uint32_t bogo_ratio = seeds_[i].sig_count - seeds_[i].bg_count;
       bool keep = true;
       double enrichment =
-          seeds_[i].sig_count / x_ - seeds_[i].bg_count / (1 - x_);
+          seeds_[i].sig_count / signal_to_total_length_ratio_ - seeds_[i].bg_count / (1 - signal_to_total_length_ratio_);
       uint16_t len = seeds_[i].g.length();
       double val = 0;
       size_t h_n_count = 0;
@@ -148,12 +146,12 @@ class seed_clusterer {
         if (seed_map.contains(o_mer)) {
           size_t idx = seed_map[o_mer];
           double o_enrichment =
-              seeds_[idx].sig_count / x_ - seeds_[idx].bg_count / (1 - x_);
+              seeds_[idx].sig_count / signal_to_total_length_ratio_ - seeds_[idx].bg_count / (1 - signal_to_total_length_ratio_);
           if (o_enrichment > enrichment) {
             keep = false;
           }
-          val += o_enrichment * ((seeds_[idx].sig_count * (1 - x_)) /
-                                 (x_ * seeds_[idx].bg_count));
+          val += o_enrichment * ((seeds_[idx].sig_count * (1 - signal_to_total_length_ratio_)) /
+                                 (signal_to_total_length_ratio_ * seeds_[idx].bg_count));
           ++h_n_count;
         } else {
           ++h_n_count;
@@ -169,7 +167,7 @@ class seed_clusterer {
       val /= h_n_count;
       val *= h1_weight_;
       double f_m =
-          ((seeds_[i].sig_count * (1 - x_)) / (x_ * seeds_[i].bg_count)) * len;
+          ((seeds_[i].sig_count * (1 - signal_to_total_length_ratio_)) / (signal_to_total_length_ratio_ * seeds_[i].bg_count)) * len;
       val += enrichment * f_m;
       if (keep) {
 #pragma omp critical
