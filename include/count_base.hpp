@@ -108,7 +108,7 @@ void count_base<t_gapmer>::count_mers(packed_read_vector const& reads,
         libbio::min_ct(read.length, middle_gap_only ? (kk + 3) / 2 : kk);
 
     for (; gap_s < gap_lim; ++gap_s) {
-      for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
+      for (uint8_t gap_l = 1; gap_l <= max_gap && kk + gap_l <= read.length; ++gap_l) {
         auto const off{offset(gap_s, gap_l)};
         gg = gapmer_type(read.packed_characters, kk, gap_s, gap_l);
         ctx.lhs_position = 0;
