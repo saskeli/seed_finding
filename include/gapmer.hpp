@@ -13,7 +13,6 @@
 
 #include "bits.hpp"
 #include "huddinge_distance.hpp"
-#include "string_buffer.hpp"
 #include "util.hpp"
 
 #ifdef DEBUG

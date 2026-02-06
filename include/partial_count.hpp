@@ -5,20 +5,22 @@
 #include <cstdlib>
 #include <cstring>
 #include <libbio/algorithm.hh>
+
 #include "count_base.hpp"
 #include "lossy_hash_map.hpp"
 
 namespace sf {
 
 // t_base used only for having a type name for the base class.
-template <class t_gapmer, typename t_base = count_base <t_gapmer>>
+template <class t_gapmer, typename t_base = count_base<t_gapmer>>
 class partial_count final : public t_base {
  public:
   typedef t_base base_type;
   typedef base_type::gapmer_type gapmer_type;
+  typedef base_type::counting_context counting_context;
+  using base_type::count_mers;
   using base_type::max_gap;
   using base_type::middle_gap_only;
-  using base_type::count_mers;
 
   typedef uint64_t value_type;
 
@@ -33,23 +35,26 @@ class partial_count final : public t_base {
   };
 
  private:
-  typedef lossy_hash_map <gapmer_type, count_pair, typename gapmer_type::hash> count_map;
+  typedef lossy_hash_map<gapmer_type, count_pair, typename gapmer_type::hash>
+      count_map;
   count_map counts_;
 
  public:
-  partial_count(): counts_(typename count_map::allocate_tag{}) {}
+  partial_count() : counts_(typename count_map::allocate_tag{}) {}
 
   void init(gapmer_type gg) { counts_.init(gg); }
   void clear() { counts_.clear(); }
 
-  void increment_signal_count(gapmer_type gg) override {
+  void increment_signal_count(gapmer_type gg,
+                              counting_context const&) override {
     if (auto vp{counts_.find(gg)}; vp) {
 #pragma omp atomic relaxed
       ++vp->signal_count;
     }
   }
 
-  void increment_background_count(gapmer_type gg) override {
+  void increment_background_count(gapmer_type gg,
+                                  counting_context const&) override {
     if (auto vp{counts_.find(gg)}; vp) {
 #pragma omp atomic relaxed
       ++vp->background_count;
@@ -58,12 +63,14 @@ class partial_count final : public t_base {
 
   uint64_t offset(uint8_t, uint8_t) const override { return 0; }
 
-  void increment_signal_count_gapped(gapmer_type gg, uint64_t) override {
-    increment_signal_count(gg);
+  void increment_signal_count_gapped(gapmer_type gg, uint64_t,
+                                     counting_context const& ctx) override {
+    increment_signal_count(gg, ctx);
   }
 
-  void increment_background_count_gapped(gapmer_type gg, uint64_t) override {
-    increment_background_count(gg);
+  void increment_background_count_gapped(gapmer_type gg, uint64_t,
+                                         counting_context const& ctx) override {
+    increment_background_count(gg, ctx);
   }
 
   count_pair count(gapmer_type gg) const {

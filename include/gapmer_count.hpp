@@ -17,7 +17,7 @@
 namespace sf {
 
 // t_base used only for having a type name for the base class.
-template <typename t_gapmer, typename t_base = count_base <t_gapmer>>
+template <typename t_gapmer, typename t_base = count_base<t_gapmer>>
 class gapmer_count final : public t_base {
  public:
   typedef t_base base_type;
@@ -25,9 +25,10 @@ class gapmer_count final : public t_base {
   const static constexpr uint64_t ONE = 1;
 
   typedef base_type::gapmer_type gapmer_type;
+  typedef base_type::counting_context counting_context;
+  using base_type::count_mers;
   using base_type::max_gap;
   using base_type::middle_gap_only;
-  using base_type::count_mers;
 
   struct count_pair {
     value_type signal_count{};
@@ -71,52 +72,55 @@ class gapmer_count final : public t_base {
   uint8_t k_{};
 
  private:
-  void increment_signal_count(gapmer_type gg) override {
+  void increment_signal_count(gapmer_type gg,
+                              counting_context const&) override {
     uint64_t cv{gg.value()};
     libbio_assert_lt(cv, sig_counts_.size());
 #pragma omp atomic relaxed
     ++sig_counts_[cv];
   }
 
-  void increment_background_count(gapmer_type gg) override {
+  void increment_background_count(gapmer_type gg,
+                                  counting_context const&) override {
     uint64_t cv{gg.value()};
     libbio_assert_lt(cv, bg_counts_.size());
 #pragma omp atomic relaxed
     ++bg_counts_[cv];
   }
 
-  void increment_signal_count_gapped(gapmer_type gg, uint64_t off) override {
+  void increment_signal_count_gapped(gapmer_type gg, uint64_t off,
+                                     counting_context const&) override {
     uint64_t cv{off + gg.value()};
     libbio_assert_lt(cv, sig_counts_.size());
 #pragma omp atomic relaxed
     ++sig_counts_[cv];
   }
 
-  void increment_background_count_gapped(gapmer_type gg,
-                                         uint64_t off) override {
+  void increment_background_count_gapped(gapmer_type gg, uint64_t off,
+                                         counting_context const&) override {
     uint64_t cv{off + gg.value()};
     libbio_assert_lt(cv, bg_counts_.size());
 #pragma omp atomic relaxed
     ++bg_counts_[cv];
   }
-
-  private:
-   gapmer_count(packed_read_vector const& sig_reads,
-                packed_read_vector const& bg_reads, uint64_t size, uint8_t k)
-       : sig_counts_(size), bg_counts_(size), discarded_(size), k_(k) {
-     count_mers(sig_reads, bg_reads, k_);
-   }
-
-  public:
-   gapmer_count(packed_read_vector const& sig_reads,
-                packed_read_vector const& bg_reads, uint8_t k)
-       : gapmer_count(sig_reads, bg_reads, lookup_elems(k), k) {}
-
-   gapmer_count() = default;
 
  private:
-  void smooth(value_type* arr, value_type* brr, value_type* sig_scratch, value_type* bg_scratch,
-              uint64_t v_lim) {
+  gapmer_count(packed_read_vector const& sig_reads,
+               packed_read_vector const& bg_reads, uint64_t size, uint8_t k)
+      : sig_counts_(size), bg_counts_(size), discarded_(size), k_(k) {
+    count_mers(sig_reads, bg_reads, k_);
+  }
+
+ public:
+  gapmer_count(packed_read_vector const& sig_reads,
+               packed_read_vector const& bg_reads, uint8_t k)
+      : gapmer_count(sig_reads, bg_reads, lookup_elems(k), k) {}
+
+  gapmer_count() = default;
+
+ private:
+  void smooth(value_type* arr, value_type* brr, value_type* sig_scratch,
+              value_type* bg_scratch, uint64_t v_lim) {
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
       sig_scratch[v] = arr[v];
@@ -152,7 +156,8 @@ class gapmer_count final : public t_base {
     uint64_t v_lim = ONE << (k_ * 2);
     value_type* sig_scratch = (value_type*)calloc(v_lim, sizeof(value_type));
     value_type* bg_scratch = (value_type*)calloc(v_lim, sizeof(value_type));
-    smooth(sig_counts_.data(), bg_counts_.data(), sig_scratch, bg_scratch, v_lim);
+    smooth(sig_counts_.data(), bg_counts_.data(), sig_scratch, bg_scratch,
+           v_lim);
     std::memcpy(sig_counts_.data(), sig_scratch, v_lim * sizeof(value_type));
     std::memcpy(bg_counts_.data(), bg_scratch, v_lim * sizeof(value_type));
     uint8_t gap_s = middle_gap_only ? k_ / 2 : 1;

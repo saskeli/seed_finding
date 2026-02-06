@@ -33,13 +33,15 @@ struct configuration {
 class counter final : public sf::count_base<gapmer_type> {
   virtual uint64_t offset(uint8_t gap_start, uint8_t gap_length) const override;
 
-  virtual void increment_signal_count(gapmer_type gg) override;
-  virtual inline void increment_signal_count_gapped(gapmer_type gg,
-                                                    uint64_t off) override;
+  virtual void increment_signal_count(gapmer_type gg,
+                                      counting_context const&) override;
+  virtual inline void increment_signal_count_gapped(
+      gapmer_type gg, uint64_t off, counting_context const&) override;
 
-  virtual void increment_background_count(gapmer_type gg) override;
-  virtual void increment_background_count_gapped(gapmer_type gg,
-                                                 uint64_t off) override;
+  virtual void increment_background_count(gapmer_type gg,
+                                          counting_context const&) override;
+  virtual void increment_background_count_gapped(
+      gapmer_type gg, uint64_t off, counting_context const&) override;
 };
 
 
@@ -66,7 +68,7 @@ void parse_arguments(int const argc, char const* const* const argv,
 
   args::Positional kk_(parser, "lookup_k", "Number of defined characters",
                        conf.kk, args::Options::Required);
-  args::Positional input_path_(parser, "signal_path", "Signal FASTA file.",
+  args::Positional input_path_(parser, "input_path", "Input FASTA/Q file",
                                conf.input_path, args::Options::Required);
 
   // Parse and check.
@@ -109,22 +111,31 @@ uint64_t counter::offset(uint8_t gap_start, uint8_t gap_length) const {
 }
 
 
-void counter::increment_signal_count(gapmer_type gg) {
-  std::cout << gg << '\n';
+void counter::increment_signal_count(gapmer_type gg, counting_context const& ctx) {
+  auto const read_idx{ctx.read_index / 2};
+  auto const is_reverse_complement{ctx.read_index % 2};
+  std::cout
+  	<< read_idx << '\t'
+    << is_reverse_complement << '\t'
+    << ctx.lhs_position << '\t'
+    << gg << '\n';
 }
 
 
-void counter::increment_signal_count_gapped(gapmer_type gg, uint64_t off) {
-  increment_signal_count(gg);
+void counter::increment_signal_count_gapped(gapmer_type gg, uint64_t off,
+                                            counting_context const& ctx) {
+  increment_signal_count(gg, ctx);
 }
 
 
-void counter::increment_background_count(gapmer_type gg) {
+void counter::increment_background_count(gapmer_type gg,
+                                         counting_context const&) {
   throw std::runtime_error("Should not be called");
 }
 
 
-void counter::increment_background_count_gapped(gapmer_type gg, uint64_t off) {
+void counter::increment_background_count_gapped(gapmer_type gg, uint64_t off,
+                                                counting_context const&) {
   throw std::runtime_error("Should not be called");
 }
 
@@ -156,6 +167,7 @@ int main(int argc, char** argv) {
   sf::packed_read_vector reads;
   read_input(conf.input_path, reads);
 
+  std::cout << "read_index\tis_reverse_complement\tlhs_position\tsequence\n";
   counter cc;
   cc.count_mers(reads, conf.kk);
 

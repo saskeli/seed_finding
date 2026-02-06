@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <libbio/algorithm.hh>
 
@@ -18,18 +19,29 @@ struct count_base {
   static_assert(gapmer_type::max_gap <= UINT8_MAX);
   constexpr static uint8_t max_gap{gapmer_type::max_gap};
 
-  using increment_fn_type = void (count_base::*)(gapmer_type);
-  using increment_gapped_fn_type = void (count_base::*)(gapmer_type, uint64_t);
+  struct counting_context {
+    std::size_t read_index{};
+    std::size_t lhs_position{};
+  };
+
+  using increment_fn_type =
+      void (count_base::*)(gapmer_type, counting_context const&);
+  using increment_gapped_fn_type =
+      void (count_base::*)(gapmer_type, uint64_t, counting_context const&);
 
   virtual ~count_base() {}
 
-  virtual void increment_signal_count(gapmer_type gg) = 0;
-  virtual void increment_background_count(gapmer_type gg) = 0;
+  virtual void increment_signal_count(gapmer_type gg,
+                                      counting_context const& ctx) = 0;
+  virtual void increment_background_count(gapmer_type gg,
+                                          counting_context const& ctx) = 0;
 
   virtual uint64_t offset(uint8_t gap_start, uint8_t gap_length) const = 0;
 
-  virtual void increment_signal_count_gapped(gapmer_type gg, uint64_t off) = 0;
-  virtual void increment_background_count_gapped(gapmer_type gg, uint64_t off) = 0;
+  virtual void increment_signal_count_gapped(gapmer_type gg, uint64_t off,
+                                             counting_context const& ctx) = 0;
+  virtual void increment_background_count_gapped(
+      gapmer_type gg, uint64_t off, counting_context const& ctx) = 0;
 
   // Member function pointers for the template version of count_mers.
   struct increment_signal_counts {
@@ -75,17 +87,20 @@ void count_base<t_gapmer>::count_mers(packed_read_vector const& reads,
         std::forward<decltype(args)>(args)...);
   });
 
-  // OpenMP’s parallel for should work with the range b.c. it is essentially a
-  // memory range and the iterator is a pointer.
+  // We use a counter instead of rsv::enumerate to make OpenMP’s parallel for work.
+  auto const read_count{reads.size()};
 #pragma omp parallel for
-  for (auto const& read : reads) {
+  for (std::size_t ii = 0; ii < read_count; ++ii) {
+    auto const &read{reads[ii]};
     if (read.length < kk) continue;
 
+    counting_context ctx{ii};
     gapmer_type gg(read.packed_characters.front() >> (64U - 2U * kk), kk);
-    increment_count(gg);
+    increment_count(gg, ctx);
     read.iterate_characters(kk, [&](std::uint8_t const cc) {
       gg = gg.next_(cc);
-      increment_count(gg);
+      ++ctx.lhs_position;
+      increment_count(gg, ctx);
     });
 
     uint8_t gap_s = middle_gap_only ? kk / 2 : 1;
@@ -96,12 +111,14 @@ void count_base<t_gapmer>::count_mers(packed_read_vector const& reads,
       for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
         auto const off{offset(gap_s, gap_l)};
         gg = gapmer_type(read.packed_characters, kk, gap_s, gap_l);
-        increment_gapped_count(gg, off);
+        ctx.lhs_position = 0;
+        increment_gapped_count(gg, off, ctx);
         read.iterate_character_pairs(
             gap_s, kk + gap_l,
             [&](std::uint8_t const lhsc, std::uint8_t const rhsc) {
               gg = gg.next_(lhsc, rhsc);
-              increment_gapped_count(gg, off);
+              ++ctx.lhs_position;
+              increment_gapped_count(gg, off, ctx);
             });
       }
     }
