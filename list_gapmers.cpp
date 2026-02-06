@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
+#include <omp.h>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -161,6 +162,8 @@ void reader_adapter_delegate::found_total_reads_with_unexpected_characters(
 
 
 int main(int argc, char** argv) {
+  omp_set_num_threads(1);
+
   configuration conf;
   parse_arguments(argc, argv, conf);
 
