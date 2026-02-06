@@ -31,7 +31,7 @@ struct configuration {
 };
 
 
-class counter final : public sf::count_base<gapmer_type> {
+class list_gapmers final : public sf::count_base<gapmer_type> {
   virtual uint64_t offset(uint8_t gap_start, uint8_t gap_length) const override;
 
   virtual void increment_signal_count(gapmer_type gg,
@@ -107,12 +107,12 @@ void read_input(std::string const& path, sf::packed_read_vector& dst) {
 }
 
 
-uint64_t counter::offset(uint8_t gap_start, uint8_t gap_length) const {
+uint64_t list_gapmers::offset(uint8_t gap_start, uint8_t gap_length) const {
   return 0;
 }
 
 
-void counter::increment_signal_count(gapmer_type gg, counting_context const& ctx) {
+void list_gapmers::increment_signal_count(gapmer_type gg, counting_context const& ctx) {
   auto const read_idx{ctx.read_index / 2};
   auto const is_reverse_complement{ctx.read_index % 2};
   std::cout
@@ -123,19 +123,19 @@ void counter::increment_signal_count(gapmer_type gg, counting_context const& ctx
 }
 
 
-void counter::increment_signal_count_gapped(gapmer_type gg, uint64_t off,
+void list_gapmers::increment_signal_count_gapped(gapmer_type gg, uint64_t off,
                                             counting_context const& ctx) {
   increment_signal_count(gg, ctx);
 }
 
 
-void counter::increment_background_count(gapmer_type gg,
+void list_gapmers::increment_background_count(gapmer_type gg,
                                          counting_context const&) {
   throw std::runtime_error("Should not be called");
 }
 
 
-void counter::increment_background_count_gapped(gapmer_type gg, uint64_t off,
+void list_gapmers::increment_background_count_gapped(gapmer_type gg, uint64_t off,
                                                 counting_context const&) {
   throw std::runtime_error("Should not be called");
 }
@@ -171,8 +171,8 @@ int main(int argc, char** argv) {
   read_input(conf.input_path, reads);
 
   std::cout << "read_index\tis_reverse_complement\tlhs_position\tsequence\n";
-  counter cc;
-  cc.count_mers(reads, conf.kk);
+  list_gapmers lg;
+  lg.count_mers(reads, conf.kk);
 
   return 0;
 }
