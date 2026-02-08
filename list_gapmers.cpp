@@ -3,19 +3,24 @@
  * This code is licensed under MIT license (see LICENSE for details).
  */
 
+#include <omp.h>
+
 #include <args.hxx>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
-#include <omp.h>
+#include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include "include/args.hpp"
 #include "include/configuration.hpp"
 #include "include/count_base.hpp"
 #include "include/gapmer.hpp"
+#include "include/gapmer_count.hpp"
 #include "include/packed_read.hpp"
 #include "include/reader_adapter.hpp"
 #include "include/version.hpp"
@@ -25,17 +30,22 @@ namespace {
 typedef sf::gapmer<true, 15> gapmer_type;
 
 
+enum class action_type { list, count };
+
+
+enum class counting_method_type { map, gapmer_count };
+
+
 struct configuration {
   std::string input_path;
   std::uint16_t kk{};
+  action_type action{action_type::list};
+  counting_method_type counting_method{counting_method_type::map};
 };
 
 
-class list_gapmers final : public sf::count_base<gapmer_type> {
+class count_base : public sf::count_base<gapmer_type> {
   virtual uint64_t offset(uint8_t gap_start, uint8_t gap_length) const override;
-
-  virtual void increment_signal_count(gapmer_type gg,
-                                      counting_context const&) override;
   virtual inline void increment_signal_count_gapped(
       gapmer_type gg, uint64_t off, counting_context const&) override;
 
@@ -43,6 +53,45 @@ class list_gapmers final : public sf::count_base<gapmer_type> {
                                           counting_context const&) override;
   virtual void increment_background_count_gapped(
       gapmer_type gg, uint64_t off, counting_context const&) override;
+};
+
+
+class gapmer_count final : public count_base {
+  typedef sf::gapmer_count<gapmer_type> count_type;
+  typedef std::set<gapmer_type> gapmer_set;
+
+  gapmer_set m_seen_gapmers;
+  count_type m_count;
+
+  virtual uint64_t offset(uint8_t gap_start, uint8_t gap_length) const override;
+  virtual void increment_signal_count(gapmer_type gg,
+                                      counting_context const&) override;
+  virtual void increment_signal_count_gapped(gapmer_type gg, uint64_t off,
+                                             counting_context const&) override;
+
+ public:
+  explicit gapmer_count(uint8_t k) : m_count(k) {}
+  void output_all() const;
+};
+
+
+class count_stl_map final : public count_base {
+  typedef std::map<gapmer_type, std::uint32_t>
+      count_map;
+
+  count_map m_counts;
+
+  virtual void increment_signal_count(gapmer_type gg,
+                                      counting_context const&) override;
+
+ public:
+  void output_all() const;
+};
+
+
+class list_gapmers final : public count_base {
+  virtual void increment_signal_count(gapmer_type gg,
+                                      counting_context const&) override;
 };
 
 
@@ -59,6 +108,10 @@ struct reader_adapter_delegate : public sf::reader_adapter_delegate {
 
 void parse_arguments(int const argc, char const* const* const argv,
                      configuration& conf) {
+  std::unordered_map<std::string, counting_method_type> const counting_methods{
+      {"stl-map", counting_method_type::map},
+      {"gapmer-count", counting_method_type::gapmer_count}};
+
   args::ArgumentParser parser("List gapmers of given length in input FASTA/Q.");
 
   args::HelpFlag help_(parser, "help", "Display this help.", {'h', "help"});
@@ -66,6 +119,11 @@ void parse_arguments(int const argc, char const* const* const argv,
                                   "Output the version number and exit.",
                                   {'V', "version"});
   args::CompletionFlag completion_(parser, {"complete"});
+
+  args::MapFlag<std::string, counting_method_type> count_(
+      parser, "count", "Count gapmers instead of listing", {"count"},
+      counting_methods, counting_method_type::map,
+      args::Options::Single);
 
   args::Positional kk_(parser, "lookup_k", "Number of defined characters",
                        conf.kk, args::Options::Required);
@@ -91,6 +149,11 @@ void parse_arguments(int const argc, char const* const* const argv,
 
   conf.kk = args::get(kk_);
   conf.input_path = args::get(input_path_);
+
+  if (count_) {
+    conf.action = action_type::count;
+    conf.counting_method = args::get(count_);
+  }
 }
 
 
@@ -107,37 +170,75 @@ void read_input(std::string const& path, sf::packed_read_vector& dst) {
 }
 
 
-uint64_t list_gapmers::offset(uint8_t gap_start, uint8_t gap_length) const {
+uint64_t count_base::offset(uint8_t gap_start, uint8_t gap_length) const {
   return 0;
 }
 
 
-void list_gapmers::increment_signal_count(gapmer_type gg, counting_context const& ctx) {
-  auto const read_idx{ctx.read_index / 2};
-  auto const is_reverse_complement{ctx.read_index % 2};
-  std::cout
-  	<< read_idx << '\t'
-    << is_reverse_complement << '\t'
-    << ctx.lhs_position << '\t'
-    << gg << '\n';
-}
-
-
-void list_gapmers::increment_signal_count_gapped(gapmer_type gg, uint64_t off,
-                                            counting_context const& ctx) {
+void count_base::increment_signal_count_gapped(gapmer_type gg, uint64_t off,
+                                               counting_context const& ctx) {
   increment_signal_count(gg, ctx);
 }
 
 
-void list_gapmers::increment_background_count(gapmer_type gg,
-                                         counting_context const&) {
+void count_base::increment_background_count(gapmer_type gg,
+                                            counting_context const&) {
   throw std::runtime_error("Should not be called");
 }
 
 
-void list_gapmers::increment_background_count_gapped(gapmer_type gg, uint64_t off,
-                                                counting_context const&) {
+void count_base::increment_background_count_gapped(gapmer_type gg, uint64_t off,
+                                                   counting_context const&) {
   throw std::runtime_error("Should not be called");
+}
+
+
+void list_gapmers::increment_signal_count(gapmer_type gg,
+                                          counting_context const& ctx) {
+  auto const read_idx{ctx.read_index / 2};
+  auto const is_reverse_complement{ctx.read_index % 2};
+  std::cout << read_idx << '\t' << is_reverse_complement << '\t'
+            << ctx.lhs_position << '\t' << gg << '\n';
+}
+
+
+void count_stl_map::increment_signal_count(gapmer_type gg,
+                                                 counting_context const& ctx) {
+  ++m_counts[gg];
+}
+
+
+void count_stl_map::output_all() const {
+  for (auto const& kv : m_counts) {
+    std::cout << kv.first << '\t' << kv.second << '\n';
+  }
+}
+
+
+uint64_t gapmer_count::offset(uint8_t gap_start, uint8_t gap_length) const {
+  return m_count.offset(gap_start, gap_length);
+}
+
+
+void gapmer_count::increment_signal_count(gapmer_type gg,
+                                          counting_context const& ctx) {
+  m_seen_gapmers.insert(gg);
+  m_count.increment_signal_count(gg, ctx);
+}
+
+
+void gapmer_count::increment_signal_count_gapped(gapmer_type gg, uint64_t off,
+                                                 counting_context const& ctx) {
+  m_seen_gapmers.insert(gg);
+  m_count.increment_signal_count_gapped(gg, off, ctx);
+}
+
+
+void gapmer_count::output_all() const {
+  for (auto const& gg : m_seen_gapmers) {
+    auto const cc{m_count.count(gg)};
+    std::cout << gg << '\t' << cc.signal_count << '\n';
+  }
 }
 
 
@@ -158,6 +259,34 @@ void reader_adapter_delegate::found_total_reads_with_unexpected_characters(
     sf::reader_adapter&, std::string_view path, std::uint64_t count) {
   std::cerr << "WARNING: Skipped " << count << " reads in " << path << ".\n";
 }
+
+
+void do_list(sf::packed_read_vector const& reads, configuration const& conf) {
+  std::cout << "read_index\tis_reverse_complement\tlhs_position\tsequence\n";
+  list_gapmers lg;
+  lg.count_mers(reads, conf.kk);
+}
+
+
+void do_count(sf::packed_read_vector const& reads, configuration const& conf) {
+  std::cout << "sequence\tcount\n";
+  switch (conf.counting_method) {
+    case counting_method_type::map: {
+      count_stl_map cc;
+      cc.count_mers(reads, conf.kk);
+      cc.output_all();
+      break;
+    }
+
+    case counting_method_type::gapmer_count: {
+      gapmer_count cc(conf.kk);
+      cc.count_mers(reads, conf.kk);
+      cc.output_all();
+      break;
+    }
+  }
+}
+
 }  // namespace
 
 
@@ -170,9 +299,14 @@ int main(int argc, char** argv) {
   sf::packed_read_vector reads;
   read_input(conf.input_path, reads);
 
-  std::cout << "read_index\tis_reverse_complement\tlhs_position\tsequence\n";
-  list_gapmers lg;
-  lg.count_mers(reads, conf.kk);
+  switch (conf.action) {
+    case action_type::list:
+      do_list(reads, conf);
+      break;
+    case action_type::count:
+      do_count(reads, conf);
+      break;
+  };
 
   return 0;
 }

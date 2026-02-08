@@ -71,7 +71,7 @@ class gapmer_count final : public t_base {
   sdsl::bit_vector discarded_;
   uint8_t k_{};
 
- private:
+ public:
   void increment_signal_count(gapmer_type gg,
                               counting_context const&) override {
     uint64_t cv{gg.value()};
@@ -105,9 +105,12 @@ class gapmer_count final : public t_base {
   }
 
  private:
+  gapmer_count(uint64_t size, uint8_t k)
+      : sig_counts_(size), bg_counts_(size), discarded_(size), k_(k) {}
+
   gapmer_count(packed_read_vector const& sig_reads,
                packed_read_vector const& bg_reads, uint64_t size, uint8_t k)
-      : sig_counts_(size), bg_counts_(size), discarded_(size), k_(k) {
+      : gapmer_count(size, k) {
     count_mers(sig_reads, bg_reads, k_);
   }
 
@@ -117,6 +120,8 @@ class gapmer_count final : public t_base {
       : gapmer_count(sig_reads, bg_reads, lookup_elems(k), k) {}
 
   gapmer_count() = default;
+
+  explicit gapmer_count(uint8_t k) : gapmer_count(lookup_elems(k), k) {}
 
  private:
   void smooth(value_type* arr, value_type* brr, value_type* sig_scratch,
