@@ -12,7 +12,8 @@
 namespace sf {
 
 // t_base used only for having a type name for the base class.
-template <class t_gapmer, typename t_base = count_base<t_gapmer>>
+template <class t_gapmer, bool t_should_init_when_finding = false,
+          typename t_base = count_base<t_gapmer>>
 class partial_count final : public t_base {
  public:
   typedef t_base base_type;
@@ -42,12 +43,21 @@ class partial_count final : public t_base {
  public:
   partial_count() : counts_(typename count_map::allocate_tag{}) {}
 
+ private:
+  count_map::value_type* find(gapmer_type gg) {
+    if constexpr (t_should_init_when_finding)
+      return counts_.insert_or_find(gg);
+    else
+      return counts_.find(gg);
+  }
+
+ public:
   void init(gapmer_type gg) { counts_.init(gg); }
   void clear() { counts_.clear(); }
 
   void increment_signal_count(gapmer_type gg,
                               counting_context const&) override {
-    if (auto vp{counts_.find(gg)}; vp) {
+    if (auto vp{find(gg)}; vp) {
 #pragma omp atomic relaxed
       ++vp->signal_count;
     }
@@ -55,7 +65,7 @@ class partial_count final : public t_base {
 
   void increment_background_count(gapmer_type gg,
                                   counting_context const&) override {
-    if (auto vp{counts_.find(gg)}; vp) {
+    if (auto vp{find(gg)}; vp) {
 #pragma omp atomic relaxed
       ++vp->background_count;
     }
@@ -108,6 +118,9 @@ class partial_count final : public t_base {
   }
 
   double fill_rate() const { return counts_.fill_rate(); }
+  void set_max_search_iterations(uint16_t max_iterations) {
+    counts_.set_max_search_iterations(max_iterations);
+  }
 };
 
 }  // namespace sf

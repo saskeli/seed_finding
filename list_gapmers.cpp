@@ -87,7 +87,7 @@ class count_wrapper final : public count_base {
 
 
 typedef count_wrapper<sf::gapmer_count<gapmer_type>> gapmer_count;
-typedef count_wrapper<sf::partial_count<gapmer_type>> partial_count;
+typedef count_wrapper<sf::partial_count<gapmer_type, true>> partial_count;
 
 
 class count_stl_map final : public count_base {
