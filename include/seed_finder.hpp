@@ -475,8 +475,8 @@ class seed_finder {
   /**
    * Find k length extensions from a, and store valid extensions in b.
    *
-   * @param a  k - 1 length mers to extend.
-   * @param b  storage for valid k-mers.
+   * @param aa  k - 1 length mers to extend.
+   * @param bb  storage for valid k-mers.
    * @param p_counter  Structure to use with partial counting.
    * @param k  length of k-mers to find.
    * @param prune  Should only one pass of extensions be done.
