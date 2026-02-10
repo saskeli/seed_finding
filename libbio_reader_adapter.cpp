@@ -217,10 +217,10 @@ bool libbio_reader_adapter::handle_sequence_chunk(lb::fasta_reader_base& reader,
                                                   std::string_view sv,
                                                   bool has_newline) {
   if (m_read_is_valid) [[likely]] {
-    auto const chunk_length{pack_characters(sv, m_read_buffer, m_read_length)};
-    m_read_is_valid = (UINT64_MAX != chunk_length);
+    auto const read_length{pack_characters(sv, m_read_buffer, m_read_length)};
+    m_read_is_valid = (UINT64_MAX != read_length);
     if (m_read_is_valid) [[likely]]
-      m_read_length += chunk_length;
+      m_read_length = read_length;
   }
 
   return true;
@@ -231,10 +231,10 @@ bool libbio_reader_adapter::handle_sequence_chunk(lb::fastq_reader_base& reader,
                                                   std::string_view sv,
                                                   bool has_newline) {
   if (m_read_is_valid) [[likely]] {
-    auto const chunk_length{pack_characters(sv, m_read_buffer, m_read_length)};
-    m_read_is_valid = (UINT64_MAX != chunk_length);
+    auto const read_length{pack_characters(sv, m_read_buffer, m_read_length)};
+    m_read_is_valid = (UINT64_MAX != read_length);
     if (m_read_is_valid) [[likely]]
-      m_read_length += chunk_length;
+      m_read_length = read_length;
   }
 
   return true;
