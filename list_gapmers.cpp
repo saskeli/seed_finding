@@ -3,7 +3,9 @@
  * This code is licensed under MIT license (see LICENSE for details).
  */
 
-#include <omp.h>
+#ifdef _OPENMP
+#  include <omp.h>
+#endif
 
 #include <args.hxx>
 #include <cstdint>
@@ -316,7 +318,9 @@ void do_count(sf::packed_read_vector const& reads, configuration const& conf) {
 
 
 int main(int argc, char** argv) {
+#ifdef _OPENMP
   omp_set_num_threads(1);
+#endif
 
   configuration conf;
   parse_arguments(argc, argv, conf);
