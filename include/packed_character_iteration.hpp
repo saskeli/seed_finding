@@ -71,7 +71,9 @@ inline void iterate_packed_characters(packed_word_vector const& src,
   std::uint8_t const remaining_characters((length - start_pos) % 32U ?: 32U);
 
   for (std::uint64_t ii{1}; ii < ctx.word_count(); ++ii) {
-    ctx.update(src[ctx.first_word_index() + ii]);
+    auto const idx{ctx.first_word_index() + ii};
+    libbio_assert_lt(idx, src.size());
+    ctx.update(src[idx]);
     for (std::uint8_t jj{}; jj < 32U; ++jj) {
       ctx.rotate_current_word();
       cb(ctx.current_word() & 0x3);
@@ -80,6 +82,7 @@ inline void iterate_packed_characters(packed_word_vector const& src,
 
   // It does not matter if we reload the last word since we only handle
   // the first remaining_characters characters.
+  libbio_assert_lt(ctx.last_word_index(), src.size());
   ctx.update(src[ctx.last_word_index()]);
   for (std::uint8_t jj{}; jj < remaining_characters; ++jj) {
     ctx.rotate_current_word();
@@ -112,8 +115,12 @@ inline void iterate_packed_character_pairs(packed_word_vector const& src,
                                          rhs_ctx.word_count()};
 
   for (std::uint64_t ii{1}; ii < rhs_ctx.word_count(); ++ii) {
-    lhs_ctx.update(src[lhs_ctx.first_word_index() + ii]);
-    rhs_ctx.update(src[rhs_ctx.first_word_index() + ii]);
+    auto const lhs_idx{lhs_ctx.first_word_index() + ii};
+    auto const rhs_idx{rhs_ctx.first_word_index() + ii};
+    libbio_assert_lt(lhs_idx, src.size());
+    libbio_assert_lt(rhs_idx, src.size());
+    lhs_ctx.update(src[lhs_idx]);
+    rhs_ctx.update(src[rhs_idx]);
     for (std::uint8_t jj{}; jj < 32U; ++jj) {
       lhs_ctx.rotate_current_word();
       rhs_ctx.rotate_current_word();
@@ -123,6 +130,8 @@ inline void iterate_packed_character_pairs(packed_word_vector const& src,
 
   // It does not matter if we reload the last word since we only handle
   // the first remaining_characters characters.
+  libbio_assert_lt(lhs_last_word_idx, src.size());
+  libbio_assert_lt(rhs_ctx.last_word_index(), src.size());
   lhs_ctx.update(src[lhs_last_word_idx]);
   rhs_ctx.update(src[rhs_ctx.last_word_index()]);
   for (std::uint8_t jj{}; jj < rhs_remaining_characters; ++jj) {
