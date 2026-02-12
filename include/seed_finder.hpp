@@ -13,7 +13,6 @@
 #include <unordered_set>
 #include <vector>
 
-#include "fm_index.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
 #include "packed_read.hpp"
