@@ -141,8 +141,8 @@ class seed_finder {
   /**
    * Check if a should be discarded based on the neigbour b.
    *
-   * @tparam calc_b_r  Indicates, wether b_r needs to be computed by this
-   * function, or has been precalculated.
+   * @tparam calc_b_r  Indicates whether b_r needs to be computed by this
+   * function or has been precalculated.
    *
    * @param a          Mer to check
    * @param b          Neighbour of a
