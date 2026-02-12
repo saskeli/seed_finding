@@ -62,7 +62,7 @@ class seed_finder {
   using gapmer_map =
       std::unordered_map<gapmer_type, t_value, typename gapmer_type::hash>;
 
-  typedef gapmer_map <seed_meta> seed_meta_map;
+  typedef gapmer_map<seed_meta> seed_meta_map;
 
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
@@ -92,7 +92,6 @@ class seed_finder {
    *
    * @return True, if extension from a to b is valid
    */
-  template <bool debug = false>
   bool validate_extension([[maybe_unused]] gapmer_type a,
                           [[maybe_unused]] gapmer_type b, double a_sig,
                           double a_bg, double b_sig, double b_bg, double a_r,
@@ -156,20 +155,22 @@ class seed_finder {
    * == false, else output parameter.
    */
   template <bool calc_b_r>
-  bool should_filter([[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
-                 double a_sig, double a_bg, double b_sig, double b_bg,
-                 double a_r, double& b_r) const {
+  bool should_filter([[maybe_unused]] gapmer_type a,
+                     [[maybe_unused]] gapmer_type b, double a_sig, double a_bg,
+                     double b_sig, double b_bg, double a_r, double& b_r) const {
     if (a_bg <= 1.00001 && b_bg <= 1.00001) {
       if (b_sig > a_sig) {
         if constexpr (calc_b_r) {
-          b_r = error_suppressed_beta_inc(b_sig, b_bg, signal_to_total_length_ratio_);
+          b_r = error_suppressed_beta_inc(b_sig, b_bg,
+                                          signal_to_total_length_ratio_);
         }
         return true;
       }
       return false;
     }
     if constexpr (calc_b_r) {
-      b_r = error_suppressed_beta_inc(b_sig, b_bg, signal_to_total_length_ratio_);
+      b_r =
+          error_suppressed_beta_inc(b_sig, b_bg, signal_to_total_length_ratio_);
     }
     return b_r < a_r;
   }
@@ -195,11 +196,12 @@ class seed_finder {
    */
   template <typename t_critical>
   [[nodiscard]] check_enrichment_result check_enrichment(
-      gapmer_type const gg, uint64_t const offset, gapmer_count_type &counts,
+      gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
       t_critical&& critical) const {
     auto const vv{gg.value()};
 
     if constexpr (filter_mers) {
+      // FIXME: not necessarily atomic. (Proably works on x86-64.)
       if (counts.is_discarded_(vv, offset)) {
         return {{0, 0, 0}, false};
       }
@@ -237,7 +239,8 @@ class seed_finder {
     // web-server for the generic analysis of large data sets of counts,
     // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
     // https://doi.org/10.1093/bioinformatics/bty640)
-    double const rr{error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
+    double const rr{
+        error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
     if (rr > p_) {
       if constexpr (filter_mers) {
         critical([&] { counts.mark_discarded_(vv, offset); });
@@ -266,7 +269,6 @@ class seed_finder {
       enrichment_result const& enrichment_res, gapmer_count_type& counts,
       t_critical&& critical, gapmer_count_type* const prev_counts = nullptr,
       t_prev_critical&& prev_critical = nullptr) const {
-
     constexpr bool skip_same_length{t_should_extend};
     constexpr bool skip_longer{not t_should_extend};
 
@@ -283,7 +285,8 @@ class seed_finder {
           }
 
           if constexpr (t_should_extend) {
-            double const o_r{error_suppressed_beta_inc(osc, obc, signal_to_total_length_ratio_)};
+            double const o_r{error_suppressed_beta_inc(
+                osc, obc, signal_to_total_length_ratio_)};
             if (validate_extension(gg, oo, sc, bc, osc, obc, rr, o_r)) {
               prev_critical([&] { prev_counts->mark_discarded(gg, offset); });
             } else {
@@ -316,13 +319,13 @@ class seed_finder {
    * @param sig_bg_k  Length k gapmer count tables
    * @param sig_bg_k1 Length k + 1 gapmer count tables
    */
-  void check_count(gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
-                   gapmer_count_type& sig_bg_k1) {
+  void check_count(gapmer_type const gg, uint64_t offset,
+                   gapmer_count_type& sig_bg_k, gapmer_count_type& sig_bg_k1) {
     auto const& [enrichment_res, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_a_bv{});
     if (not should_continue) return;
 
-    auto const &[rr, sc, bc] = enrichment_res;
+    auto const& [rr, sc, bc] = enrichment_res;
     if constexpr (filter_mers) {
       filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
                                            critical_a_bv{});
@@ -341,28 +344,25 @@ class seed_finder {
   }
 
   /**
-   * Checks H1 neighbourhood with lengths k gapmer implied by k, v,
-   * gap_s and gap_l, and marks invalid candidates as discarded in sig_bg_c.
+   * Checks H1 neighbourhood of the given gapmer
+   * and marks invalid candidates as discarded in sig_bg_c.
    *
    * Surviving mers get added to candidate set m.
    *
-   * @param k        Gapmer length
-   * @param v        Gapmer value as uint64_t
-   * @param gap_s    Start location of gap
-   * @param gap_l    Length of gap
    * @param offset   Offset value for table access
    * @param sig_bg_k Length k gapmer count tables
    * @param mm       Map to add candidate seeds to.
    */
-  void filter_count(gapmer_type const gg, uint64_t offset, gapmer_count_type &sig_bg_k,
-                    seed_meta_map &mm) const {
+  void filter_count(gapmer_type const gg, uint64_t offset,
+                    gapmer_count_type& sig_bg_k, seed_meta_map& mm) const {
     auto const& [enrichment_res, should_continue] =
         check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
     if (not should_continue) return;
 
-    auto const &[rr, sc, bc] = enrichment_res;
+    auto const& [rr, sc, bc] = enrichment_res;
     if constexpr (filter_mers) {
-      filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k, critical_d_bv{});
+      filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
+                                           critical_d_bv{});
       if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
         mm[gg] = {rr, sc, bc};
@@ -380,7 +380,7 @@ class seed_finder {
    * mers
    */
   void counted_seeds_and_candidates(gapmer_count_type& sig_bg_c) {
-    using std::swap; // For ADL.
+    using std::swap;  // For ADL.
 
     std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
     // Initialize by counting 5-mers
@@ -433,42 +433,45 @@ class seed_finder {
    * @param p_counter  Partial k-mer counts that may contain valid mer
    * extensions
    */
-  void extend_counted(seed_meta_map const &aa, seed_meta_map &bb, partial_count_type const &p_counter) const {
+  void extend_counted(seed_meta_map const& aa, seed_meta_map& bb,
+                      partial_count_type const& p_counter) const {
     for (auto p : aa) {
 #ifdef DEBUG
       std::cerr << "        " << p.first.to_string() << ": "
                 << p.second.sig_count << ", " << p.second.bg_count << ", "
                 << p.second.p << std::endl;
 #endif
-      p.first.template huddinge_neighbours<true, true, false>([&](gapmer_type oo) {
-        if (not oo.is_canonical()) {
-          oo = oo.reverse_complement();
-        }
+      p.first.template huddinge_neighbours<true, true, false>(
+          [&](gapmer_type oo) {
+            if (not oo.is_canonical()) {
+              oo = oo.reverse_complement();
+            }
 
-        if (not bb.contains(oo)) {
-          auto const counts([&]{
-            if constexpr (enable_smoothing)
-              return p_counter.smooth_count(oo);
-            else
-              return p_counter.count(oo);
-          }());
+            if (not bb.contains(oo)) {
+              auto const counts([&] {
+                if constexpr (enable_smoothing)
+                  return p_counter.smooth_count(oo);
+                else
+                  return p_counter.count(oo);
+              }());
 
-          // Potentially narrowing conversion.
-          double const sc(counts.signal_count + 1);
-          double const bc(counts.background_count + 1);
+              // Potentially narrowing conversion.
+              double const sc(counts.signal_count + 1);
+              double const bc(counts.background_count + 1);
 
-          if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
-            return;
-          }
+              if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
+                return;
+              }
 
-          double const rr{error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
-          if (validate_extension<false>(p.first, oo, p.second.sig_count,
-                                        p.second.bg_count, sc, bc,
-                                        p.second.p, rr)) {
-            bb[oo] = {rr, uint64_t(sc), uint64_t(bc)};
-          }
-        }
-      });
+              double const rr{error_suppressed_beta_inc(
+                  sc, bc, signal_to_total_length_ratio_)};
+              if (validate_extension(p.first, oo, p.second.sig_count,
+                                     p.second.bg_count, sc, bc, p.second.p,
+                                     rr)) {
+                bb[oo] = {rr, uint64_t(sc), uint64_t(bc)};
+              }
+            }
+          });
     }
   }
 
@@ -481,8 +484,8 @@ class seed_finder {
    * @param k  length of k-mers to find.
    * @param prune  Should only one pass of extensions be done.
    */
-   void extend(seed_meta_map &aa, seed_meta_map &bb,
-               partial_count_type &p_counter, uint16_t k, bool prune) const {
+  void extend(seed_meta_map& aa, seed_meta_map& bb,
+              partial_count_type& p_counter, uint16_t k, bool prune) const {
     std::cerr << "    Extend " << aa.size() << " mers." << std::endl;
 
     const constexpr double fill_limit = 0.4;
@@ -575,7 +578,7 @@ class seed_finder {
    *
    * @param m   gapmers to filter
    */
-  void filter(seed_meta_map &mm) const {
+  void filter(seed_meta_map& mm) const {
     gapmer_set del_set;
     auto e = mm.end();
     for (auto it = mm.begin(); it != e; ++it) {
@@ -621,7 +624,6 @@ class seed_finder {
         k_lim_(max_k),
         lookup_k_(lookup_k),
         prune_(prune) {
-
     // For calculating the sum of the read lengths.
     auto const read_length_sum{[](packed_read_vector const& reads) {
       return std::accumulate(reads.begin(), reads.end(), std::uint64_t{},
@@ -636,7 +638,8 @@ class seed_finder {
     signal_to_total_length_ratio_ = double(sig_size_) / (sig_size_ + bg_size_);
     std::cout << "# Background length " << bg_size_ << '\n';
     std::cout << "# Signal length " << sig_size_ << '\n';
-    std::cout << "# Signal to total length ratio " << signal_to_total_length_ratio_ << '\n';
+    std::cout << "# Signal to total length ratio "
+              << signal_to_total_length_ratio_ << '\n';
   }
 
 
@@ -645,7 +648,7 @@ class seed_finder {
    * candidates
    */
   void find_seeds() {
-    using std::swap; // For ADL.
+    using std::swap;  // For ADL.
 
     seed_meta_map aa;
     seed_meta_map bb;
@@ -661,7 +664,8 @@ class seed_finder {
         filter_count(gg, 0, sig_bg_c, aa);
       }
       uint8_t gap_s = middle_gap_only ? lookup_k_ / 2 : 1;
-      uint8_t const gap_lim(middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1);
+      uint8_t const gap_lim(middle_gap_only ? lookup_k_ - gap_s
+                                            : lookup_k_ - 1);
       for (; gap_s <= gap_lim; ++gap_s) {
         for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
           uint64_t offset = sig_bg_c.offset(gap_s, gap_l);
@@ -707,6 +711,8 @@ class seed_finder {
 
   const std::vector<seed>& get_seeds() const { return seeds_; }
 
-  double signal_to_total_length_ratio() const { return signal_to_total_length_ratio_; }
+  double signal_to_total_length_ratio() const {
+    return signal_to_total_length_ratio_;
+  }
 };
 }  // namespace sf
