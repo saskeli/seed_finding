@@ -492,7 +492,7 @@ void seed_finder<t_configuration>::filter_count(gapmer_type const gg,
 /**
  * Generate candidates for all k small enough to enable full k-mer counting
  *
- * @param sig_bg_c  Ouput parameter, for storing counts for final k-length
+ * @param sig_bg_c  Output parameter, for storing counts for final k-length
  * mers
  */
 template <typename t_configuration>
