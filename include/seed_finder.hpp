@@ -135,7 +135,7 @@ class seed_finder {
   void filter_count(gapmer_type const gg, uint64_t offset,
                     gapmer_count_type& sig_bg_k, seed_meta_map& mm) const;
 
-  void counted_seeds_and_candidates(gapmer_count_type& sig_bg_c);
+  void count_short_gapmers(gapmer_count_type& sig_bg_c);
 
   void extend_counted(seed_meta_map const& aa, seed_meta_map& bb,
                       partial_count_type const& p_counter) const;
@@ -496,7 +496,7 @@ void seed_finder<t_configuration>::filter_count(gapmer_type const gg,
  * mers
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::counted_seeds_and_candidates(
+void seed_finder<t_configuration>::count_short_gapmers(
     gapmer_count_type& sig_bg_c) {
   using std::swap;  // For ADL.
 
@@ -745,7 +745,7 @@ void seed_finder<t_configuration>::find_seeds() {
   // full k-mer couting as long as memory is sufficient.
   {
     gapmer_count_type sig_bg_c;
-    counted_seeds_and_candidates(sig_bg_c);
+    count_short_gapmers(sig_bg_c);
     uint64_t const v_lim{gapmer_count_type::ONE << (lookup_k_ * 2)};
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
