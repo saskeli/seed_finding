@@ -22,10 +22,26 @@
 
 namespace sf {
 
-template <bool middle_gap_only, uint8_t max_gap, bool enable_smoothing = true,
-          bool filter_mers = true>
+template <bool t_middle_gap_only, uint8_t t_max_gap,
+          bool t_enable_smoothing = true, bool t_filter_mers = true>
+struct seed_finder_configuration {
+  constexpr static inline bool middle_gap_only{t_middle_gap_only};
+  constexpr static inline uint8_t max_gap{t_max_gap};
+  constexpr static inline bool enable_smoothing{t_enable_smoothing};
+  constexpr static inline bool filter_mers{t_filter_mers};
+};
+
+
+template <typename t_configuration>
 class seed_finder {
  public:
+  constexpr static inline bool middle_gap_only{
+      t_configuration::middle_gap_only};
+  constexpr static inline uint8_t max_gap{t_configuration::max_gap};
+  constexpr static inline bool enable_smoothing{
+      t_configuration::enable_smoothing};
+  constexpr static inline bool filter_mers{t_configuration::filter_mers};
+
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
  private:

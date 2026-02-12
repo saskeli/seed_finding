@@ -23,8 +23,8 @@
 #include "include/gapmer.hpp"
 #include "include/gapmer_count.hpp"
 #include "include/reader_adapter.hpp"
-#include "include/seed_finder.hpp"
 #include "include/seed_clusterer.hpp"
+#include "include/seed_finder.hpp"
 #include "include/util.hpp"
 #include "include/version.hpp"
 
@@ -319,9 +319,9 @@ int main(int argc, char const* argv[]) {
     // Figure out how big lookup tables will fit in memory.
     sf::call_with_constant(
         conf.middle_gap_only, [&](auto const middle_gap_only) {
-          typedef sf::gapmer <middle_gap_only, max_gap> gapmer_type;
-          while (sf::gapmer_count<gapmer_type>::lookup_bytes(
-                     conf.lookup_k) < conf.mem_limit &&
+          typedef sf::gapmer<middle_gap_only, max_gap> gapmer_type;
+          while (sf::gapmer_count<gapmer_type>::lookup_bytes(conf.lookup_k) <
+                     conf.mem_limit &&
                  conf.lookup_k <= 10) {
             ++conf.lookup_k;
           }
@@ -367,8 +367,10 @@ int main(int argc, char const* argv[]) {
   // used as non-type template parameters.
   auto const run([&](auto const middle_gap_only,
                      auto const enable_smoothing) -> void {
-    typedef sf::seed_finder<middle_gap_only, max_gap, enable_smoothing, false>
-        seed_finder_type;
+    typedef sf::seed_finder_configuration<middle_gap_only, max_gap,
+                                          enable_smoothing, false>
+        seed_finder_configuration_type;
+    typedef sf::seed_finder<seed_finder_configuration_type> seed_finder_type;
     typedef typename seed_finder_type::gapmer_type gapmer_type;
 
     seed_finder_type finder(signal_reads, background_reads, conf.p,
@@ -384,7 +386,8 @@ int main(int argc, char const* argv[]) {
     auto sc{make_seed_clusterer<middle_gap_only, max_gap>(
         finder.get_seeds(), signal_reads, background_reads, conf.p_ext,
         conf.h1_weight, finder.signal_to_total_length_ratio())};
-    std::cout << "seed\tsignal_count\tbackground_count\tp_value\tpriority" << std::endl;
+    std::cout << "seed\tsignal_count\tbackground_count\tp_value\tpriority"
+              << std::endl;
     for (size_t i = 0; i < conf.print_lim; ++i) {
       if (not sc.has_next()) {
         break;
