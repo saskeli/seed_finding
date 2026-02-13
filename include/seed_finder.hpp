@@ -123,19 +123,19 @@ class seed_finder {
     uint64_t background_count{};
   };
 
-  struct check_enrichment_result {
+  struct enrichment_check_result {
     enrichment_result result{};
     bool did_pass{};
 
     operator bool() const { return did_pass; }
   };
 
-  [[nodiscard]] check_enrichment_result check_enrichment(
+  [[nodiscard]] enrichment_check_result check_enrichment(
       gapmer_type const gg, uint64_t const offset,
       gapmer_count_type const& counts) const;
 
   template <typename t_critical>
-  [[nodiscard]] check_enrichment_result check_enrichment_and_filter(
+  [[nodiscard]] enrichment_check_result check_enrichment_and_filter(
       gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
       t_critical&& critical) const;
 
@@ -347,7 +347,7 @@ bool seed_finder<t_configuration>::should_filter([[maybe_unused]] gapmer_type a,
 template <typename t_configuration>
 [[nodiscard]] auto seed_finder<t_configuration>::check_enrichment(
     gapmer_type const gg, uint64_t const offset,
-    gapmer_count_type const& counts) const -> check_enrichment_result {
+    gapmer_count_type const& counts) const -> enrichment_check_result {
   // Add pseudocounts.
   // Narrows the count value type (double).
   auto const [sc_, bc_] = counts.count(gg, offset);
@@ -387,7 +387,7 @@ template <typename t_configuration>
 template <typename t_critical>
 [[nodiscard]] auto seed_finder<t_configuration>::check_enrichment_and_filter(
     gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
-    t_critical&& critical) const -> check_enrichment_result {
+    t_critical&& critical) const -> enrichment_check_result {
   auto const vv{gg.value()};
   if constexpr (filter_mers) {
     // FIXME: not necessarily atomic. (Proably works on x86-64.)
