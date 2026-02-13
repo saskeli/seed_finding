@@ -3,10 +3,14 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iostream>
+#include <libbio/file_handle.hh>
+#include <libbio/file_handling.hh>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
+#include "libbio/syncstream.hh"
 #include "packed_read.hpp"
 #include "reader_adapter.hpp"
 
@@ -27,6 +31,9 @@
 #include "include/seed_finder.hpp"
 #include "include/util.hpp"
 #include "include/version.hpp"
+
+namespace lb = libbio;
+
 
 #ifndef MAX_GAP
 #define MAX_GAP 5
@@ -95,6 +102,7 @@ struct configuration {
   std::string sig_path{};
   std::string prefix{};
   std::string dot_output{};
+  std::string discarded_gapmer_output_path{};
   bool middle_gap_only{true};
   bool prune{false};
   bool should_output_all_matches{false};
@@ -175,9 +183,6 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     args::Positional<std::string> sig_path_(
         parser, "signal_path", "Signal FASTA file.", retval.sig_path,
         args::Options::Required);
-    sf::args::value_flag dot_path_(
-        parser, "path", "Compute Huddinge graph and output to dot file path.",
-        {"dot"}, retval.dot_output);
     args::Flag gap_any_(parser, "gap_any",
                         "Allow gaps at any location, not just in the middle.",
                         {'a', "gap-at-any-location"});
@@ -235,6 +240,12 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         "Relative impact of H1 neighbourhood enrichment on mer priority. (0 -> "
         "no impact, 1 -> 0.5 h1 neighbourhod 0.5 mer enrichment)",
         {"h1-weight"}, retval.h1_weight);
+    sf::args::value_flag dot_path_(
+        parser, "path", "Compute Huddinge graph and output to dot file path.",
+        {"output-huddinge-graph"}, retval.dot_output);
+    sf::args::value_flag discarded_gapmer_output_path_(
+        parser, "path", "Output discarded gapmers to the given path",
+        {"output-discarded-gapmers"}, retval.discarded_gapmer_output_path);
 
     // Parse and check.
     try {
@@ -365,20 +376,37 @@ int main(int argc, char const* argv[]) {
 
   // Run the algorithm. The parameters are std::bool_constants and hence can be
   // used as non-type template parameters.
-  auto const run([&](auto const middle_gap_only,
-                     auto const enable_smoothing) -> void {
+  auto const run([&](auto const middle_gap_only, auto const enable_smoothing,
+                     auto const enable_discarded_gapmer_output) -> void {
     typedef sf::seed_finder_configuration<middle_gap_only, max_gap,
-                                          enable_smoothing, false>
+                                          enable_smoothing, false,
+                                          enable_discarded_gapmer_output>
         seed_finder_configuration_type;
     typedef sf::seed_finder<seed_finder_configuration_type> seed_finder_type;
     typedef typename seed_finder_type::gapmer_type gapmer_type;
+
+    lb::file_ostream discarded_gapmer_output_stream;
+    // Since macOS Sequoia’s libc++ does not have std::osyncstream, we use
+    // this replacement. It is optimised away if the class is available.
+    lb::ostream_synchronizer discarded_gapmer_output_stream_synchronizer{
+        discarded_gapmer_output_stream};
 
     seed_finder_type finder(signal_reads, background_reads, conf.p,
                             conf.log_fold, conf.max_k, conf.mem_limit,
                             conf.p_ext, conf.lookup_k, conf.prune);
 
+    if constexpr (enable_discarded_gapmer_output) {
+      if (not conf.discarded_gapmer_output_path.empty()) {
+        lb::open_file_for_writing(conf.discarded_gapmer_output_path,
+                                  discarded_gapmer_output_stream,
+                                  lb::writing_open_mode::CREATE);
+        finder.set_discarded_gapmer_reporting_ostream(
+            discarded_gapmer_output_stream);
+      }
+    }
+
     finder.find_seeds();
-    if (!conf.dot_output.empty()) {
+    if (not conf.dot_output.empty()) {
       sf::Dot_Writer::write_dot<gapmer_type>(conf.dot_output,
                                              finder.get_seeds(), conf.max_k);
     }
@@ -401,10 +429,15 @@ int main(int argc, char const* argv[]) {
 
   // Convert runtime parameters to constants.
   sf::call_with_constant(conf.middle_gap_only, [&](auto const middle_gap_only) {
-    sf::call_with_constant(conf.enable_smoothing,
-                           [&](auto const enable_smoothing) {
-                             run(middle_gap_only, enable_smoothing);
-                           });
+    sf::call_with_constant(
+        conf.enable_smoothing, [&](auto const enable_smoothing) {
+          sf::call_with_constant(
+              not conf.discarded_gapmer_output_path.empty(),
+              [&](auto const enable_discarded_gapmer_output) {
+                run(middle_gap_only, enable_smoothing,
+                    enable_discarded_gapmer_output);
+              });
+        });
   });
 
   return 0;

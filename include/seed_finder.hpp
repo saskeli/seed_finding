@@ -7,7 +7,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <format>
 #include <iostream>
+#include <libbio/assert.hh>
+#include <libbio/syncstream.hh>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -21,13 +24,15 @@
 
 namespace sf {
 
-template <bool t_middle_gap_only, uint8_t t_max_gap,
-          bool t_enable_smoothing = true, bool t_filter_mers = true>
+template <bool t_middle_gap_only, uint8_t t_max_gap, bool t_enable_smoothing,
+          bool t_filter_mers, bool t_enable_reporting_discarded_seeds>
 struct seed_finder_configuration {
   constexpr static inline bool middle_gap_only{t_middle_gap_only};
   constexpr static inline uint8_t max_gap{t_max_gap};
   constexpr static inline bool enable_smoothing{t_enable_smoothing};
   constexpr static inline bool filter_mers{t_filter_mers};
+  constexpr static inline bool enable_reporting_discarded_seeds{
+      t_enable_reporting_discarded_seeds};
 };
 
 
@@ -40,6 +45,8 @@ class seed_finder {
   constexpr static inline bool enable_smoothing{
       t_configuration::enable_smoothing};
   constexpr static inline bool filter_mers{t_configuration::filter_mers};
+  constexpr static inline bool enable_reporting_discarded_seeds{
+      t_configuration::enable_reporting_discarded_seeds};
 
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
@@ -82,6 +89,7 @@ class seed_finder {
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
   std::vector<seed> seeds_;
+  std::ostream* discarded_gapmer_reporting_ostream_{};
   uint64_t sig_size_;
   uint64_t bg_size_;
   double p_;
@@ -92,6 +100,11 @@ class seed_finder {
   uint8_t k_lim_;
   uint8_t lookup_k_;
   bool prune_;
+
+  template <typename... t_args>
+  inline void report_discarded(gapmer_type chosen, gapmer_type discarded,
+                               std::format_string<t_args...> fmt,
+                               t_args&&... args) const;
 
   bool validate_extension([[maybe_unused]] gapmer_type a,
                           [[maybe_unused]] gapmer_type b, double a_sig,
@@ -182,12 +195,29 @@ class seed_finder {
 
   void find_seeds();
 
+  void set_discarded_gapmer_reporting_ostream(std::ostream& stream) {
+    discarded_gapmer_reporting_ostream_ = &stream;
+  }
+
   const std::vector<seed>& get_seeds() const { return seeds_; }
 
   double signal_to_total_length_ratio() const {
     return signal_to_total_length_ratio_;
   }
 };
+
+
+template <typename t_configuration>
+template <typename... t_args>
+inline void seed_finder<t_configuration>::report_discarded(
+    gapmer_type chosen, gapmer_type discarded,
+    std::format_string<t_args...> fmt, t_args&&... args) const {
+  if constexpr (enable_reporting_discarded_seeds) {
+    libbio_assert(discarded_gapmer_reporting_ostream_);
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
+    std::print(stream, fmt, args...);
+  }
+}
 
 
 /**
@@ -211,43 +241,58 @@ bool seed_finder<t_configuration>::validate_extension(
     double b_r) const {
   if (a_bg <= 1.00001 && b_bg <= 1.00001) {
     if (a_sig > b_sig * 4) {
+      report_discarded(
+          a, b,
+          "Not extended since neither a nor b in background and number of a in "
+          "signal is at least quadruple w.r.t. b; "
+          "a_sig: {}, b_sig: {}",
+          a_sig, b_sig);
       return false;
     }
     double p_extend = gsl_cdf_binomial_Q(b_sig, 0.25, a_sig);
     if (p_extend < p_ext_ && b_r < p_) {
-#ifdef DEBUG
-      std::cerr << "        " << a.to_string() << " discarded by "
-                << b.to_string() << "\n            (" << a_sig << ", " << a_bg
-                << ") <-> (" << b_sig << ", " << b_bg
-                << ")\n            with p_extend " << p_extend << std::endl;
-#endif
+      report_discarded(b, a,
+                       "Extended since neither a nor b in background and "
+                       "binomial and AC test "
+                       "p-value limits reached; p_extend: {} "
+                       "b_r: {} a_sig: {} a_bg: {} b_sig: {} b_bg: {}",
+                       p_extend, b_r, a_sig, a_bg, b_sig, b_bg);
       return true;
     }
-#ifdef DEBUG
-    std::cerr << "        " << a.to_string() << " discards " << b.to_string()
-              << "\n            (" << a_sig << ", " << a_bg << ") <-> ("
-              << b_sig << ", " << b_bg << ")\n            with p_extend "
-              << p_extend << std::endl;
-#endif
+    report_discarded(a, b,
+                     "Not extended since neither a nor b in background and "
+                     "either binomial or AC "
+                     "test p-value limit not reached; p_extend: {} "
+                     "b_r: {} a_sig: {} a_bg: {} b_sig: {} b_bg: {}",
+                     p_extend, b_r, a_sig, a_bg, b_sig, b_bg);
     return false;
   }
+
+  // Either a or b occurs in the background set.
   if constexpr (filter_mers) {
-#ifdef DEBUG
-    if (b_r < a_r) {
-      std::cerr << "        " << a.to_string() << " discarded by "
-                << b.to_string() << "\n            (" << a_sig << ", " << a_bg
-                << ") <-> (" << b_sig << ", " << b_bg
-                << ")\n            with p " << b_r << std::endl;
-    } else {
-      std::cerr << "        " << a.to_string() << " discards " << b.to_string()
-                << "\n            (" << a_sig << ", " << a_bg << ") <-> ("
-                << b_sig << ", " << b_bg << ")\n            with p " << b_r
-                << std::endl;
+    if (b_r <= a_r) {
+      report_discarded(b, a,
+                       "Extended due to filtering since AC test p-value lte. "
+                       "for b; a_r: {} b_r: {}",
+                       a_r, b_r);
+      return true;
     }
-#endif
+    report_discarded(a, b,
+                     "Not extended due to filtering since AC test p-value gt. "
+                     "for b; a_r: {} b_r: {}",
+                     a_r, b_r);
+    return false;
     return b_r <= a_r;
   } else {
-    return b_r <= p_;
+    if (b_r <= p_) {
+      report_discarded(
+          b, a, "Extended since AC test p-value limit reached; b_r: {}", b_r);
+      return true;
+    }
+    report_discarded(
+        a, b, "Not extended since AC test p-value limit not reached; b_r: {}",
+        b_r);
+    return false;
   }
 }
 
@@ -306,7 +351,6 @@ template <typename t_critical>
     gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
     t_critical&& critical) const -> check_enrichment_result {
   auto const vv{gg.value()};
-
   if constexpr (filter_mers) {
     // FIXME: not necessarily atomic. (Proably works on x86-64.)
     if (counts.is_discarded_(vv, offset)) {
@@ -437,6 +481,7 @@ void seed_finder<t_configuration>::check_count(gapmer_type const gg,
 
   auto const& [rr, sc, bc] = enrichment_res;
   if constexpr (filter_mers) {
+    // FIXME: Add calls to report_discarded to this branch?
     filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
                                          critical_a_bv{});
     filter_huddinge_neighbourhood<true>(gg, offset, enrichment_res, sig_bg_k1,
