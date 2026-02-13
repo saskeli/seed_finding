@@ -390,8 +390,7 @@ template <typename t_critical>
     t_critical&& critical) const -> enrichment_check_result {
   auto const vv{gg.value()};
   if constexpr (filter_mers) {
-    // FIXME: not necessarily atomic. (Proably works on x86-64.)
-    if (counts.is_discarded_(vv, offset)) {
+    if (critical([&] { return counts.is_discarded_(vv, offset); })) {
       return {{0, 0, 0}, false};
     }
   }

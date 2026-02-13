@@ -1,16 +1,25 @@
 #pragma once
 
+#include <gsl/gsl_cdf.h>
+#include <gsl/gsl_sf_gamma.h>
+#include <gsl/gsl_sf_result.h>
+
 #include <array>
+#include <concepts>
 #include <cstdint>
 #include <string>
 #include <type_traits>
 #include <unordered_set>
 
-#include <gsl/gsl_cdf.h>
-#include <gsl/gsl_sf_gamma.h>
-#include <gsl/gsl_sf_result.h>
-
 namespace sf {
+
+template <typename t_fn>
+concept VoidReturning = std::same_as<std::invoke_result_t<t_fn>, void>;
+
+template <typename t_fn>
+concept NonVoidReturning = !VoidReturning<t_fn>;
+
+
 const static constexpr std::array<char, 4> v_to_nuc = {'A', 'C', 'G', 'T'};
 const static constexpr std::array<uint8_t, 256> nuc_to_v = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -175,26 +184,44 @@ void call_with_constant(bool val, t_cb&& cb) {
 
 // OpenMP helpers.
 struct critical_a_bv {
-  template <typename t_cb>
+  template <VoidReturning t_cb>
   void operator()(t_cb&& cb) {
 #pragma omp critical(a_bv)
     cb();
   }
+
+  template <NonVoidReturning t_cb>
+  decltype(auto) operator()(t_cb&& cb) {
+#pragma omp critical(a_bv)
+    return cb();
+  }
 };
 
 struct critical_d_bv {
-  template <typename t_cb>
+  template <VoidReturning t_cb>
   void operator()(t_cb&& cb) {
 #pragma omp critical(d_bv)
     cb();
   }
+
+  template <NonVoidReturning t_cb>
+  decltype(auto) operator()(t_cb&& cb) {
+#pragma omp critical(d_bv)
+    return cb();
+  }
 };
 
 struct critical_o_bv {
-  template <typename t_cb>
+  template <VoidReturning t_cb>
   void operator()(t_cb&& cb) {
 #pragma omp critical(o_bv)
     cb();
+  }
+
+  template <NonVoidReturning t_cb>
+  decltype(auto) operator()(t_cb&& cb) {
+#pragma omp critical(o_bv)
+    return cb();
   }
 };
 
