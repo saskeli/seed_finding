@@ -118,10 +118,12 @@ class seed_finder {
                      double b_sig, double b_bg, double a_r, double& b_r) const;
 
 
+  // FIXME: Consider using the same value type (e.g. double) for all counts.
+  template <typename t_value>
   struct enrichment_result {
     double ac_test_result{};
-    uint64_t signal_count{};
-    uint64_t background_count{};
+    t_value signal_count{};
+    t_value background_count{};
   };
 
   enum class enrichment_check_status {
@@ -132,27 +134,29 @@ class seed_finder {
     not_canonical
   };
 
+  template <typename t_value>
   struct enrichment_check_result {
-    enrichment_result result{};
+    enrichment_result<t_value> result{};
     enrichment_check_status status{enrichment_check_status::success};
 
     operator bool() const { return status == enrichment_check_status::success; }
   };
 
   template <typename t_value>
-  [[nodiscard]] enrichment_check_result check_enrichment(
+  [[nodiscard]] enrichment_check_result<t_value> check_enrichment(
       count_pair<t_value> count) const;
 
   template <typename t_critical>
-  [[nodiscard]] enrichment_check_result check_enrichment_and_filter(
-      gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
-      t_critical&& critical) const;
+  [[nodiscard]] enrichment_check_result<gapmer_count_value_type>
+  check_enrichment_and_filter(gapmer_type const gg, uint64_t const offset,
+                              gapmer_count_type& counts,
+                              t_critical&& critical) const;
 
   template <bool t_should_extend, typename t_critical,
             typename t_prev_critical = std::nullptr_t>
   void filter_huddinge_neighbourhood(
       gapmer_type const gg, uint64_t const offset,
-      enrichment_result const& enrichment_res, gapmer_count_type& counts,
+      enrichment_result <gapmer_count_value_type> const& enrichment_res, gapmer_count_type& counts,
       t_critical&& critical, gapmer_count_type* const prev_counts = nullptr,
       t_prev_critical&& prev_critical = nullptr) const;
 
@@ -356,7 +360,7 @@ bool seed_finder<t_configuration>::should_filter([[maybe_unused]] gapmer_type a,
 template <typename t_configuration>
 template <typename t_value>
 [[nodiscard]] auto seed_finder<t_configuration>::check_enrichment(
-    count_pair<t_value> count) const -> enrichment_check_result {
+    count_pair<t_value> count) const -> enrichment_check_result<t_value> {
   // Add pseudocounts.
   count.add_pseudocounts();
 
@@ -396,7 +400,8 @@ template <typename t_configuration>
 template <typename t_critical>
 [[nodiscard]] auto seed_finder<t_configuration>::check_enrichment_and_filter(
     gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
-    t_critical&& critical) const -> enrichment_check_result {
+    t_critical&& critical) const
+    -> enrichment_check_result<gapmer_count_value_type> {
   auto const vv{gg.value()};
   if constexpr (filter_mers) {
     if (critical([&] { return counts.is_discarded_(vv, offset); })) {
@@ -436,7 +441,7 @@ template <typename t_configuration>
 template <bool t_should_extend, typename t_critical, typename t_prev_critical>
 void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
     gapmer_type const gg, uint64_t const offset,
-    enrichment_result const& enrichment_res, gapmer_count_type& counts,
+    enrichment_result <gapmer_count_value_type> const& enrichment_res, gapmer_count_type& counts,
     t_critical&& critical, gapmer_count_type* const prev_counts,
     t_prev_critical&& prev_critical) const {
   constexpr bool skip_same_length{t_should_extend};
@@ -510,11 +515,11 @@ void seed_finder<t_configuration>::check_count(gapmer_type const gg,
 
     if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
-      seeds_.push_back({gg, rr, sc, bc});
+      seeds_.emplace_back(gg, rr, uint64_t(sc), uint64_t(bc));
     }
   } else {
 #pragma omp critical
-    seeds_.push_back({gg, rr, sc, bc});
+    seeds_.emplace_back(gg, rr, uint64_t(sc), uint64_t(bc));
   }
 }
 
@@ -545,11 +550,11 @@ void seed_finder<t_configuration>::filter_count(gapmer_type const gg,
                                          critical_d_bv{});
     if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
-      mm[gg] = {rr, sc, bc};
+      mm[gg] = {rr, uint64_t(sc), uint64_t(bc)};
     }
   } else {
 #pragma omp critical
-    mm[gg] = {rr, sc, bc};
+    mm[gg] = {rr, uint64_t(sc), uint64_t(bc)};
   }
 }
 
