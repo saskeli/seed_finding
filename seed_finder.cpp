@@ -5,7 +5,6 @@
 #include <iostream>
 #include <libbio/file_handle.hh>
 #include <libbio/file_handling.hh>
-#include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
