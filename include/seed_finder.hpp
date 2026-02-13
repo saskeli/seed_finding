@@ -16,6 +16,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "count_base.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
 #include "packed_read.hpp"
@@ -138,9 +139,9 @@ class seed_finder {
     operator bool() const { return status == enrichment_check_status::success; }
   };
 
+  template <typename t_value>
   [[nodiscard]] enrichment_check_result check_enrichment(
-      gapmer_type const gg, uint64_t const offset,
-      gapmer_count_type const& counts) const;
+      count_pair<t_value> count) const;
 
   template <typename t_critical>
   [[nodiscard]] enrichment_check_result check_enrichment_and_filter(
@@ -353,14 +354,11 @@ bool seed_finder<t_configuration>::should_filter([[maybe_unused]] gapmer_type a,
 
 
 template <typename t_configuration>
+template <typename t_value>
 [[nodiscard]] auto seed_finder<t_configuration>::check_enrichment(
-    gapmer_type const gg, uint64_t const offset,
-    gapmer_count_type const& counts) const -> enrichment_check_result {
+    count_pair<t_value> count) const -> enrichment_check_result {
   // Add pseudocounts.
-  // Narrows the count value type (double).
-  auto const [sc_, bc_] = counts.count(gg, offset);
-  uint64_t const sc(sc_ + 1);
-  uint64_t const bc(bc_ + 1);
+  count.add_pseudocounts();
 
   // Check the enrichment w.r.t. background by requiring that
   // the logarithmic fold change is greater than log_fold passed
@@ -368,6 +366,7 @@ template <typename t_configuration>
   // definitions of aa and bb). The formula we use is
   // log_2((sig_count / sig_size) / (bg_count / bg_size)) ≤ log_fold
   // but with the logarithm and divisions removed.
+  auto const& [sc, bc] = count;
   if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
     return {{0, sc, bc}, enrichment_check_status::fold_change_test_failed};
   }
@@ -412,7 +411,7 @@ template <typename t_critical>
     return {{0, 0, 0}, enrichment_check_status::not_canonical};
   }
 
-  auto const retval{check_enrichment(gg, offset, counts)};
+  auto const retval{check_enrichment(counts.count(gg, offset))};
   if (not retval) {
     if constexpr (filter_mers) {
       critical([&] { counts.mark_discarded_(vv, offset); });
@@ -535,10 +534,11 @@ void seed_finder<t_configuration>::filter_count(gapmer_type const gg,
                                                 uint64_t offset,
                                                 gapmer_count_type& sig_bg_k,
                                                 seed_meta_map& mm) const {
-  auto const &res{check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
+  auto const& res{
+      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
   if (not res) return;
 
-  auto const &enrichment_res{res.result};
+  auto const& enrichment_res{res.result};
   auto const& [rr, sc, bc] = enrichment_res;
   if constexpr (filter_mers) {
     filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
@@ -640,16 +640,10 @@ void seed_finder<t_configuration>::extend_counted(
                 return p_counter.count(oo);
             }());
 
-            // Potentially narrowing conversion.
-            double const sc(counts.signal_count + 1);
-            double const bc(counts.background_count + 1);
+            auto const enrichment_res{check_enrichment(counts)};
+            if (not enrichment_res) return;
 
-            if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
-              return;
-            }
-
-            double const rr{error_suppressed_beta_inc(
-                sc, bc, signal_to_total_length_ratio_)};
+            auto const& [rr, sc, bc] = enrichment_res.result;
             if (validate_extension(p.first, oo, p.second.sig_count,
                                    p.second.bg_count, sc, bc, p.second.p, rr)) {
               bb[oo] = {rr, uint64_t(sc), uint64_t(bc)};
