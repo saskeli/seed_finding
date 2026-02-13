@@ -620,7 +620,7 @@ void seed_finder<t_configuration>::count_short_gapmers(
 template <typename t_configuration>
 void seed_finder<t_configuration>::extend_counted(
     seed_meta_map const& aa, seed_meta_map& bb,
-    partial_count_type const& p_counter) const {
+    partial_count_type const& counts) const {
   for (auto p : aa) {
 #ifdef DEBUG
     std::cerr << "        " << p.first.to_string() << ": " << p.second.sig_count
@@ -633,14 +633,14 @@ void seed_finder<t_configuration>::extend_counted(
           }
 
           if (not bb.contains(oo)) {
-            auto const counts([&] {
+            auto const count([&] {
               if constexpr (enable_smoothing)
-                return p_counter.smooth_count(oo);
+                return counts.smooth_count(oo);
               else
-                return p_counter.count(oo);
+                return counts.count(oo);
             }());
 
-            auto const enrichment_res{check_enrichment(counts)};
+            auto const enrichment_res{check_enrichment(count)};
             if (not enrichment_res) return;
 
             auto const& [rr, sc, bc] = enrichment_res.result;
