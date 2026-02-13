@@ -126,10 +126,16 @@ class seed_finder {
   struct check_enrichment_result {
     enrichment_result result{};
     bool did_pass{};
+
+    operator bool() const { return did_pass; }
   };
 
-  template <typename t_critical>
   [[nodiscard]] check_enrichment_result check_enrichment(
+      gapmer_type const gg, uint64_t const offset,
+      gapmer_count_type const& counts) const;
+
+  template <typename t_critical>
+  [[nodiscard]] check_enrichment_result check_enrichment_and_filter(
       gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
       t_critical&& critical) const;
 
@@ -338,6 +344,38 @@ bool seed_finder<t_configuration>::should_filter([[maybe_unused]] gapmer_type a,
 }
 
 
+template <typename t_configuration>
+[[nodiscard]] auto seed_finder<t_configuration>::check_enrichment(
+    gapmer_type const gg, uint64_t const offset,
+    gapmer_count_type const& counts) const -> check_enrichment_result {
+  // Add pseudocounts.
+  // Narrows the count value type (double).
+  auto const [sc_, bc_] = counts.count(gg, offset);
+  uint64_t const sc(sc_ + 1);
+  uint64_t const bc(bc_ + 1);
+
+  // Check the enrichment w.r.t. background by requiring that
+  // the logarithmic fold change is greater than log_fold passed
+  // to the constructor, 0.5 by default (with the added pseudocount, see the
+  // definitions of aa and bb). The formula we use is
+  // log_2((sig_count / sig_size) / (bg_count / bg_size)) ≤ log_fold
+  // but with the logarithm and divisions removed.
+  if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
+    return {{0, sc, bc}, false};
+  }
+
+  // Check the enrichment w.r.t. background by using the Audic-Claverie test.
+  // (Using the incomplete regularized beta function is explained in
+  // the supplement of Jean-Michel Claverie, Thi Ngan Ta, ACDtool: a
+  // web-server for the generic analysis of large data sets of counts,
+  // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
+  // https://doi.org/10.1093/bioinformatics/bty640)
+  double const rr{
+      error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
+  return {{rr, sc, bc}, rr <= p_};
+}
+
+
 /**
  * Check the enrichment of gg in the given signal and background.
  *
@@ -347,7 +385,7 @@ bool seed_finder<t_configuration>::should_filter([[maybe_unused]] gapmer_type a,
  */
 template <typename t_configuration>
 template <typename t_critical>
-[[nodiscard]] auto seed_finder<t_configuration>::check_enrichment(
+[[nodiscard]] auto seed_finder<t_configuration>::check_enrichment_and_filter(
     gapmer_type const gg, uint64_t const offset, gapmer_count_type& counts,
     t_critical&& critical) const -> check_enrichment_result {
   auto const vv{gg.value()};
@@ -365,41 +403,14 @@ template <typename t_critical>
     return {{0, 0, 0}, false};
   }
 
-  // Add pseudocounts.
-  // Narrows the count value type (double).
-  auto const [sc_, bc_] = counts.count(gg, offset);
-  uint64_t const sc(sc_ + 1);
-  uint64_t const bc(bc_ + 1);
-
-  // Check the enrichment w.r.t. background by requiring that
-  // the logarithmic fold change is greater than log_fold passed
-  // to the constructor, 0.5 by default (with the added pseudocount, see the
-  // definitions of aa and bb). The formula we use is
-  // log_2((sig_count / sig_size) / (bg_count / bg_size)) ≤ log_fold
-  // but with the logarithm and divisions removed.
-  if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
+  auto const retval{check_enrichment(gg, offset, counts)};
+  if (not retval) {
     if constexpr (filter_mers) {
       critical([&] { counts.mark_discarded_(vv, offset); });
     }
-    return {{0, sc, bc}, false};
   }
 
-  // Check the enrichment w.r.t. background by using the Audic-Claverie test.
-  // (Using the incomplete regularized beta function is explained in
-  // the supplement of Jean-Michel Claverie, Thi Ngan Ta, ACDtool: a
-  // web-server for the generic analysis of large data sets of counts,
-  // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
-  // https://doi.org/10.1093/bioinformatics/bty640)
-  double const rr{
-      error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
-  if (rr > p_) {
-    if constexpr (filter_mers) {
-      critical([&] { counts.mark_discarded_(vv, offset); });
-    }
-    return {{rr, sc, bc}, false};
-  }
-
-  return {{rr, sc, bc}, true};
+  return retval;
 }
 
 
@@ -476,7 +487,7 @@ void seed_finder<t_configuration>::check_count(gapmer_type const gg,
                                                gapmer_count_type& sig_bg_k,
                                                gapmer_count_type& sig_bg_k1) {
   auto const& [enrichment_res, should_continue] =
-      check_enrichment(gg, offset, sig_bg_k, critical_a_bv{});
+      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_a_bv{});
   if (not should_continue) return;
 
   auto const& [rr, sc, bc] = enrichment_res;
@@ -515,7 +526,7 @@ void seed_finder<t_configuration>::filter_count(gapmer_type const gg,
                                                 gapmer_count_type& sig_bg_k,
                                                 seed_meta_map& mm) const {
   auto const& [enrichment_res, should_continue] =
-      check_enrichment(gg, offset, sig_bg_k, critical_d_bv{});
+      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{});
   if (not should_continue) return;
 
   auto const& [rr, sc, bc] = enrichment_res;
