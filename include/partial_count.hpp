@@ -24,16 +24,8 @@ class partial_count final : public t_base {
   using base_type::middle_gap_only;
 
   typedef uint64_t value_type;
-
-  struct count_pair {
-    value_type signal_count{};
-    value_type background_count{};
-  };
-
-  struct smooth_count_pair {
-    double signal_count{};
-    double background_count{};
-  };
+  typedef sf::count_pair<value_type> count_pair;
+  typedef sf::count_pair<double> smooth_count_pair;
 
  private:
   typedef lossy_hash_map<gapmer_type, count_pair, typename gapmer_type::hash>

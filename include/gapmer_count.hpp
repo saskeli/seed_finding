@@ -23,17 +23,13 @@ class gapmer_count final : public t_base {
   typedef t_base base_type;
   typedef double value_type;
   const static constexpr uint64_t ONE = 1;
+  typedef sf::count_pair<value_type> count_pair;
 
   typedef base_type::gapmer_type gapmer_type;
   typedef base_type::counting_context counting_context;
   using base_type::count_mers;
   using base_type::max_gap;
   using base_type::middle_gap_only;
-
-  struct count_pair {
-    value_type signal_count{};
-    value_type background_count{};
-  };
 
   static constexpr uint64_t lookup_elems(uint8_t k) {
     uint64_t ret = ONE << (k * 2);

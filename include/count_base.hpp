@@ -9,6 +9,20 @@
 
 namespace sf {
 
+template <typename t_value>
+struct count_pair {
+  typedef t_value value_type;
+
+  value_type signal_count{};
+  value_type background_count{};
+
+  void add_pseudocounts() {
+    ++signal_count;
+    ++background_count;
+  }
+};
+
+
 template <typename t_gapmer>
 struct count_base {
   typedef t_gapmer gapmer_type;
