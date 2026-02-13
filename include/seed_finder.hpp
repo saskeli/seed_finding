@@ -123,11 +123,19 @@ class seed_finder {
     uint64_t background_count{};
   };
 
+  enum class enrichment_check_status {
+    success,
+    fold_change_test_failed,
+    ac_test_failed,
+    discarded_earlier,
+    not_canonical
+  };
+
   struct enrichment_check_result {
     enrichment_result result{};
-    bool did_pass{};
+    enrichment_check_status status{enrichment_check_status::success};
 
-    operator bool() const { return did_pass; }
+    operator bool() const { return status == enrichment_check_status::success; }
   };
 
   [[nodiscard]] enrichment_check_result check_enrichment(
@@ -361,7 +369,7 @@ template <typename t_configuration>
   // log_2((sig_count / sig_size) / (bg_count / bg_size)) ≤ log_fold
   // but with the logarithm and divisions removed.
   if (sc * bg_size_ <= fold_lim_ * bc * sig_size_) {
-    return {{0, sc, bc}, false};
+    return {{0, sc, bc}, enrichment_check_status::fold_change_test_failed};
   }
 
   // Check the enrichment w.r.t. background by using the Audic-Claverie test.
@@ -372,7 +380,9 @@ template <typename t_configuration>
   // https://doi.org/10.1093/bioinformatics/bty640)
   double const rr{
       error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
-  return {{rr, sc, bc}, rr <= p_};
+  return {{rr, sc, bc},
+          rr <= p_ ? enrichment_check_status::success
+                   : enrichment_check_status::ac_test_failed};
 }
 
 
@@ -391,7 +401,7 @@ template <typename t_critical>
   auto const vv{gg.value()};
   if constexpr (filter_mers) {
     if (critical([&] { return counts.is_discarded_(vv, offset); })) {
-      return {{0, 0, 0}, false};
+      return {{0, 0, 0}, enrichment_check_status::discarded_earlier};
     }
   }
 
@@ -399,7 +409,7 @@ template <typename t_critical>
     if constexpr (filter_mers) {
       critical([&] { counts.mark_discarded_(vv, offset); });
     }
-    return {{0, 0, 0}, false};
+    return {{0, 0, 0}, enrichment_check_status::not_canonical};
   }
 
   auto const retval{check_enrichment(gg, offset, counts)};
@@ -485,10 +495,11 @@ void seed_finder<t_configuration>::check_count(gapmer_type const gg,
                                                uint64_t offset,
                                                gapmer_count_type& sig_bg_k,
                                                gapmer_count_type& sig_bg_k1) {
-  auto const& [enrichment_res, should_continue] =
-      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_a_bv{});
-  if (not should_continue) return;
+  auto const res{
+      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_a_bv{})};
+  if (not res) return;
 
+  auto const& enrichment_res{res.result};
   auto const& [rr, sc, bc] = enrichment_res;
   if constexpr (filter_mers) {
     // FIXME: Add calls to report_discarded to this branch?
@@ -524,10 +535,10 @@ void seed_finder<t_configuration>::filter_count(gapmer_type const gg,
                                                 uint64_t offset,
                                                 gapmer_count_type& sig_bg_k,
                                                 seed_meta_map& mm) const {
-  auto const& [enrichment_res, should_continue] =
-      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{});
-  if (not should_continue) return;
+  auto const &res{check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
+  if (not res) return;
 
+  auto const &enrichment_res{res.result};
   auto const& [rr, sc, bc] = enrichment_res;
   if constexpr (filter_mers) {
     filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
