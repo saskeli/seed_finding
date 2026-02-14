@@ -324,7 +324,6 @@ bool seed_finder<t_configuration>::validate_extension(
                      "for b; a_r: {} b_r: {}",
                      aa_er.ac_test_result, bb_er.ac_test_result);
     return false;
-    return bb_er.ac_test_result <= aa_er.ac_test_result;
   } else {
     if (bb_er.ac_test_result <= p_) {
       report_discarded(bb, aa,
