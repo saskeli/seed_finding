@@ -52,6 +52,22 @@ class seed_finder {
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
  private:
+  // FIXME: Consider using the same value type (e.g. double) for all counts.
+  template <typename t_value>
+  struct enrichment_result {
+    double ac_test_result{};
+    t_value signal_count{};
+    t_value background_count{};
+
+    // FIXME: remove?
+    template <typename t_value_>
+    enrichment_result<t_value_> to_enrichment_result() const {
+      return enrichment_result<t_value_>(ac_test_result, t_value_(signal_count),
+                                         t_value_(background_count));
+    }
+  };
+
+  // FIXME: remove.
   struct seed_meta {
     double p{};
     uint64_t sig_count{};
@@ -71,6 +87,13 @@ class seed_finder {
     static seed from_seed_meta(gapmer_type g_, seed_meta mm) {
       return {g_, mm.p, mm.sig_count, mm.bg_count};
     }
+
+    template <typename t_value>
+    static seed from_enrichment_result(gapmer_type g_,
+                                       enrichment_result<t_value> er) {
+      return {g_, er.ac_test_result, uint64_t(er.signal_count),
+              uint64_t(er.background_count)};
+    }
   };
 
  private:
@@ -85,7 +108,7 @@ class seed_finder {
   using gapmer_map =
       std::unordered_map<gapmer_type, t_value, typename gapmer_type::hash>;
 
-  typedef gapmer_map<seed_meta> seed_meta_map;
+  typedef gapmer_map<enrichment_result<double>> enrichment_result_map;
 
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
@@ -107,24 +130,15 @@ class seed_finder {
                                std::format_string<t_args...> fmt,
                                t_args&&... args) const;
 
-  bool validate_extension([[maybe_unused]] gapmer_type a,
-                          [[maybe_unused]] gapmer_type b, double a_sig,
-                          double a_bg, double b_sig, double b_bg, double a_r,
-                          double b_r) const;
-
-  template <bool calc_b_r>
-  bool should_filter([[maybe_unused]] gapmer_type a,
-                     [[maybe_unused]] gapmer_type b, double a_sig, double a_bg,
-                     double b_sig, double b_bg, double a_r, double& b_r) const;
-
-
-  // FIXME: Consider using the same value type (e.g. double) for all counts.
   template <typename t_value>
-  struct enrichment_result {
-    double ac_test_result{};
-    t_value signal_count{};
-    t_value background_count{};
-  };
+  bool validate_extension(gapmer_type aa, gapmer_type bb,
+                          enrichment_result<t_value> aa_er,
+                          enrichment_result<t_value> bb_er) const;
+
+  template <bool calculate_ac_test_for_bb, typename t_value>
+  bool should_filter(gapmer_type aa, gapmer_type bb,
+                     enrichment_result<t_value> aa_er,
+                     enrichment_result<t_value>& bb_er) const;
 
   enum class enrichment_check_status {
     success,
@@ -156,25 +170,28 @@ class seed_finder {
             typename t_prev_critical = std::nullptr_t>
   void filter_huddinge_neighbourhood(
       gapmer_type const gg, uint64_t const offset,
-      enrichment_result <gapmer_count_value_type> const& enrichment_res, gapmer_count_type& counts,
-      t_critical&& critical, gapmer_count_type* const prev_counts = nullptr,
+      enrichment_result<gapmer_count_value_type> const& enrichment_res,
+      gapmer_count_type& counts, t_critical&& critical,
+      gapmer_count_type* const prev_counts = nullptr,
       t_prev_critical&& prev_critical = nullptr) const;
 
   void check_count(gapmer_type const gg, uint64_t offset,
                    gapmer_count_type& sig_bg_k, gapmer_count_type& sig_bg_k1);
 
   void filter_count(gapmer_type const gg, uint64_t offset,
-                    gapmer_count_type& sig_bg_k, seed_meta_map& mm) const;
+                    gapmer_count_type& sig_bg_k,
+                    enrichment_result_map& mm) const;
 
   void count_short_gapmers(gapmer_count_type& sig_bg_c);
 
-  void extend_counted(seed_meta_map const& aa, seed_meta_map& bb,
+  void extend_counted(enrichment_result_map const& aa,
+                      enrichment_result_map& bb,
                       partial_count_type const& p_counter) const;
 
-  void extend(seed_meta_map& aa, seed_meta_map& bb,
+  void extend(enrichment_result_map& aa, enrichment_result_map& bb,
               partial_count_type& p_counter, uint16_t k, bool prune) const;
 
-  void filter(seed_meta_map& mm) const;
+  void filter(enrichment_result_map& mm) const;
 
  public:
   seed_finder(packed_read_vector const& signal_reads,
@@ -254,63 +271,69 @@ inline void seed_finder<t_configuration>::report_discarded(
  * @return True, if extension from a to b is valid
  */
 template <typename t_configuration>
+template <typename t_value>
 bool seed_finder<t_configuration>::validate_extension(
-    [[maybe_unused]] gapmer_type a, [[maybe_unused]] gapmer_type b,
-    double a_sig, double a_bg, double b_sig, double b_bg, double a_r,
-    double b_r) const {
-  if (a_bg <= 1.00001 && b_bg <= 1.00001) {
-    if (a_sig > b_sig * 4) {
+    gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
+    enrichment_result<t_value> bb_er) const {
+  if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
+    if (aa_er.signal_count > bb_er.signal_count * 4) {
       report_discarded(
-          a, b,
+          aa, bb,
           "Not extended since neither a nor b in background and number of a in "
           "signal is at least quadruple w.r.t. b; "
           "a_sig: {}, b_sig: {}",
-          a_sig, b_sig);
+          aa_er.signal_count, bb_er.signal_count);
       return false;
     }
-    double p_extend = gsl_cdf_binomial_Q(b_sig, 0.25, a_sig);
-    if (p_extend < p_ext_ && b_r < p_) {
-      report_discarded(b, a,
+    double p_extend =
+        gsl_cdf_binomial_Q(bb_er.signal_count, 0.25, aa_er.signal_count);
+    if (p_extend < p_ext_ && bb_er.ac_test_result < p_) {
+      report_discarded(bb, aa,
                        "Extended since neither a nor b in background and "
                        "binomial and AC test "
                        "p-value limits reached; p_extend: {} "
                        "b_r: {} a_sig: {} a_bg: {} b_sig: {} b_bg: {}",
-                       p_extend, b_r, a_sig, a_bg, b_sig, b_bg);
+                       p_extend, bb_er.ac_test_result, aa_er.signal_count,
+                       aa_er.background_count, bb_er.signal_count,
+                       bb_er.background_count);
       return true;
     }
-    report_discarded(a, b,
+    report_discarded(aa, bb,
                      "Not extended since neither a nor b in background and "
                      "either binomial or AC "
                      "test p-value limit not reached; p_extend: {} "
                      "b_r: {} a_sig: {} a_bg: {} b_sig: {} b_bg: {}",
-                     p_extend, b_r, a_sig, a_bg, b_sig, b_bg);
+                     p_extend, bb_er.ac_test_result, aa_er.signal_count,
+                     aa_er.background_count, bb_er.signal_count,
+                     bb_er.background_count);
     return false;
   }
 
   // Either a or b occurs in the background set.
   if constexpr (filter_mers) {
-    if (b_r <= a_r) {
-      report_discarded(b, a,
+    if (bb_er.ac_test_result <= aa_er.ac_test_result) {
+      report_discarded(bb, aa,
                        "Extended due to filtering since AC test p-value lte. "
                        "for b; a_r: {} b_r: {}",
-                       a_r, b_r);
+                       aa_er.ac_test_result, bb_er.ac_test_result);
       return true;
     }
-    report_discarded(a, b,
+    report_discarded(aa, bb,
                      "Not extended due to filtering since AC test p-value gt. "
                      "for b; a_r: {} b_r: {}",
-                     a_r, b_r);
+                     aa_er.ac_test_result, bb_er.ac_test_result);
     return false;
-    return b_r <= a_r;
+    return bb_er.ac_test_result <= aa_er.ac_test_result;
   } else {
-    if (b_r <= p_) {
-      report_discarded(
-          b, a, "Extended since AC test p-value limit reached; b_r: {}", b_r);
+    if (bb_er.ac_test_result <= p_) {
+      report_discarded(bb, aa,
+                       "Extended since AC test p-value limit reached; b_r: {}",
+                       bb_er.ac_test_result);
       return true;
     }
     report_discarded(
-        a, b, "Not extended since AC test p-value limit not reached; b_r: {}",
-        b_r);
+        aa, bb, "Not extended since AC test p-value limit not reached; b_r: {}",
+        bb_er.ac_test_result);
     return false;
   }
 }
@@ -319,41 +342,37 @@ bool seed_finder<t_configuration>::validate_extension(
 /**
  * Check if a should be discarded based on the neigbour b.
  *
- * @tparam calc_b_r  Indicates whether b_r needs to be computed by this
- * function or has been precalculated.
+ * @tparam t_calculate_ac_test_for_bb  Indicates whether bb_er.ac_test_result
+ * needs to be computed by this function or has been precalculated.
  *
- * @param a          Mer to check
- * @param b          Neighbour of a
- * @param a_sig      Number of occurrences of a in signal set
- * @param a_bg       Number of occurrences of a in backgroud set
- * @param b_sig      Number of occurrences of a in signal set
- * @param b_bg       Number of occurrences of b in backgroud set
- * @param a_r        p-value for a from incomplete beta function
- * @param b_r        p-value for b from incomplete beta function, if calc_b_r
- * == false, else output parameter.
+ * @param aa         Mer to check
+ * @param bb         Neighbour of aa
+ * @param aa_er      Enrichment result for aa
+ * @param bb_er      Enrichment result for bb
  */
 template <typename t_configuration>
-template <bool calc_b_r>
-bool seed_finder<t_configuration>::should_filter([[maybe_unused]] gapmer_type a,
-                                                 [[maybe_unused]] gapmer_type b,
-                                                 double a_sig, double a_bg,
-                                                 double b_sig, double b_bg,
-                                                 double a_r,
-                                                 double& b_r) const {
-  if (a_bg <= 1.00001 && b_bg <= 1.00001) {
-    if (b_sig > a_sig) {
-      if constexpr (calc_b_r) {
-        b_r = error_suppressed_beta_inc(b_sig, b_bg,
-                                        signal_to_total_length_ratio_);
+template <bool t_calculate_ac_test_for_bb, typename t_value>
+bool seed_finder<t_configuration>::should_filter(
+    gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
+    enrichment_result<t_value>& bb_er) const {
+  if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
+    if (aa_er.signal_count < bb_er.signal_count) {
+      if constexpr (t_calculate_ac_test_for_bb) {
+        bb_er.ac_test_result = error_suppressed_beta_inc(
+            bb_er.signal_count, bb_er.background_count,
+            signal_to_total_length_ratio_);
       }
       return true;
     }
     return false;
   }
-  if constexpr (calc_b_r) {
-    b_r = error_suppressed_beta_inc(b_sig, b_bg, signal_to_total_length_ratio_);
+
+  if constexpr (t_calculate_ac_test_for_bb) {
+    bb_er.ac_test_result =
+        error_suppressed_beta_inc(bb_er.signal_count, bb_er.background_count,
+                                  signal_to_total_length_ratio_);
   }
-  return b_r < a_r;
+  return bb_er.ac_test_result < aa_er.ac_test_result;
 }
 
 
@@ -441,8 +460,9 @@ template <typename t_configuration>
 template <bool t_should_extend, typename t_critical, typename t_prev_critical>
 void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
     gapmer_type const gg, uint64_t const offset,
-    enrichment_result <gapmer_count_value_type> const& enrichment_res, gapmer_count_type& counts,
-    t_critical&& critical, gapmer_count_type* const prev_counts,
+    enrichment_result<gapmer_count_value_type> const& enrichment_res,
+    gapmer_count_type& counts, t_critical&& critical,
+    gapmer_count_type* const prev_counts,
     t_prev_critical&& prev_critical) const {
   constexpr bool skip_same_length{t_should_extend};
   constexpr bool skip_longer{not t_should_extend};
@@ -535,26 +555,23 @@ void seed_finder<t_configuration>::check_count(gapmer_type const gg,
  * @param mm       Map to add candidate seeds to.
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::filter_count(gapmer_type const gg,
-                                                uint64_t offset,
-                                                gapmer_count_type& sig_bg_k,
-                                                seed_meta_map& mm) const {
+void seed_finder<t_configuration>::filter_count(
+    gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
+    enrichment_result_map& mm) const {
   auto const& res{
       check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
   if (not res) return;
 
-  auto const& enrichment_res{res.result};
-  auto const& [rr, sc, bc] = enrichment_res;
   if constexpr (filter_mers) {
-    filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
+    filter_huddinge_neighbourhood<false>(gg, offset, res.result, sig_bg_k,
                                          critical_d_bv{});
     if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
-      mm[gg] = {rr, uint64_t(sc), uint64_t(bc)};
+      mm[gg] = res.result;
     }
   } else {
 #pragma omp critical
-    mm[gg] = {rr, uint64_t(sc), uint64_t(bc)};
+    mm[gg] = res.result;
   }
 }
 
@@ -624,7 +641,7 @@ void seed_finder<t_configuration>::count_short_gapmers(
  */
 template <typename t_configuration>
 void seed_finder<t_configuration>::extend_counted(
-    seed_meta_map const& aa, seed_meta_map& bb,
+    enrichment_result_map const& aa, enrichment_result_map& bb,
     partial_count_type const& counts) const {
   for (auto p : aa) {
 #ifdef DEBUG
@@ -648,10 +665,10 @@ void seed_finder<t_configuration>::extend_counted(
             auto const enrichment_res{check_enrichment(count)};
             if (not enrichment_res) return;
 
-            auto const& [rr, sc, bc] = enrichment_res.result;
-            if (validate_extension(p.first, oo, p.second.sig_count,
-                                   p.second.bg_count, sc, bc, p.second.p, rr)) {
-              bb[oo] = {rr, uint64_t(sc), uint64_t(bc)};
+            auto const enrichment_res_fp{
+                enrichment_res.result.template to_enrichment_result<double>()};
+            if (validate_extension(p.first, oo, p.second, enrichment_res_fp)) {
+              bb[oo] = enrichment_res_fp;
             }
           }
         });
@@ -669,7 +686,8 @@ void seed_finder<t_configuration>::extend_counted(
  * @param prune  Should only one pass of extensions be done.
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::extend(seed_meta_map& aa, seed_meta_map& bb,
+void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
+                                          enrichment_result_map& bb,
                                           partial_count_type& p_counter,
                                           uint16_t k, bool prune) const {
   std::cerr << "    Extend " << aa.size() << " mers." << std::endl;
@@ -689,7 +707,7 @@ void seed_finder<t_configuration>::extend(seed_meta_map& aa, seed_meta_map& bb,
   if (prune) {
     std::vector<seed> prio;
     for (auto kv : aa) {
-      prio.emplace_back(seed::from_seed_meta(kv.first, kv.second));
+      prio.emplace_back(seed::from_enrichment_result(kv.first, kv.second));
     }
     // Sort by fold change.
     std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
@@ -739,9 +757,7 @@ void seed_finder<t_configuration>::extend(seed_meta_map& aa, seed_meta_map& bb,
               o = o.reverse_complement();
             }
             if (bb.contains(o)) {
-              if (validate_extension(kv.first, o, kv.second.sig_count,
-                                     kv.second.bg_count, bb[o].sig_count,
-                                     bb[o].bg_count, kv.second.p, bb[o].p)) {
+              if (validate_extension(kv.first, o, kv.second, bb[o])) {
                 keep = false;
               }
             }
@@ -766,7 +782,7 @@ void seed_finder<t_configuration>::extend(seed_meta_map& aa, seed_meta_map& bb,
  * @param m   gapmers to filter
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::filter(seed_meta_map& mm) const {
+void seed_finder<t_configuration>::filter(enrichment_result_map& mm) const {
   gapmer_set del_set;
   auto e = mm.end();
   for (auto it = mm.begin(); it != e; ++it) {
@@ -803,8 +819,8 @@ template <typename t_configuration>
 void seed_finder<t_configuration>::find_seeds() {
   using std::swap;  // For ADL.
 
-  seed_meta_map aa;
-  seed_meta_map bb;
+  enrichment_result_map aa;
+  enrichment_result_map bb;
 
   // full k-mer couting as long as memory is sufficient.
   {
@@ -839,7 +855,7 @@ void seed_finder<t_configuration>::find_seeds() {
               << "    " << bb.size() << " " << int(k) << " potentials"
               << std::endl;
     for (auto pp : aa) {
-      seeds_.emplace_back(seed::from_seed_meta(pp.first, pp.second));
+      seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
     }
     aa.clear();
     if constexpr (filter_mers) {
@@ -854,7 +870,7 @@ void seed_finder<t_configuration>::find_seeds() {
   }
   if (aa.size() > 0) {
     for (auto pp : aa) {
-      seeds_.emplace_back(seed::from_seed_meta(pp.first, pp.second));
+      seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
     }
     std::cerr << int(k_lim_) << " -> " << seeds_.size() << " candidates."
               << std::endl;
