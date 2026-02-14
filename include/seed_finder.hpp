@@ -175,12 +175,13 @@ class seed_finder {
       gapmer_count_type* const prev_counts = nullptr,
       t_prev_critical&& prev_critical = nullptr) const;
 
-  void check_count(gapmer_type const gg, uint64_t offset,
-                   gapmer_count_type& sig_bg_k, gapmer_count_type& sig_bg_k1);
+  enrichment_check_result<gapmer_count_value_type> check_count(
+      gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
+      gapmer_count_type& sig_bg_k1);
 
-  void filter_count(gapmer_type const gg, uint64_t offset,
-                    gapmer_count_type& sig_bg_k,
-                    enrichment_result_map& mm) const;
+  enrichment_check_result<gapmer_count_value_type> filter_count(
+      gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
+      enrichment_result_map& mm) const;
 
   void count_short_gapmers(gapmer_count_type& sig_bg_c);
 
@@ -515,18 +516,18 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
  * @param sig_bg_k1 Length k + 1 gapmer count tables
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::check_count(gapmer_type const gg,
-                                               uint64_t offset,
-                                               gapmer_count_type& sig_bg_k,
-                                               gapmer_count_type& sig_bg_k1) {
+auto seed_finder<t_configuration>::check_count(
+    gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
+    gapmer_count_type& sig_bg_k1)
+    -> enrichment_check_result<gapmer_count_value_type> {
   auto const res{
       check_enrichment_and_filter(gg, offset, sig_bg_k, critical_a_bv{})};
-  if (not res) return;
+  if (not res) return res;
 
   auto const& enrichment_res{res.result};
   auto const& [rr, sc, bc] = enrichment_res;
   if constexpr (filter_mers) {
-    // FIXME: Add calls to report_discarded to this branch?
+    // FIXME: Add discarded seed reporting to this branch?
     filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
                                          critical_a_bv{});
     filter_huddinge_neighbourhood<true>(gg, offset, enrichment_res, sig_bg_k1,
@@ -541,6 +542,8 @@ void seed_finder<t_configuration>::check_count(gapmer_type const gg,
 #pragma omp critical
     seeds_.emplace_back(gg, rr, uint64_t(sc), uint64_t(bc));
   }
+
+  return res;
 }
 
 
@@ -555,12 +558,14 @@ void seed_finder<t_configuration>::check_count(gapmer_type const gg,
  * @param mm       Map to add candidate seeds to.
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::filter_count(
-    gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
-    enrichment_result_map& mm) const {
+auto seed_finder<t_configuration>::filter_count(gapmer_type const gg,
+                                                uint64_t offset,
+                                                gapmer_count_type& sig_bg_k,
+                                                enrichment_result_map& mm) const
+    -> enrichment_check_result<gapmer_count_value_type> {
   auto const& res{
       check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
-  if (not res) return;
+  if (not res) return res;
 
   if constexpr (filter_mers) {
     filter_huddinge_neighbourhood<false>(gg, offset, res.result, sig_bg_k,
@@ -573,6 +578,8 @@ void seed_finder<t_configuration>::filter_count(
 #pragma omp critical
     mm[gg] = res.result;
   }
+
+  return res;
 }
 
 
