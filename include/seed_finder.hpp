@@ -410,18 +410,12 @@ inline void seed_finder<t_configuration>::report_encrichment_check_failure(
 
 
 /**
- * Check if extension a -> b is valid
+ * Check if extension aa -> bb is valid
  *
- * @param a      Mer to extend from
- * @param b      Mer to extend to
- * @param a_sig  Number of occurrences of a in the signal set
- * @param a_bg   Number of occurrences of a in the backround set
- * @param b_sig  Number of occurrences of b in the signal set
- * @param b_bg   Number of occurrences of b in the background set
- * @param a_r    p-value for a from the incomplete beta function
- * @param b_r    p-value for b from the incomplete beta function
- *
- * @return True, if extension from a to b is valid
+ * @param aa     Mer to extend from
+ * @param bb     Mer to extend to
+ * @param aa_er  Enrichment result for aa
+ * @param bb_er  Enrichment result for bb
  */
 template <typename t_configuration>
 template <typename t_value>
@@ -483,7 +477,7 @@ template <typename t_value>
 
 
 /**
- * Check if a should be discarded based on the neigbour b.
+ * Check if aa should be discarded based on the neigbour bb.
  *
  * @tparam t_calculate_ac_test_for_bb  Indicates whether bb_er.ac_test_result
  * needs to be computed by this function or has been precalculated.
@@ -652,16 +646,11 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
 
 
 /**
- * Checks H1 neighbourhood with lengths k and k + 1 of gapmer implied by k, v,
- * gap_s and gap_l, and marks invalid candidates as discarded in counts_k and
- * counts_k1.
- *
+ * Checks H1 neighbourhood with lengths k and k + 1 of the given gapmer,
+ * and marks invalid candidates as discarded in counts_k and counts_k1.
  * Surviving mers get added to candidate list.
  *
- * @param k         Gapmer length
- * @param v         Gapmer value as uint64_t
- * @param gap_s     Start location of gap
- * @param gap_l     Length of gap
+ * @param gg        Gapmer in question
  * @param offset    Offset value for table access
  * @param counts_k  Length k gapmer count tables
  * @param counts_k1 Length k + 1 gapmer count tables
@@ -704,9 +693,9 @@ auto seed_finder<t_configuration>::check_count(gapmer_type const gg,
 /**
  * Checks H1 neighbourhood of the given gapmer
  * and marks invalid candidates as discarded in counts_k.
+ * Surviving mers get added to candidate set mm.
  *
- * Surviving mers get added to candidate set m.
- *
+ * @param gg       Gapmer in question
  * @param offset   Offset value for table access
  * @param counts_k Length k gapmer count tables
  * @param mm       Map to add candidate seeds to.
@@ -804,9 +793,9 @@ void seed_finder<t_configuration>::count_short_gapmers(
  * Newly found valid extensions from aa to elements found in counts are
  * added to bb
  *
- * @param aa  Shorter mers to extend
- * @param bb  Valid extended mers
- * @param counts  Partial k-mer counts that may contain valid mer
+ * @param aa     Shorter mers to extend
+ * @param bb     Valid extended mers
+ * @param counts Partial k-mer counts that may contain valid mer
  * extensions
  */
 template <typename t_configuration>
@@ -853,10 +842,10 @@ void seed_finder<t_configuration>::extend_counted(
 /**
  * Find k length extensions from a, and store valid extensions in b.
  *
- * @param aa  k - 1 length mers to extend.
- * @param bb  storage for valid k-mers.
- * @param p_counter  Structure to use with partial counting.
- * @param k  length of k-mers to find.
+ * @param aa     k - 1 length mers to extend.
+ * @param bb     storage for valid k-mers.
+ * @param counts Structure to use with partial counting.
+ * @param k      length of k-mers to find.
  * @param prune  Should only one pass of extensions be done.
  */
 template <typename t_configuration>
