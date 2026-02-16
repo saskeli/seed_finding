@@ -890,7 +890,7 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
     for (auto kv : aa) {
       kv.first.template huddinge_neighbours<true, true, false>(init_counters);
       if (counts.fill_rate() >= fill_limit) {
-        std::print("\tLoad factor ≥ {} ({}). Counting…\n", fill_limit,
+        std::print(std::cerr, "\tLoad factor ≥ {} ({}). Counting…\n", fill_limit,
                    counts.fill_rate());
         counts.count_mers(signal_reads_, background_reads_, k);
         std::cerr << "\tFiltering extension…\n";
@@ -1018,8 +1018,8 @@ void seed_finder<t_configuration>::find_seeds() {
   for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
     std::cerr << +(k - 1) << " → \n";
     extend(aa, bb, partial_counts, k, prune_);
-    std::print("    {} {} candidates\n", aa.size(), +(k - 1));
-    std::print("    {} {} potentials\n", bb.size(), +k);
+    std::print(std::cerr, "    {} {} candidates\n", aa.size(), +(k - 1));
+    std::print(std::cerr, "    {} {} potentials\n", bb.size(), +k);
     for (auto pp : aa) {
       seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
     }
@@ -1028,7 +1028,7 @@ void seed_finder<t_configuration>::find_seeds() {
       filter(bb);
     }
     swap(aa, bb);
-    std::print("{} → {} candidates.\n", +(k - 1), seeds_.size());
+    std::print(std::cerr, "{} → {} candidates.\n", +(k - 1), seeds_.size());
     if (aa.empty()) {
       break;
     }
@@ -1037,7 +1037,7 @@ void seed_finder<t_configuration>::find_seeds() {
     for (auto pp : aa) {
       seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
     }
-    std::print("{} → {} candidates.\n", +k_lim_, seeds_.size());
+    std::print(std::cerr, "{} → {} candidates.\n", +k_lim_, seeds_.size());
   }
 }
 }  // namespace sf
