@@ -331,8 +331,7 @@ int main(int argc, char const* argv[]) {
   //print_invocation(argc, argv);
   configuration conf{parse_command_line_arguments(argc, argv)};
 
-  if (conf.should_output_options)
-    std::cerr << conf;
+  if (conf.should_output_options) std::cerr << conf;
 
   conf.mem_limit *= 1000;
   conf.mem_limit *= 1000;
@@ -450,9 +449,13 @@ int main(int argc, char const* argv[]) {
       std::sort(seeds.begin(), seeds.end(),
                 [](auto const& lhs, auto const& rhs) { return lhs.p < rhs.p; });
       std::cout << "seed\tsignal_count\tbackground_count\tp_value\n";
-      for (auto const& seed : seeds)
+      std::size_t ii{};
+      for (auto const& seed : seeds) {
+        if (ii <= conf.print_lim) break;
         std::cout << seed.g << '\t' << seed.sig_count << '\t' << seed.bg_count
                   << '\t' << seed.p << '\n';
+        ++ii;
+      }
     }
   });
 
