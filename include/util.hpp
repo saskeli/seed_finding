@@ -16,9 +16,6 @@ namespace sf {
 template <typename t_fn>
 concept VoidReturning = std::same_as<std::invoke_result_t<t_fn>, void>;
 
-template <typename t_fn>
-concept NonVoidReturning = !VoidReturning<t_fn>;
-
 
 const static constexpr std::array<char, 4> v_to_nuc = {'A', 'C', 'G', 'T'};
 const static constexpr std::array<uint8_t, 256> nuc_to_v = {
@@ -189,12 +186,6 @@ struct critical_a_bv {
 #pragma omp critical(a_bv)
     cb();
   }
-
-  template <NonVoidReturning t_cb>
-  decltype(auto) operator()(t_cb&& cb) {
-#pragma omp critical(a_bv)
-    return cb();
-  }
 };
 
 struct critical_d_bv {
@@ -203,12 +194,6 @@ struct critical_d_bv {
 #pragma omp critical(d_bv)
     cb();
   }
-
-  template <NonVoidReturning t_cb>
-  decltype(auto) operator()(t_cb&& cb) {
-#pragma omp critical(d_bv)
-    return cb();
-  }
 };
 
 struct critical_o_bv {
@@ -216,12 +201,6 @@ struct critical_o_bv {
   void operator()(t_cb&& cb) {
 #pragma omp critical(o_bv)
     cb();
-  }
-
-  template <NonVoidReturning t_cb>
-  decltype(auto) operator()(t_cb&& cb) {
-#pragma omp critical(o_bv)
-    return cb();
   }
 };
 
