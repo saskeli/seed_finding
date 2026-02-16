@@ -10,6 +10,7 @@
 #include <iostream>
 #include <libbio/assert.hh>
 #include <libbio/syncstream.hh>
+#include <ostream>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -101,11 +102,41 @@ struct extension_validation_result {
 };
 
 
+inline std::ostream& operator<<(std::ostream& os,
+                                enrichment_check_status status) {
+  switch (status) {
+    case enrichment_check_status::success:
+      os << "success";
+      break;
+    case enrichment_check_status::fold_change_test_failed:
+      os << "fold change test failed";
+      break;
+    case enrichment_check_status::ac_test_failed:
+      os << "AC test failed";
+      break;
+    case enrichment_check_status::discarded_earlier:
+      os << "discarded earlier";
+      break;
+    case enrichment_check_status::not_canonical:
+      os << "not canonical";
+      break;
+  }
+  return os;
+}
+
+
 template <typename t_value>
 std::ostream& operator<<(std::ostream& os, enrichment_result<t_value> er) {
-  std::print(os, "(SC: {} BC: {} AC test p-value: {})", er.signal_count,
+  std::print(os, "SC: {} BC: {} AC test p-value: {}", er.signal_count,
              er.background_count, er.ac_test_result);
   return os;
+}
+
+
+template <typename t_value>
+std::ostream &operator<<(std::ostream& os, enrichment_check_result<t_value> er) {
+	os << "Status: " << er.status << " (" << er.result << ')';
+	return os;
 }
 
 
@@ -406,7 +437,7 @@ inline void seed_finder<t_configuration>::report_encrichment_check_failure(
     libbio_assert(discarded_gapmer_reporting_ostream_);
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
-    stream << "encrichment check\t\t" << discarded << '\t' << false << '\t'
+    stream << "encrichment check\t\t" << discarded << '\t' << bool(res) << '\t'
            << caller << '\t' << test_fn << '\t' << res << '\n';
   }
 }
@@ -889,8 +920,8 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
     for (auto kv : aa) {
       kv.first.template huddinge_neighbours<true, true, false>(init_counters);
       if (counts.fill_rate() >= fill_limit) {
-        std::print(std::cerr, "\tLoad factor ≥ {} ({}). Counting…\n", fill_limit,
-                   counts.fill_rate());
+        std::print(std::cerr, "\tLoad factor ≥ {} ({}). Counting…\n",
+                   fill_limit, counts.fill_rate());
         counts.count_mers(signal_reads_, background_reads_, k);
         std::cerr << "\tFiltering extension…\n";
         extend_counted(aa, bb, counts);
