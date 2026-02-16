@@ -296,14 +296,14 @@ class seed_finder {
       t_prev_critical&& prev_critical = nullptr) const;
 
   enrichment_check_result<gapmer_count_value_type> check_count(
-      gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
-      gapmer_count_type& sig_bg_k1);
+      gapmer_type const gg, uint64_t offset, gapmer_count_type& counts_k,
+      gapmer_count_type& counts_k1);
 
   enrichment_check_result<gapmer_count_value_type> filter_count(
-      gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
+      gapmer_type const gg, uint64_t offset, gapmer_count_type& counts_k,
       enrichment_result_map& mm) const;
 
-  void count_short_gapmers(gapmer_count_type& sig_bg_c);
+  void count_short_gapmers(gapmer_count_type& counts);
 
   void extend_counted(enrichment_result_map const& aa,
                       enrichment_result_map& bb,
@@ -653,8 +653,8 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
 
 /**
  * Checks H1 neighbourhood with lengths k and k + 1 of gapmer implied by k, v,
- * gap_s and gap_l, and marks invalid candidates as discarded in sig_bg_a an
- * sig_bg_b.
+ * gap_s and gap_l, and marks invalid candidates as discarded in counts_k and
+ * counts_k1.
  *
  * Surviving mers get added to candidate list.
  *
@@ -663,30 +663,30 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
  * @param gap_s     Start location of gap
  * @param gap_l     Length of gap
  * @param offset    Offset value for table access
- * @param sig_bg_k  Length k gapmer count tables
- * @param sig_bg_k1 Length k + 1 gapmer count tables
+ * @param counts_k  Length k gapmer count tables
+ * @param counts_k1 Length k + 1 gapmer count tables
  */
 template <typename t_configuration>
 auto seed_finder<t_configuration>::check_count(gapmer_type const gg,
                                                uint64_t offset,
-                                               gapmer_count_type& sig_bg_k,
-                                               gapmer_count_type& sig_bg_k1)
+                                               gapmer_count_type& counts_k,
+                                               gapmer_count_type& counts_k1)
     -> enrichment_check_result<gapmer_count_value_type> {
-  auto res{check_enrichment_and_filter(gg, offset, sig_bg_k, critical_a_bv{})};
+  auto res{check_enrichment_and_filter(gg, offset, counts_k, critical_a_bv{})};
   if (not res) return res;
 
   auto const& enrichment_res{res.result};
   auto const& [rr, sc, bc] = enrichment_res;
   if constexpr (filter_mers) {
     // FIXME: Add discarded seed reporting to this branch?
-    filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, sig_bg_k,
+    filter_huddinge_neighbourhood<false>(gg, offset, enrichment_res, counts_k,
                                          critical_a_bv{});
-    filter_huddinge_neighbourhood<true>(gg, offset, enrichment_res, sig_bg_k1,
-                                        critical_o_bv{}, &sig_bg_k,
+    filter_huddinge_neighbourhood<true>(gg, offset, enrichment_res, counts_k1,
+                                        critical_o_bv{}, &counts_k,
                                         critical_a_bv{});
 
     // FIXME: Not necessarily atomic. (Likely works on x86-64.)
-    if (not sig_bg_k.is_discarded(gg, offset)) {
+    if (not counts_k.is_discarded(gg, offset)) {
 #pragma omp critical
       seeds_.emplace_back(gg, rr, uint64_t(sc), uint64_t(bc));
     } else {
@@ -703,28 +703,28 @@ auto seed_finder<t_configuration>::check_count(gapmer_type const gg,
 
 /**
  * Checks H1 neighbourhood of the given gapmer
- * and marks invalid candidates as discarded in sig_bg_c.
+ * and marks invalid candidates as discarded in counts_k.
  *
  * Surviving mers get added to candidate set m.
  *
  * @param offset   Offset value for table access
- * @param sig_bg_k Length k gapmer count tables
+ * @param counts_k Length k gapmer count tables
  * @param mm       Map to add candidate seeds to.
  */
 template <typename t_configuration>
 auto seed_finder<t_configuration>::filter_count(gapmer_type const gg,
                                                 uint64_t offset,
-                                                gapmer_count_type& sig_bg_k,
+                                                gapmer_count_type& counts_k,
                                                 enrichment_result_map& mm) const
     -> enrichment_check_result<gapmer_count_value_type> {
-  auto res{check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
+  auto res{check_enrichment_and_filter(gg, offset, counts_k, critical_d_bv{})};
   if (not res) return res;
 
   if constexpr (filter_mers) {
-    filter_huddinge_neighbourhood<false>(gg, offset, res.result, sig_bg_k,
+    filter_huddinge_neighbourhood<false>(gg, offset, res.result, counts_k,
                                          critical_d_bv{});
     // FIXME: Not necessarily atomic. (Likely works on x86-64.)
-    if (not sig_bg_k.is_discarded(gg, offset)) {
+    if (not counts_k.is_discarded(gg, offset)) {
 #pragma omp critical
       mm[gg] = res.result;
     } else {
@@ -742,32 +742,32 @@ auto seed_finder<t_configuration>::filter_count(gapmer_type const gg,
 /**
  * Generate candidates for all k small enough to enable full k-mer counting
  *
- * @param sig_bg_c  Output parameter, for storing counts for final k-length
+ * @param counts  Output parameter, for storing counts for final k-length
  * mers
  */
 template <typename t_configuration>
 void seed_finder<t_configuration>::count_short_gapmers(
-    gapmer_count_type& sig_bg_c) {
+    gapmer_count_type& counts) {
   using std::swap;  // For ADL.
 
   std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
   // Initialize by counting 5-mers
-  gapmer_count_type sig_bg_a(signal_reads_, background_reads_, 5);
+  gapmer_count_type counts_k(signal_reads_, background_reads_, 5);
   if constexpr (enable_smoothing) {
-    sig_bg_a.smooth();
+    counts_k.smooth();
   }
 
   for (uint8_t k = 6; k <= lookup_k_; ++k) {
     // Initialize the k + 1 to compute extensions
-    gapmer_count_type sig_bg_b(signal_reads_, background_reads_, k);
+    gapmer_count_type counts_k1(signal_reads_, background_reads_, k);
     if constexpr (enable_smoothing) {
-      sig_bg_b.smooth();
+      counts_k1.smooth();
     }
     uint64_t v_lim = gapmer_count_type::ONE << ((k - 1) * 2);
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
       gapmer_type const gg(v, k - 1, 0, 0);
-      if (auto const res{check_count(gg, 0, sig_bg_a, sig_bg_b)}; not res) {
+      if (auto const res{check_count(gg, 0, counts_k, counts_k1)}; not res) {
         report_encrichment_check_failure(gg, res, "count_short_gapmers",
                                          "check_count");
       }
@@ -776,11 +776,11 @@ void seed_finder<t_configuration>::count_short_gapmers(
     uint8_t gap_lim = middle_gap_only ? k - gap_s - 1 : k - 2;
     for (; gap_s <= gap_lim; ++gap_s) {
       for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-        uint64_t offset = sig_bg_a.offset(gap_s, gap_l);
+        uint64_t offset = counts_k.offset(gap_s, gap_l);
 #pragma omp parallel for
         for (uint64_t v = 0; v < v_lim; ++v) {
           gapmer_type gg(v, k - 1, gap_s, gap_l);
-          if (auto const res{check_count(gg, offset, sig_bg_a, sig_bg_b)};
+          if (auto const res{check_count(gg, offset, counts_k, counts_k1)};
               not res) {
             report_encrichment_check_failure(gg, res, "count_short_gapmers",
                                              "check_count");
@@ -790,31 +790,31 @@ void seed_finder<t_configuration>::count_short_gapmers(
     }
 
     // k -> k + 1
-    swap(sig_bg_a, sig_bg_b);
+    swap(counts_k, counts_k1);
     std::cerr << int(k - 1) << " -> " << seeds_.size() << " candidates."
               << std::endl;
   }
-  swap(sig_bg_a, sig_bg_c);
+  swap(counts_k, counts);
 }
 
 
 /**
  * Check collected mers for extension validity
  *
- * Newly found valid extensions from a to elements found in p_counter are
- * added to b
+ * Newly found valid extensions from aa to elements found in counts are
+ * added to bb
  *
- * @param a  Shorter mers to extend
- * @param b  Valid extended mers
- * @param p_counter  Partial k-mer counts that may contain valid mer
+ * @param aa  Shorter mers to extend
+ * @param bb  Valid extended mers
+ * @param counts  Partial k-mer counts that may contain valid mer
  * extensions
  */
 template <typename t_configuration>
 void seed_finder<t_configuration>::extend_counted(
     enrichment_result_map const& aa, enrichment_result_map& bb,
     partial_count_type const& counts) const {
-  for (auto p : aa) {
-    p.first.template huddinge_neighbours<true, true, false>(
+  for (auto kv : aa) {
+    kv.first.template huddinge_neighbours<true, true, false>(
         [&](gapmer_type oo) {
           if (not oo.is_canonical()) {
             oo = oo.reverse_complement();
@@ -838,8 +838,8 @@ void seed_finder<t_configuration>::extend_counted(
             auto const enrichment_res_fp{
                 enrichment_res.result.template to_enrichment_result<double>()};
             auto const res{
-                validate_extension(p.first, oo, p.second, enrichment_res_fp)};
-            report_discarded(p.first, oo, res, p.second, enrichment_res,
+                validate_extension(kv.first, oo, kv.second, enrichment_res_fp)};
+            report_discarded(kv.first, oo, res, kv.second, enrichment_res,
                              "extend_counted");
             if (res) {
               bb[oo] = enrichment_res_fp;
@@ -862,7 +862,7 @@ void seed_finder<t_configuration>::extend_counted(
 template <typename t_configuration>
 void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
                                           enrichment_result_map& bb,
-                                          partial_count_type& p_counter,
+                                          partial_count_type& counts,
                                           uint16_t k, bool prune) const {
   std::cerr << "    Extend " << aa.size() << " mers." << std::endl;
 
@@ -871,9 +871,9 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
 
   auto const init_counters{[&](gapmer_type oo) {
     if (not bb.contains(oo)) {
-      p_counter.init(oo);
+      counts.init(oo);
       if constexpr (enable_smoothing) {
-        oo.hamming_neighbours([&](gapmer_type h_n) { p_counter.init(h_n); });
+        oo.hamming_neighbours([&](gapmer_type h_n) { counts.init(h_n); });
       }
     }
   }};
@@ -890,30 +890,30 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
 
     for (auto res : prio) {
       res.g.template huddinge_neighbours<true, true, false>(init_counters);
-      if (p_counter.fill_rate() >= fill_limit) {
+      if (counts.fill_rate() >= fill_limit) {
         break;
       }
     }
   } else {
     for (auto kv : aa) {
       kv.first.template huddinge_neighbours<true, true, false>(init_counters);
-      if (p_counter.fill_rate() >= fill_limit) {
+      if (counts.fill_rate() >= fill_limit) {
         std::cerr << "\tLoad factor >= " << fill_limit << " ("
-                  << p_counter.fill_rate() << ") counting.." << std::endl;
-        p_counter.count_mers(signal_reads_, background_reads_, k);
+                  << counts.fill_rate() << ") counting.." << std::endl;
+        counts.count_mers(signal_reads_, background_reads_, k);
         std::cerr << "\tFiltering extension..." << std::endl;
-        extend_counted(aa, bb, p_counter);
-        p_counter.clear();
+        extend_counted(aa, bb, counts);
+        counts.clear();
       }
     }
   }
 
-  std::cerr << "\tFinal load factor " << p_counter.fill_rate() << " counting.."
+  std::cerr << "\tFinal load factor " << counts.fill_rate() << " counting.."
             << std::endl;
-  p_counter.count_mers(signal_reads_, background_reads_, k);
+  counts.count_mers(signal_reads_, background_reads_, k);
   std::cerr << "\tFiltering extension..." << std::endl;
-  extend_counted(aa, bb, p_counter);
-  p_counter.clear();
+  extend_counted(aa, bb, counts);
+  counts.clear();
 
   if constexpr (filter_mers) {
     std::cerr << "\tFiltering sources..." << std::endl;
@@ -995,13 +995,13 @@ void seed_finder<t_configuration>::find_seeds() {
 
   // full k-mer couting as long as memory is sufficient.
   {
-    gapmer_count_type sig_bg_c;
-    count_short_gapmers(sig_bg_c);
+    gapmer_count_type counts;
+    count_short_gapmers(counts);
     uint64_t const v_lim{gapmer_count_type::ONE << (lookup_k_ * 2)};
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
       gapmer_type const gg(v, lookup_k_, 0, 0);
-      if (auto const res{filter_count(gg, 0, sig_bg_c, aa)}; not res) {
+      if (auto const res{filter_count(gg, 0, counts, aa)}; not res) {
         report_encrichment_check_failure(gg, res, "find_seeds", "filter_count");
       }
     }
@@ -1009,11 +1009,11 @@ void seed_finder<t_configuration>::find_seeds() {
     uint8_t const gap_lim(middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1);
     for (; gap_s <= gap_lim; ++gap_s) {
       for (uint8_t gap_l = 1; gap_l <= max_gap; ++gap_l) {
-        uint64_t offset = sig_bg_c.offset(gap_s, gap_l);
+        uint64_t offset = counts.offset(gap_s, gap_l);
 #pragma omp parallel for
         for (uint64_t v = 0; v < v_lim; ++v) {
           gapmer_type const gg(v, lookup_k_, 0, 0);
-          if (auto const res{filter_count(gg, offset, sig_bg_c, aa)}; not res) {
+          if (auto const res{filter_count(gg, offset, counts, aa)}; not res) {
             report_encrichment_check_failure(gg, res, "find_seeds",
                                              "filter_count");
           }
@@ -1023,10 +1023,10 @@ void seed_finder<t_configuration>::find_seeds() {
   }
 
   // Partial count with extensions when we can no longer count everything
-  partial_count_type p_counter;
+  partial_count_type partial_counts;
   for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
     std::cerr << int(k) - 1 << " -> " << std::endl;
-    extend(aa, bb, p_counter, k, prune_);
+    extend(aa, bb, partial_counts, k, prune_);
     std::cerr << "    " << aa.size() << " " << int(k) - 1 << " candidates\n"
               << "    " << bb.size() << " " << int(k) << " potentials"
               << std::endl;
