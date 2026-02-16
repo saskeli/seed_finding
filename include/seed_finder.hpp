@@ -107,6 +107,50 @@ std::ostream& operator<<(std::ostream& os, enrichment_result<t_value> er) {
              er.background_count, er.ac_test_result);
   return os;
 }
+
+
+inline std::ostream& operator<<(std::ostream& os,
+                                extension_validation_status status) {
+  switch (status) {
+    case extension_validation_status::ac_test_passed:
+      os << "AC test passed";
+      break;
+    case extension_validation_status::binomial_and_ac_tests_passed:
+      os << "binomial and AC tests passed";
+      break;
+    case extension_validation_status::target_ac_test_p_value_smaller:
+      os << "target’s AC test p-value smaller";
+      break;
+    case extension_validation_status::source_signal_count_at_least_quadruple:
+      os << "source signal count at least quadruple";
+      break;
+    case extension_validation_status::ac_test_failed:
+      os << "AC test failed";
+      break;
+    case extension_validation_status::binomial_test_failed:
+      os << "binomial test failed";
+      break;
+    case extension_validation_status::source_ac_test_p_value_smaller:
+      os << "source’s AC test p-value was smaller";
+      break;
+  }
+
+  return os;
+}
+
+
+inline std::ostream& operator<<(std::ostream& os,
+                                extension_validation_strategy strategy) {
+  switch (strategy) {
+    case extension_validation_strategy::comparison_to_background:
+      os << "comparison to background";
+    case extension_validation_strategy::comparison_to_background_filtering:
+      os << "comparison to background with filtering";
+    case extension_validation_strategy::signal_count_only:
+      os << "signal count only";
+  }
+  return os;
+}
 }  // namespace sf::detail
 
 
@@ -338,46 +382,7 @@ inline void seed_finder<t_configuration>::report_discarded(
 
     stream << '\t' << bool(res) << "\t\t" << test_fn << '\t';
 
-    switch (res.strategy) {
-      case extension_validation_strategy::comparison_to_background:
-        stream << "Either aa or bb in background";
-        break;
-
-      case extension_validation_strategy::comparison_to_background_filtering:
-        stream << "Filtering and either aa or bb in background";
-        break;
-
-      case extension_validation_strategy::signal_count_only:
-        stream << "Using signal count only";
-        break;
-    }
-
-    stream << "; ";
-
-    switch (res.status) {
-      case extension_validation_status::ac_test_passed:
-        stream << "AC test passed";
-        break;
-      case extension_validation_status::binomial_and_ac_tests_passed:
-        stream << "binomial and AC tests passed";
-        break;
-      case extension_validation_status::target_ac_test_p_value_smaller:
-        stream << "target’s AC test p-value smaller";
-        break;
-      case extension_validation_status::source_signal_count_at_least_quadruple:
-        stream << "source signal count at least quadruple";
-        break;
-      case extension_validation_status::ac_test_failed:
-        stream << "AC test failed";
-        break;
-      case extension_validation_status::binomial_test_failed:
-        stream << "binomial test failed";
-        break;
-      case extension_validation_status::source_ac_test_p_value_smaller:
-        stream << "source’s AC test p-value was smaller";
-        break;
-    }
-
+    stream << res.strategy << "; " << res.status << "; ";
     if (res)
       stream << " (lhs: " << lhs_info << " rhs: " << rhs_info << ')';
     else
