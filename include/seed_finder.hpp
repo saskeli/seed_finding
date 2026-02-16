@@ -376,9 +376,7 @@ inline void seed_finder<t_configuration>::report_discarded(
     char const* test_fn) const {
   if constexpr (enable_reporting_discarded_seeds) {
     libbio_assert(discarded_gapmer_reporting_ostream_);
-    // GCC 14 reports an error if std::osyncstream is used directly.
-    libbio::osyncstream sync_stream{*discarded_gapmer_reporting_ostream_};
-    std::ostream &stream{sync_stream};
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
     stream << "extension\t";
 
@@ -406,9 +404,7 @@ inline void seed_finder<t_configuration>::report_encrichment_check_failure(
     char const* caller, char const* test_fn) const {
   if constexpr (enable_reporting_discarded_seeds) {
     libbio_assert(discarded_gapmer_reporting_ostream_);
-    // GCC 14 reports an error if std::osyncstream is used directly.
-    libbio::osyncstream sync_stream{*discarded_gapmer_reporting_ostream_};
-    std::ostream &stream{sync_stream};
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
     stream << "encrichment check\t\t" << discarded << '\t' << false << '\t'
            << caller << '\t' << test_fn << '\t' << res << '\n';
