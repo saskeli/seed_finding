@@ -331,9 +331,8 @@ int main(int argc, char const* argv[]) {
   //print_invocation(argc, argv);
   configuration conf{parse_command_line_arguments(argc, argv)};
 
-#ifdef DEBUG
-  std::cerr << conf;
-#endif
+  if (conf.should_output_options)
+    std::cerr << conf;
 
   conf.mem_limit *= 1000;
   conf.mem_limit *= 1000;
