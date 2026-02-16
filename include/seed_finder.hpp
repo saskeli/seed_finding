@@ -144,10 +144,13 @@ inline std::ostream& operator<<(std::ostream& os,
   switch (strategy) {
     case extension_validation_strategy::comparison_to_background:
       os << "comparison to background";
+      break;
     case extension_validation_strategy::comparison_to_background_filtering:
       os << "comparison to background with filtering";
+      break;
     case extension_validation_strategy::signal_count_only:
       os << "signal count only";
+      break;
   }
   return os;
 }
