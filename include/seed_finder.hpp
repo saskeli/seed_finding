@@ -208,6 +208,7 @@ class seed_finder {
   uint8_t lookup_k_;
   bool prune_;
 
+  // Thread safe.
   template <typename t_lhs_info, typename t_rhs_info>
   inline void report_discarded(gapmer_type lhs, gapmer_type rhs,
                                extension_validation_result res,
@@ -215,6 +216,7 @@ class seed_finder {
                                t_rhs_info const& rhs_info,
                                char const* test_fn) const;
 
+  // Thread safe.
   template <typename t_value>
   inline void report_encrichment_check_failure(
       gapmer_type discarded, enrichment_check_result<t_value> res,
@@ -318,6 +320,7 @@ class seed_finder {
 };
 
 
+// Thread safe.
 template <typename t_configuration>
 template <typename t_lhs_info, typename t_rhs_info>
 inline void seed_finder<t_configuration>::report_discarded(
@@ -383,6 +386,7 @@ inline void seed_finder<t_configuration>::report_discarded(
 }
 
 
+// Thread safe.
 template <typename t_configuration>
 template <typename t_value>
 inline void seed_finder<t_configuration>::report_encrichment_check_failure(
@@ -417,9 +421,10 @@ template <typename t_value>
     gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
     enrichment_result<t_value> bb_er) const -> extension_validation_result {
   if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
+    constexpr auto strategy{extension_validation_strategy::signal_count_only};
     if (aa_er.signal_count > bb_er.signal_count * 4) {
       return extension_validation_result::make(
-          extension_validation_strategy::signal_count_only,
+          strategy,
           extension_validation_status::source_signal_count_at_least_quadruple);
     }
 
@@ -427,8 +432,7 @@ template <typename t_value>
     // FIXME: Is this needed since it uses the background count?
     if (p_ <= bb_er.ac_test_result) {
       return extension_validation_result::make(
-          extension_validation_strategy::signal_count_only,
-          extension_validation_status::ac_test_failed);
+          strategy, extension_validation_status::ac_test_failed);
     }
 
     // Binomial test.
@@ -436,37 +440,36 @@ template <typename t_value>
         gsl_cdf_binomial_Q(bb_er.signal_count, 0.25, aa_er.signal_count)};
     if (p_ext_ <= p_ext) {
       return extension_validation_result::make(
-          extension_validation_strategy::signal_count_only,
-          extension_validation_status::binomial_test_failed, p_ext);
+          strategy, extension_validation_status::binomial_test_failed, p_ext);
     }
 
     // Success.
     return extension_validation_result::make(
-        extension_validation_strategy::signal_count_only,
-        extension_validation_status::binomial_and_ac_tests_passed);
+        strategy, extension_validation_status::binomial_and_ac_tests_passed);
   }
 
   // Either a or b occurs in the background set.
   if constexpr (filter_mers) {
+    constexpr auto strategy{
+        extension_validation_strategy::comparison_to_background_filtering};
     if (bb_er.ac_test_result <= aa_er.ac_test_result) {
       return extension_validation_result::make(
-          extension_validation_strategy::comparison_to_background_filtering,
+          strategy,
           extension_validation_status::target_ac_test_p_value_smaller);
     }
 
     return extension_validation_result::make(
-        extension_validation_strategy::comparison_to_background_filtering,
-        extension_validation_status::source_ac_test_p_value_smaller);
+        strategy, extension_validation_status::source_ac_test_p_value_smaller);
   } else {
+    constexpr auto strategy{
+        extension_validation_strategy::comparison_to_background};
     if (bb_er.ac_test_result <= p_) {
       return extension_validation_result::make(
-          extension_validation_strategy::comparison_to_background,
-          extension_validation_status::ac_test_passed);
+          strategy, extension_validation_status::ac_test_passed);
     }
 
     return extension_validation_result::make(
-        extension_validation_strategy::comparison_to_background,
-        extension_validation_status::ac_test_failed);
+        strategy, extension_validation_status::ac_test_failed);
   }
 }
 
