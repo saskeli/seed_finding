@@ -739,7 +739,7 @@ void seed_finder<t_configuration>::count_short_gapmers(
     gapmer_count_type& counts) {
   using std::swap;  // For ADL.
 
-  std::cerr << "Lookup tables up to " << int(lookup_k_) << std::endl;
+  std::cerr << "Lookup tables up to " << +lookup_k_ << '\n';
   // Initialize by counting 5-mers
   gapmer_count_type counts_k(signal_reads_, background_reads_, 5);
   if constexpr (enable_smoothing) {
@@ -780,8 +780,7 @@ void seed_finder<t_configuration>::count_short_gapmers(
 
     // k -> k + 1
     swap(counts_k, counts_k1);
-    std::cerr << int(k - 1) << " -> " << seeds_.size() << " candidates."
-              << std::endl;
+    std::cerr << +(k - 1) << " → " << seeds_.size() << " candidates.\n";
   }
   swap(counts_k, counts);
 }
@@ -853,7 +852,7 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
                                           enrichment_result_map& bb,
                                           partial_count_type& counts,
                                           uint16_t k, bool prune) const {
-  std::cerr << "    Extend " << aa.size() << " mers." << std::endl;
+  std::cerr << "    Extend " << aa.size() << " mers.\n";
 
   const constexpr double fill_limit = 0.4;
   gapmer_set del_set;
@@ -887,25 +886,24 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
     for (auto kv : aa) {
       kv.first.template huddinge_neighbours<true, true, false>(init_counters);
       if (counts.fill_rate() >= fill_limit) {
-        std::cerr << "\tLoad factor >= " << fill_limit << " ("
-                  << counts.fill_rate() << ") counting.." << std::endl;
+        std::print("\tLoad factor ≥ {} ({}). Counting…\n", fill_limit,
+                   counts.fill_rate());
         counts.count_mers(signal_reads_, background_reads_, k);
-        std::cerr << "\tFiltering extension..." << std::endl;
+        std::cerr << "\tFiltering extension…\n";
         extend_counted(aa, bb, counts);
         counts.clear();
       }
     }
   }
 
-  std::cerr << "\tFinal load factor " << counts.fill_rate() << " counting.."
-            << std::endl;
+  std::cerr << "\tFinal load factor " << counts.fill_rate() << ". Counting…\n";
   counts.count_mers(signal_reads_, background_reads_, k);
-  std::cerr << "\tFiltering extension..." << std::endl;
+  std::cerr << "\tFiltering extension…\n";
   extend_counted(aa, bb, counts);
   counts.clear();
 
   if constexpr (filter_mers) {
-    std::cerr << "\tFiltering sources..." << std::endl;
+    std::cerr << "\tFiltering sources…\n";
     for (auto kv : aa) {
       bool keep = true;
 
@@ -967,7 +965,7 @@ void seed_finder<t_configuration>::filter(enrichment_result_map& mm) const {
   for (auto d : del_set) {
     mm.erase(d);
   }
-  std::cerr << "    filtered to " << mm.size() << " mers" << std::endl;
+  std::cerr << "    filtered to " << mm.size() << " mers\n";
 }
 
 
@@ -1014,11 +1012,10 @@ void seed_finder<t_configuration>::find_seeds() {
   // Partial count with extensions when we can no longer count everything
   partial_count_type partial_counts;
   for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
-    std::cerr << int(k) - 1 << " -> " << std::endl;
+    std::cerr << +(k - 1) << " → \n";
     extend(aa, bb, partial_counts, k, prune_);
-    std::cerr << "    " << aa.size() << " " << int(k) - 1 << " candidates\n"
-              << "    " << bb.size() << " " << int(k) << " potentials"
-              << std::endl;
+    std::print("    {} {} candidates\n", aa.size(), +(k - 1));
+    std::print("    {} {} potentials\n", bb.size(), +k);
     for (auto pp : aa) {
       seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
     }
@@ -1027,9 +1024,8 @@ void seed_finder<t_configuration>::find_seeds() {
       filter(bb);
     }
     swap(aa, bb);
-    std::cerr << int(k) - 1 << " -> " << seeds_.size() << " candidates."
-              << std::endl;
-    if (aa.size() == 0) {
+    std::print("{} → {} candidates.\n", +(k - 1), seeds_.size());
+    if (aa.empty()) {
       break;
     }
   }
@@ -1037,8 +1033,7 @@ void seed_finder<t_configuration>::find_seeds() {
     for (auto pp : aa) {
       seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
     }
-    std::cerr << int(k_lim_) << " -> " << seeds_.size() << " candidates."
-              << std::endl;
+    std::print("{} → {} candidates.\n", +k_lim_, seeds_.size());
   }
 }
 }  // namespace sf
