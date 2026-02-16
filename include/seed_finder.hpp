@@ -7,7 +7,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <format>
 #include <iostream>
 #include <libbio/assert.hh>
 #include <libbio/syncstream.hh>
@@ -57,6 +56,51 @@ struct enrichment_check_result {
 };
 
 
+enum class extension_validation_status {
+  // Extending.
+  ac_test_passed,
+  binomial_and_ac_tests_passed,
+  target_ac_test_p_value_smaller,
+  // Not extending.
+  source_signal_count_at_least_quadruple,
+  ac_test_failed,
+  binomial_test_failed,
+  source_ac_test_p_value_smaller
+};
+
+
+enum class extension_validation_strategy {
+  comparison_to_background,
+  comparison_to_background_filtering,
+  signal_count_only  // FIXME: AC test not needed in this case since it uses background count?
+};
+
+
+struct extension_validation_result {
+  double binomial_test_result{};
+  extension_validation_status status;
+  extension_validation_strategy strategy;
+
+  static extension_validation_result make(
+      extension_validation_strategy strategy_,
+      extension_validation_status status_, double binomial_test_result_ = 0) {
+    return {binomial_test_result_, status_, strategy_};
+  }
+
+  operator bool() const {
+    switch (status) {
+      case extension_validation_status::ac_test_passed:
+      case extension_validation_status::binomial_and_ac_tests_passed:
+      case extension_validation_status::target_ac_test_p_value_smaller:
+        return true;
+
+      default:
+        return false;
+    }
+  }
+};
+
+
 template <typename t_value>
 std::ostream& operator<<(std::ostream& os, enrichment_result<t_value> er) {
   std::print(os, "(SC: {} BC: {} AC test p-value: {})", er.signal_count,
@@ -96,6 +140,9 @@ class seed_finder {
 
  private:
   typedef detail::enrichment_check_status enrichment_check_status;
+  typedef detail::extension_validation_status extension_validation_status;
+  typedef detail::extension_validation_strategy extension_validation_strategy;
+  typedef detail::extension_validation_result extension_validation_result;
 
   template <typename t_value>
   using enrichment_result = detail::enrichment_result<t_value>;
@@ -161,10 +208,12 @@ class seed_finder {
   uint8_t lookup_k_;
   bool prune_;
 
-  template <typename... t_args>
-  inline void report_discarded(gapmer_type chosen, gapmer_type discarded,
-                               std::format_string<t_args...> fmt,
-                               t_args&&... args) const;
+  template <typename t_lhs_info, typename t_rhs_info>
+  inline void report_discarded(gapmer_type lhs, gapmer_type rhs,
+                               extension_validation_result res,
+                               t_lhs_info const& lhs_info,
+                               t_rhs_info const& rhs_info,
+                               char const* test_fn) const;
 
   template <typename t_value>
   inline void report_encrichment_check_failure(
@@ -172,14 +221,14 @@ class seed_finder {
       char const* caller, char const* test_fn) const;
 
   template <typename t_value>
-  bool validate_extension(gapmer_type aa, gapmer_type bb,
-                          enrichment_result<t_value> aa_er,
-                          enrichment_result<t_value> bb_er) const;
+  [[nodiscard]] extension_validation_result validate_extension(
+      gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
+      enrichment_result<t_value> bb_er) const;
 
   template <bool calculate_ac_test_for_bb, typename t_value>
-  bool should_filter(gapmer_type aa, gapmer_type bb,
-                     enrichment_result<t_value> aa_er,
-                     enrichment_result<t_value>& bb_er) const;
+  [[nodiscard]] bool should_filter(gapmer_type aa, gapmer_type bb,
+                                   enrichment_result<t_value> aa_er,
+                                   enrichment_result<t_value>& bb_er) const;
 
   template <typename t_value>
   [[nodiscard]] enrichment_check_result<t_value> check_enrichment(
@@ -270,14 +319,66 @@ class seed_finder {
 
 
 template <typename t_configuration>
-template <typename... t_args>
+template <typename t_lhs_info, typename t_rhs_info>
 inline void seed_finder<t_configuration>::report_discarded(
-    gapmer_type chosen, gapmer_type discarded,
-    std::format_string<t_args...> fmt, t_args&&... args) const {
+    gapmer_type lhs, gapmer_type rhs, extension_validation_result res,
+    t_lhs_info const& lhs_info, t_rhs_info const& rhs_info,
+    char const* test_fn) const {
   if constexpr (enable_reporting_discarded_seeds) {
     libbio_assert(discarded_gapmer_reporting_ostream_);
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
-    std::print(stream, fmt, args...);
+
+    if (res)
+      stream << lhs << '\t' << rhs;
+    else
+      stream << rhs << '\t' << lhs;
+
+    stream << '\t' << bool(res) << "\t\t" << test_fn << '\t';
+
+    switch (res.strategy) {
+      case extension_validation_strategy::comparison_to_background:
+        stream << "Either aa or bb in background";
+        break;
+
+      case extension_validation_strategy::comparison_to_background_filtering:
+        stream << "Filtering and either aa or bb in background";
+        break;
+
+      case extension_validation_strategy::signal_count_only:
+        stream << "Using signal count only";
+        break;
+    }
+
+    stream << "; ";
+
+    switch (res.status) {
+      case extension_validation_status::ac_test_passed:
+        stream << "AC test passed";
+        break;
+      case extension_validation_status::binomial_and_ac_tests_passed:
+        stream << "binomial and AC tests passed";
+        break;
+      case extension_validation_status::target_ac_test_p_value_smaller:
+        stream << "target’s AC test p-value smaller";
+        break;
+      case extension_validation_status::source_signal_count_at_least_quadruple:
+        stream << "source signal count at least quadruple";
+        break;
+      case extension_validation_status::ac_test_failed:
+        stream << "AC test failed";
+        break;
+      case extension_validation_status::binomial_test_failed:
+        stream << "binomial test failed";
+        break;
+      case extension_validation_status::source_ac_test_p_value_smaller:
+        stream << "source’s AC test p-value was smaller";
+        break;
+    }
+
+    if (res)
+      stream << " (lhs: " << lhs_info << " rhs: " << rhs_info << ')';
+    else
+      stream << " (lhs: " << rhs_info << " rhs: " << lhs_info << ')';
   }
 }
 
@@ -290,8 +391,8 @@ inline void seed_finder<t_configuration>::report_encrichment_check_failure(
   if constexpr (enable_reporting_discarded_seeds) {
     libbio_assert(discarded_gapmer_reporting_ostream_);
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
-    stream << '\t' << discarded << '\t' << caller << '\t' << test_fn << '\t'
-           << res << '\n';
+    stream << '\t' << discarded << '\t' << false << '\t' << caller << '\t'
+           << test_fn << '\t' << res << '\n';
   }
 }
 
@@ -312,68 +413,60 @@ inline void seed_finder<t_configuration>::report_encrichment_check_failure(
  */
 template <typename t_configuration>
 template <typename t_value>
-bool seed_finder<t_configuration>::validate_extension(
+[[nodiscard]] auto seed_finder<t_configuration>::validate_extension(
     gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
-    enrichment_result<t_value> bb_er) const {
+    enrichment_result<t_value> bb_er) const -> extension_validation_result {
   if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
     if (aa_er.signal_count > bb_er.signal_count * 4) {
-      report_discarded(
-          aa, bb,
-          "Not extended since neither a nor b in background and number of a in "
-          "signal is at least quadruple w.r.t. b; "
-          "a_sig: {}, b_sig: {}",
-          aa_er.signal_count, bb_er.signal_count);
-      return false;
+      return extension_validation_result::make(
+          extension_validation_strategy::signal_count_only,
+          extension_validation_status::source_signal_count_at_least_quadruple);
     }
-    double p_extend =
-        gsl_cdf_binomial_Q(bb_er.signal_count, 0.25, aa_er.signal_count);
-    if (p_extend < p_ext_ && bb_er.ac_test_result < p_) {
-      report_discarded(bb, aa,
-                       "Extended since neither a nor b in background and "
-                       "binomial and AC test "
-                       "p-value limits reached; p_extend: {} "
-                       "b_r: {} a_sig: {} a_bg: {} b_sig: {} b_bg: {}",
-                       p_extend, bb_er.ac_test_result, aa_er.signal_count,
-                       aa_er.background_count, bb_er.signal_count,
-                       bb_er.background_count);
-      return true;
+
+    // Check the AC test result.
+    // FIXME: Is this needed since it uses the background count?
+    if (p_ <= bb_er.ac_test_result) {
+      return extension_validation_result::make(
+          extension_validation_strategy::signal_count_only,
+          extension_validation_status::ac_test_failed);
     }
-    report_discarded(aa, bb,
-                     "Not extended since neither a nor b in background and "
-                     "either binomial or AC "
-                     "test p-value limit not reached; p_extend: {} "
-                     "b_r: {} a_sig: {} a_bg: {} b_sig: {} b_bg: {}",
-                     p_extend, bb_er.ac_test_result, aa_er.signal_count,
-                     aa_er.background_count, bb_er.signal_count,
-                     bb_er.background_count);
-    return false;
+
+    // Binomial test.
+    double const p_ext{
+        gsl_cdf_binomial_Q(bb_er.signal_count, 0.25, aa_er.signal_count)};
+    if (p_ext_ <= p_ext) {
+      return extension_validation_result::make(
+          extension_validation_strategy::signal_count_only,
+          extension_validation_status::binomial_test_failed, p_ext);
+    }
+
+    // Success.
+    return extension_validation_result::make(
+        extension_validation_strategy::signal_count_only,
+        extension_validation_status::binomial_and_ac_tests_passed);
   }
 
   // Either a or b occurs in the background set.
   if constexpr (filter_mers) {
     if (bb_er.ac_test_result <= aa_er.ac_test_result) {
-      report_discarded(bb, aa,
-                       "Extended due to filtering since AC test p-value lte. "
-                       "for b; a_r: {} b_r: {}",
-                       aa_er.ac_test_result, bb_er.ac_test_result);
-      return true;
+      return extension_validation_result::make(
+          extension_validation_strategy::comparison_to_background_filtering,
+          extension_validation_status::target_ac_test_p_value_smaller);
     }
-    report_discarded(aa, bb,
-                     "Not extended due to filtering since AC test p-value gt. "
-                     "for b; a_r: {} b_r: {}",
-                     aa_er.ac_test_result, bb_er.ac_test_result);
-    return false;
+
+    return extension_validation_result::make(
+        extension_validation_strategy::comparison_to_background_filtering,
+        extension_validation_status::source_ac_test_p_value_smaller);
   } else {
     if (bb_er.ac_test_result <= p_) {
-      report_discarded(bb, aa,
-                       "Extended since AC test p-value limit reached; b_r: {}",
-                       bb_er.ac_test_result);
-      return true;
+      return extension_validation_result::make(
+          extension_validation_strategy::comparison_to_background,
+          extension_validation_status::ac_test_passed);
     }
-    report_discarded(
-        aa, bb, "Not extended since AC test p-value limit not reached; b_r: {}",
-        bb_er.ac_test_result);
-    return false;
+
+    return extension_validation_result::make(
+        extension_validation_strategy::comparison_to_background,
+        extension_validation_status::ac_test_failed);
   }
 }
 
@@ -391,7 +484,7 @@ bool seed_finder<t_configuration>::validate_extension(
  */
 template <typename t_configuration>
 template <bool t_calculate_ac_test_for_bb, typename t_value>
-bool seed_finder<t_configuration>::should_filter(
+[[nodiscard]] bool seed_finder<t_configuration>::should_filter(
     gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
     enrichment_result<t_value>& bb_er) const {
   if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
@@ -514,6 +607,7 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
         double const osc{o_counts.signal_count + 1};
         double const obc{o_counts.background_count + 1};
         if (osc * bg_size_ <= fold_lim_ * obc * sig_size_) {
+          // FIXME: report discarded.
           critical([&] { counts.mark_discarded(oo, o_offset); });
           return;
         }
@@ -521,12 +615,20 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
         if constexpr (t_should_extend) {
           double const o_r{error_suppressed_beta_inc(
               osc, obc, signal_to_total_length_ratio_)};
-          if (validate_extension(gg, oo, sc, bc, osc, obc, rr, o_r)) {
+
+          enrichment_result other_enrichment_res{o_r, osc, obc};
+          auto const res{
+              validate_extension(gg, oo, enrichment_res, other_enrichment_res)};
+          report_discarded(gg, oo, res, enrichment_res, other_enrichment_res,
+                           "filter_huddinge_neighbourhood");
+
+          if (res) {
             prev_critical([&] { prev_counts->mark_discarded(gg, offset); });
           } else {
             critical([&] { counts.mark_discarded(oo, o_offset); });
           }
         } else {
+          // FIXME: report discarded.
           double o_r{};
           if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
             critical([&] { counts.mark_discarded(gg, offset); });
@@ -720,11 +822,19 @@ void seed_finder<t_configuration>::extend_counted(
             }());
 
             auto const enrichment_res{check_enrichment(count)};
-            if (not enrichment_res) return;
+            if (not enrichment_res) {
+              report_encrichment_check_failure(oo, enrichment_res, "extend",
+                                               "extend_counted");
+              return;
+            }
 
             auto const enrichment_res_fp{
                 enrichment_res.result.template to_enrichment_result<double>()};
-            if (validate_extension(p.first, oo, p.second, enrichment_res_fp)) {
+            auto const res{
+                validate_extension(p.first, oo, p.second, enrichment_res_fp)};
+            report_discarded(p.first, oo, res, p.second, enrichment_res,
+                             "extend_counted");
+            if (res) {
               bb[oo] = enrichment_res_fp;
             }
           }
@@ -814,7 +924,9 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
               o = o.reverse_complement();
             }
             if (bb.contains(o)) {
-              if (validate_extension(kv.first, o, kv.second, bb[o])) {
+              auto const res{validate_extension(kv.first, o, kv.second, bb[o])};
+              report_discarded(kv.first, o, res, kv.second, bb[o], "extend");
+              if (res) {
                 keep = false;
               }
             }
