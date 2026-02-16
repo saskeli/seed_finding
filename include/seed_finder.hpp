@@ -191,6 +191,17 @@ inline std::ostream& operator<<(std::ostream& os,
 
 namespace sf {
 
+template <typename t_gapmer>
+struct seed {
+  typedef t_gapmer gapmer_type;
+
+  gapmer_type g{};
+  double p{};
+  uint64_t sig_count{};
+  uint64_t bg_count{};
+};
+
+
 template <bool t_middle_gap_only, uint8_t t_max_gap, bool t_enable_smoothing,
           bool t_filter_mers, bool t_enable_reporting_discarded_seeds>
 struct seed_finder_configuration {
@@ -237,26 +248,7 @@ class seed_finder {
   };
 
  public:
-  struct seed {
-    friend seed_finder;
-
-    gapmer_type g{};
-    double p{};
-    uint64_t sig_count{};
-    uint64_t bg_count{};
-
-   private:
-    static seed from_seed_meta(gapmer_type g_, seed_meta mm) {
-      return {g_, mm.p, mm.sig_count, mm.bg_count};
-    }
-
-    template <typename t_value>
-    static seed from_enrichment_result(gapmer_type g_,
-                                       enrichment_result<t_value> er) {
-      return {g_, er.ac_test_result, uint64_t(er.signal_count),
-              uint64_t(er.background_count)};
-    }
-  };
+  typedef seed<gapmer_type> seed;
 
  private:
   typedef gapmer_count<gapmer_type> gapmer_count_type;
@@ -286,6 +278,12 @@ class seed_finder {
   uint8_t k_lim_;
   uint8_t lookup_k_;
   bool prune_;
+
+  static inline seed seed_from_seed_meta(gapmer_type g_, seed_meta mm);
+
+  template <typename t_value>
+  static inline seed seed_from_enrichment_result(gapmer_type g_,
+                                                 enrichment_result<t_value> er);
 
   // Thread safe.
   template <typename t_lhs_info, typename t_rhs_info>
@@ -397,6 +395,22 @@ class seed_finder {
     return signal_to_total_length_ratio_;
   }
 };
+
+
+template <typename t_configuration>
+auto seed_finder<t_configuration>::seed_from_seed_meta(gapmer_type g_,
+                                                       seed_meta mm) -> seed {
+  return {g_, mm.p, mm.sig_count, mm.bg_count};
+}
+
+
+template <typename t_configuration>
+template <typename t_value>
+auto seed_finder<t_configuration>::seed_from_enrichment_result(
+    gapmer_type g_, enrichment_result<t_value> er) -> seed {
+  return {g_, er.ac_test_result, uint64_t(er.signal_count),
+          uint64_t(er.background_count)};
+}
 
 
 // Thread safe.
@@ -904,7 +918,7 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
   if (prune) {
     std::vector<seed> prio;
     for (auto kv : aa) {
-      prio.emplace_back(seed::from_enrichment_result(kv.first, kv.second));
+      prio.emplace_back(seed_from_enrichment_result(kv.first, kv.second));
     }
     // Sort by fold change.
     std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
@@ -1052,7 +1066,7 @@ void seed_finder<t_configuration>::find_seeds() {
     std::print(std::cerr, "    {} {} candidates\n", aa.size(), +(k - 1));
     std::print(std::cerr, "    {} {} potentials\n", bb.size(), +k);
     for (auto pp : aa) {
-      seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
+      seeds_.emplace_back(seed_from_enrichment_result(pp.first, pp.second));
     }
     aa.clear();
     if constexpr (filter_mers) {
@@ -1066,7 +1080,7 @@ void seed_finder<t_configuration>::find_seeds() {
   }
   if (aa.size() > 0) {
     for (auto pp : aa) {
-      seeds_.emplace_back(seed::from_enrichment_result(pp.first, pp.second));
+      seeds_.emplace_back(seed_from_enrichment_result(pp.first, pp.second));
     }
     std::print(std::cerr, "{} → {} candidates.\n", +k_lim_, seeds_.size());
   }
