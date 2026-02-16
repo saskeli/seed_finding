@@ -5,11 +5,11 @@
 #include <iostream>
 #include <libbio/file_handle.hh>
 #include <libbio/file_handling.hh>
+#include <libbio/syncstream.hh>
 #include <stdexcept>
 #include <string>
 #include <string_view>
 
-#include "libbio/syncstream.hh"
 #include "packed_read.hpp"
 #include "reader_adapter.hpp"
 
@@ -311,6 +311,8 @@ struct reader_adapter_delegate : public sf::reader_adapter_delegate {
 
 
 int main(int argc, char const* argv[]) {
+  std::ios_base::sync_with_stdio(false);
+
   //print_invocation(argc, argv);
   configuration conf{parse_command_line_arguments(argc, argv)};
 
