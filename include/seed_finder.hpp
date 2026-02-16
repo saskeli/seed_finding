@@ -248,7 +248,7 @@ class seed_finder {
   };
 
  public:
-  typedef seed<gapmer_type> seed;
+  typedef seed<gapmer_type> seed_type;
 
  private:
   typedef gapmer_count<gapmer_type> gapmer_count_type;
@@ -266,7 +266,7 @@ class seed_finder {
 
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
-  std::vector<seed> seeds_;
+  std::vector<seed_type> seeds_;
   std::ostream* discarded_gapmer_reporting_ostream_{};
   uint64_t sig_size_;
   uint64_t bg_size_;
@@ -279,11 +279,11 @@ class seed_finder {
   uint8_t lookup_k_;
   bool prune_;
 
-  static inline seed seed_from_seed_meta(gapmer_type g_, seed_meta mm);
+  static inline seed_type seed_from_seed_meta(gapmer_type g_, seed_meta mm);
 
   template <typename t_value>
-  static inline seed seed_from_enrichment_result(gapmer_type g_,
-                                                 enrichment_result<t_value> er);
+  static inline seed_type seed_from_enrichment_result(
+      gapmer_type g_, enrichment_result<t_value> er);
 
   // Thread safe.
   template <typename t_lhs_info, typename t_rhs_info>
@@ -389,7 +389,8 @@ class seed_finder {
     discarded_gapmer_reporting_ostream_ = &stream;
   }
 
-  const std::vector<seed>& get_seeds() const { return seeds_; }
+  std::vector<seed_type>& get_seeds() { return seeds_; }
+  const std::vector<seed_type>& get_seeds() const { return seeds_; }
 
   double signal_to_total_length_ratio() const {
     return signal_to_total_length_ratio_;
@@ -399,7 +400,8 @@ class seed_finder {
 
 template <typename t_configuration>
 auto seed_finder<t_configuration>::seed_from_seed_meta(gapmer_type g_,
-                                                       seed_meta mm) -> seed {
+                                                       seed_meta mm)
+    -> seed_type {
   return {g_, mm.p, mm.sig_count, mm.bg_count};
 }
 
@@ -407,7 +409,7 @@ auto seed_finder<t_configuration>::seed_from_seed_meta(gapmer_type g_,
 template <typename t_configuration>
 template <typename t_value>
 auto seed_finder<t_configuration>::seed_from_enrichment_result(
-    gapmer_type g_, enrichment_result<t_value> er) -> seed {
+    gapmer_type g_, enrichment_result<t_value> er) -> seed_type {
   return {g_, er.ac_test_result, uint64_t(er.signal_count),
           uint64_t(er.background_count)};
 }
@@ -916,7 +918,7 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
   }};
 
   if (prune) {
-    std::vector<seed> prio;
+    std::vector<seed_type> prio;
     for (auto kv : aa) {
       prio.emplace_back(seed_from_enrichment_result(kv.first, kv.second));
     }
