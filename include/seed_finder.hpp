@@ -515,12 +515,12 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
  * @param sig_bg_k1 Length k + 1 gapmer count tables
  */
 template <typename t_configuration>
-auto seed_finder<t_configuration>::check_count(
-    gapmer_type const gg, uint64_t offset, gapmer_count_type& sig_bg_k,
-    gapmer_count_type& sig_bg_k1)
+auto seed_finder<t_configuration>::check_count(gapmer_type const gg,
+                                               uint64_t offset,
+                                               gapmer_count_type& sig_bg_k,
+                                               gapmer_count_type& sig_bg_k1)
     -> enrichment_check_result<gapmer_count_value_type> {
-  auto const res{
-      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_a_bv{})};
+  auto res{check_enrichment_and_filter(gg, offset, sig_bg_k, critical_a_bv{})};
   if (not res) return res;
 
   auto const& enrichment_res{res.result};
@@ -533,9 +533,12 @@ auto seed_finder<t_configuration>::check_count(
                                         critical_o_bv{}, &sig_bg_k,
                                         critical_a_bv{});
 
+    // FIXME: Not necessarily atomic. (Likely works on x86-64.)
     if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
       seeds_.emplace_back(gg, rr, uint64_t(sc), uint64_t(bc));
+    } else {
+      res.status = enrichment_check_status::discarded_earlier;
     }
   } else {
 #pragma omp critical
@@ -562,16 +565,18 @@ auto seed_finder<t_configuration>::filter_count(gapmer_type const gg,
                                                 gapmer_count_type& sig_bg_k,
                                                 enrichment_result_map& mm) const
     -> enrichment_check_result<gapmer_count_value_type> {
-  auto const& res{
-      check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
+  auto res{check_enrichment_and_filter(gg, offset, sig_bg_k, critical_d_bv{})};
   if (not res) return res;
 
   if constexpr (filter_mers) {
     filter_huddinge_neighbourhood<false>(gg, offset, res.result, sig_bg_k,
                                          critical_d_bv{});
+    // FIXME: Not necessarily atomic. (Likely works on x86-64.)
     if (not sig_bg_k.is_discarded(gg, offset)) {
 #pragma omp critical
       mm[gg] = res.result;
+    } else {
+      res.status = enrichment_check_status::discarded_earlier;
     }
   } else {
 #pragma omp critical
