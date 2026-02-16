@@ -398,7 +398,7 @@ int main(int argc, char const* argv[]) {
       if (not conf.discarded_gapmer_output_path.empty()) {
         lb::open_file_for_writing(conf.discarded_gapmer_output_path,
                                   discarded_gapmer_output_stream,
-                                  lb::writing_open_mode::CREATE);
+                                  lb::make_writing_open_mode({lb::writing_open_mode::CREATE, lb::writing_open_mode::OVERWRITE}));
         discarded_gapmer_output_stream
             << "operation\tseed\tdiscarded_seed\tstatus\tcaller\ttesting_"
                "function\tdescription\n";
