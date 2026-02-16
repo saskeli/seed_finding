@@ -32,7 +32,7 @@ struct enrichment_result {
   t_value signal_count{};
   t_value background_count{};
 
-    // FIXME: remove?
+  // FIXME: remove?
   template <typename t_value_>
   enrichment_result<t_value_> to_enrichment_result() const {
     return enrichment_result<t_value_>(ac_test_result, t_value_(signal_count),
@@ -55,6 +55,14 @@ struct enrichment_check_result {
 
   operator bool() const { return status == enrichment_check_status::success; }
 };
+
+
+template <typename t_value>
+std::ostream& operator<<(std::ostream& os, enrichment_result<t_value> er) {
+  std::print(os, "(SC: {} BC: {} AC test p-value: {})", er.signal_count,
+             er.background_count, er.ac_test_result);
+  return os;
+}
 }  // namespace sf::detail
 
 
