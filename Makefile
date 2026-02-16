@@ -157,6 +157,9 @@ comp: comp.o include/util.hpp
 list_gapmers: $(LIST_GAPMERS_OBJECTS) $(HEADERS) $(ARGS_HXX) $(LIBBIO_DIR)/src/libbio.a | $(ARGS_DIR) $(LIBBIO_DIR)
 	$(CXX) $(CXXFLAGS) $(LIST_GAPMERS_OBJECTS) -o $@ $(LIBBIO_DIR)/src/libbio.a $(LDFLAGS)
 
+read_log: read_log.o
+	$(CXX) $(CXXFLAGS) $< -o $@ $(LDFLAGS)
+
 huddinge_deb: huddinge.debug.o $(HEADERS)
 	$(CXX) $(DEBUG_CXXFLAGS) $< -o $@ $(DEBUG_LDFLAGS)
 
@@ -164,9 +167,9 @@ seed_finder_deb: $(SEED_FINDER_DEBUG_OBJECTS) $(HEADERS) $(ARGS_HXX) | $(SDSL_DI
 	$(CXX) $(DEBUG_CXXFLAGS) $(SEED_FINDER_DEBUG_OBJECTS) -o $@ $(DEBUG_LDFLAGS)
 
 clean:
-	$(RM) $(SEED_FINDER_OBJECTS) motivating.o huddinge.o comp.o list_gapmers.o $(SEED_FINDER_DEBUG_OBJECTS) huddinge.debug.o $(TEST_OBJECTS) $(TEST_COVERAGE_OBJECTS)
+	$(RM) $(SEED_FINDER_OBJECTS) motivating.o huddinge.o comp.o list_gapmers.o read_log.o $(SEED_FINDER_DEBUG_OBJECTS) huddinge.debug.o $(TEST_OBJECTS) $(TEST_COVERAGE_OBJECTS)
 	$(RM) $(GCDA) $(GCNO) coverage.info
-	$(RM) huddinge huddinge_deb seed_finder seed_finder_deb comp list_gapmers motivating
+	$(RM) huddinge huddinge_deb seed_finder seed_finder_deb comp list_gapmers motivating read_log
 	$(RM) test/test test/cover
 	$(RM) -r target/
 
