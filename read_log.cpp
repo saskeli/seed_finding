@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <print>
 #include <string>
@@ -70,12 +71,15 @@ int main(int argc, char** argv) {
 
   args::ArgumentParser parser(
       "Read a TSV-formatted log file from stdin and filter lines according to "
-      "the given "
-      "options.");
+      "the given options.");
   args::ValueFlagList<field_value<std::string>, std::vector,
                       field_value_reader<std::string>>
       field_equals_(parser, "equals", "Given field equals the passed value",
                     {"equals"});
+  args::ValueFlagList<field_value<std::string>, std::vector,
+                      field_value_reader<std::string>>
+      field_contains_(parser, "contains",
+                      "Given field contains the passed value", {"contains"});
 
   try {
     parser.ParseCLI(argc, argv);
@@ -96,16 +100,16 @@ int main(int argc, char** argv) {
   std::vector<std::string_view> fields;
   std::size_t lineno{};
 
-  auto const check_fields_eq([&] -> bool {
-    for (auto const& eq : args::get(field_equals_)) {
-      std::size_t field_idx(eq.field - 1); // Checked earlier.
+  auto const check_fields([&](auto& args, auto const& test) -> bool {
+    for (auto const& fv : args::get(args)) {
+      std::size_t field_idx(fv.field - 1); // Checked earlier.
       if (fields.size() <= field_idx) {
         std::print(std::cerr, "WARNING: Field count on line {} was {}.\n",
                    lineno, fields.size());
         return false;
       }
 
-      if (eq.value != fields[field_idx]) return false;
+      if (not test(fv.value, fields[field_idx])) return false;
     }
 
     return true;
@@ -115,7 +119,12 @@ int main(int argc, char** argv) {
     ++lineno;
     split_tabs(buffer, fields);
 
-    if (not check_fields_eq()) continue;
+    if (not check_fields(field_equals_, std::equal_to{})) continue;
+    if (not check_fields(field_contains_,
+                         [](auto const& passed, auto const& actual) {
+                           return actual.contains(passed);
+                         }))
+      continue;
 
     std::cout << buffer << '\n';
   }
