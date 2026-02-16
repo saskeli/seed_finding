@@ -23,6 +23,41 @@
 #include "partial_count.hpp"
 #include "util.hpp"
 
+
+namespace sf::detail {
+// FIXME: Consider using the same value type (e.g. double) for all counts.
+template <typename t_value>
+struct enrichment_result {
+  double ac_test_result{};
+  t_value signal_count{};
+  t_value background_count{};
+
+    // FIXME: remove?
+  template <typename t_value_>
+  enrichment_result<t_value_> to_enrichment_result() const {
+    return enrichment_result<t_value_>(ac_test_result, t_value_(signal_count),
+                                       t_value_(background_count));
+  }
+};
+
+enum class enrichment_check_status {
+  success,
+  fold_change_test_failed,
+  ac_test_failed,
+  discarded_earlier,
+  not_canonical
+};
+
+template <typename t_value>
+struct enrichment_check_result {
+  enrichment_result<t_value> result{};
+  enrichment_check_status status{enrichment_check_status::success};
+
+  operator bool() const { return status == enrichment_check_status::success; }
+};
+}  // namespace sf::detail
+
+
 namespace sf {
 
 template <bool t_middle_gap_only, uint8_t t_max_gap, bool t_enable_smoothing,
@@ -52,36 +87,13 @@ class seed_finder {
   typedef gapmer<middle_gap_only, max_gap> gapmer_type;
 
  private:
-  // FIXME: Consider using the same value type (e.g. double) for all counts.
-  template <typename t_value>
-  struct enrichment_result {
-    double ac_test_result{};
-    t_value signal_count{};
-    t_value background_count{};
-
-    // FIXME: remove?
-    template <typename t_value_>
-    enrichment_result<t_value_> to_enrichment_result() const {
-      return enrichment_result<t_value_>(ac_test_result, t_value_(signal_count),
-                                         t_value_(background_count));
-    }
-  };
-
-  enum class enrichment_check_status {
-    success,
-    fold_change_test_failed,
-    ac_test_failed,
-    discarded_earlier,
-    not_canonical
-  };
+  typedef detail::enrichment_check_status enrichment_check_status;
 
   template <typename t_value>
-  struct enrichment_check_result {
-    enrichment_result<t_value> result{};
-    enrichment_check_status status{enrichment_check_status::success};
+  using enrichment_result = detail::enrichment_result<t_value>;
 
-    operator bool() const { return status == enrichment_check_status::success; }
-  };
+  template <typename t_value>
+  using enrichment_check_result = detail::enrichment_check_result<t_value>;
 
   // FIXME: remove.
   struct seed_meta {
