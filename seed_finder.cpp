@@ -399,6 +399,9 @@ int main(int argc, char const* argv[]) {
         lb::open_file_for_writing(conf.discarded_gapmer_output_path,
                                   discarded_gapmer_output_stream,
                                   lb::writing_open_mode::CREATE);
+        discarded_gapmer_output_stream
+            << "operation\tseed\tdiscarded_seed\tstatus\tcaller\ttesting_"
+               "function\tdescription\n";
         finder.set_discarded_gapmer_reporting_ostream(
             discarded_gapmer_output_stream);
       }

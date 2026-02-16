@@ -375,6 +375,8 @@ inline void seed_finder<t_configuration>::report_discarded(
     libbio_assert(discarded_gapmer_reporting_ostream_);
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
+    stream << "extension\t";
+
     if (res)
       stream << lhs << '\t' << rhs;
     else
@@ -400,8 +402,9 @@ inline void seed_finder<t_configuration>::report_encrichment_check_failure(
   if constexpr (enable_reporting_discarded_seeds) {
     libbio_assert(discarded_gapmer_reporting_ostream_);
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
-    stream << '\t' << discarded << '\t' << false << '\t' << caller << '\t'
-           << test_fn << '\t' << res << '\n';
+
+    stream << "encrichment check\t\t" << discarded << '\t' << false << '\t'
+           << caller << '\t' << test_fn << '\t' << res << '\n';
   }
 }
 
