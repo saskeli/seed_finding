@@ -67,6 +67,22 @@ class seed_finder {
     }
   };
 
+  enum class enrichment_check_status {
+    success,
+    fold_change_test_failed,
+    ac_test_failed,
+    discarded_earlier,
+    not_canonical
+  };
+
+  template <typename t_value>
+  struct enrichment_check_result {
+    enrichment_result<t_value> result{};
+    enrichment_check_status status{enrichment_check_status::success};
+
+    operator bool() const { return status == enrichment_check_status::success; }
+  };
+
   // FIXME: remove.
   struct seed_meta {
     double p{};
@@ -131,6 +147,11 @@ class seed_finder {
                                t_args&&... args) const;
 
   template <typename t_value>
+  inline void report_encrichment_check_failure(
+      gapmer_type discarded, enrichment_check_result<t_value> res,
+      char const* caller, char const* test_fn) const;
+
+  template <typename t_value>
   bool validate_extension(gapmer_type aa, gapmer_type bb,
                           enrichment_result<t_value> aa_er,
                           enrichment_result<t_value> bb_er) const;
@@ -139,22 +160,6 @@ class seed_finder {
   bool should_filter(gapmer_type aa, gapmer_type bb,
                      enrichment_result<t_value> aa_er,
                      enrichment_result<t_value>& bb_er) const;
-
-  enum class enrichment_check_status {
-    success,
-    fold_change_test_failed,
-    ac_test_failed,
-    discarded_earlier,
-    not_canonical
-  };
-
-  template <typename t_value>
-  struct enrichment_check_result {
-    enrichment_result<t_value> result{};
-    enrichment_check_status status{enrichment_check_status::success};
-
-    operator bool() const { return status == enrichment_check_status::success; }
-  };
 
   template <typename t_value>
   [[nodiscard]] enrichment_check_result<t_value> check_enrichment(
@@ -253,6 +258,20 @@ inline void seed_finder<t_configuration>::report_discarded(
     libbio_assert(discarded_gapmer_reporting_ostream_);
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
     std::print(stream, fmt, args...);
+  }
+}
+
+
+template <typename t_configuration>
+template <typename t_value>
+inline void seed_finder<t_configuration>::report_encrichment_check_failure(
+    gapmer_type discarded, enrichment_check_result<t_value> res,
+    char const* caller, char const* test_fn) const {
+  if constexpr (enable_reporting_discarded_seeds) {
+    libbio_assert(discarded_gapmer_reporting_ostream_);
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
+    stream << '\t' << discarded << '\t' << caller << '\t' << test_fn << '\t'
+           << res << '\n';
   }
 }
 
@@ -615,7 +634,10 @@ void seed_finder<t_configuration>::count_short_gapmers(
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
       gapmer_type const gg(v, k - 1, 0, 0);
-      check_count(gg, 0, sig_bg_a, sig_bg_b);
+      if (auto const res{check_count(gg, 0, sig_bg_a, sig_bg_b)}; not res) {
+        report_encrichment_check_failure(gg, res, "count_short_gapmers",
+                                         "check_count");
+      }
     }
     uint8_t gap_s = middle_gap_only ? (k - 1) / 2 : 1;
     uint8_t gap_lim = middle_gap_only ? k - gap_s - 1 : k - 2;
@@ -625,7 +647,11 @@ void seed_finder<t_configuration>::count_short_gapmers(
 #pragma omp parallel for
         for (uint64_t v = 0; v < v_lim; ++v) {
           gapmer_type gg(v, k - 1, gap_s, gap_l);
-          check_count(gg, offset, sig_bg_a, sig_bg_b);
+          if (auto const res{check_count(gg, offset, sig_bg_a, sig_bg_b)};
+              not res) {
+            report_encrichment_check_failure(gg, res, "count_short_gapmers",
+                                             "check_count");
+          }
         }
       }
     }
@@ -841,7 +867,9 @@ void seed_finder<t_configuration>::find_seeds() {
 #pragma omp parallel for
     for (uint64_t v = 0; v < v_lim; ++v) {
       gapmer_type const gg(v, lookup_k_, 0, 0);
-      filter_count(gg, 0, sig_bg_c, aa);
+      if (auto const res{filter_count(gg, 0, sig_bg_c, aa)}; not res) {
+        report_encrichment_check_failure(gg, res, "find_seeds", "filter_count");
+      }
     }
     uint8_t gap_s = middle_gap_only ? lookup_k_ / 2 : 1;
     uint8_t const gap_lim(middle_gap_only ? lookup_k_ - gap_s : lookup_k_ - 1);
@@ -851,7 +879,10 @@ void seed_finder<t_configuration>::find_seeds() {
 #pragma omp parallel for
         for (uint64_t v = 0; v < v_lim; ++v) {
           gapmer_type const gg(v, lookup_k_, 0, 0);
-          filter_count(gg, offset, sig_bg_c, aa);
+          if (auto const res{filter_count(gg, offset, sig_bg_c, aa)}; not res) {
+            report_encrichment_check_failure(gg, res, "find_seeds",
+                                             "filter_count");
+          }
         }
       }
     }
