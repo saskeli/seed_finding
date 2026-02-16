@@ -814,10 +814,6 @@ void seed_finder<t_configuration>::extend_counted(
     enrichment_result_map const& aa, enrichment_result_map& bb,
     partial_count_type const& counts) const {
   for (auto p : aa) {
-#ifdef DEBUG
-    std::cerr << "        " << p.first.to_string() << ": " << p.second.sig_count
-              << ", " << p.second.bg_count << ", " << p.second.p << std::endl;
-#endif
     p.first.template huddinge_neighbours<true, true, false>(
         [&](gapmer_type oo) {
           if (not oo.is_canonical()) {
@@ -922,11 +918,6 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
   if constexpr (filter_mers) {
     std::cerr << "\tFiltering sources..." << std::endl;
     for (auto kv : aa) {
-#ifdef DEBUG
-      std::cerr << "        " << kv.first.to_string() << ": "
-                << kv.second.sig_count << ", " << kv.second.bg_count << ", "
-                << kv.second.p << std::endl;
-#endif
       bool keep = true;
 
       kv.first.template huddinge_neighbours<true, true, false>(
