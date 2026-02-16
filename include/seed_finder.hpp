@@ -134,9 +134,10 @@ std::ostream& operator<<(std::ostream& os, enrichment_result<t_value> er) {
 
 
 template <typename t_value>
-std::ostream &operator<<(std::ostream& os, enrichment_check_result<t_value> er) {
-	os << "Status: " << er.status << " (" << er.result << ')';
-	return os;
+std::ostream& operator<<(std::ostream& os,
+                         enrichment_check_result<t_value> er) {
+  os << "Status: " << er.status << " (" << er.result << ')';
+  return os;
 }
 
 
@@ -296,7 +297,7 @@ class seed_finder {
 
   // Thread safe.
   template <typename t_value>
-  inline void report_encrichment_check_failure(
+  inline void report_enrichment_check_failure(
       gapmer_type discarded, enrichment_check_result<t_value> res,
       char const* caller, char const* test_fn) const;
 
@@ -430,14 +431,14 @@ inline void seed_finder<t_configuration>::report_discarded(
 // Thread safe.
 template <typename t_configuration>
 template <typename t_value>
-inline void seed_finder<t_configuration>::report_encrichment_check_failure(
+inline void seed_finder<t_configuration>::report_enrichment_check_failure(
     gapmer_type discarded, enrichment_check_result<t_value> res,
     char const* caller, char const* test_fn) const {
   if constexpr (enable_reporting_discarded_seeds) {
     libbio_assert(discarded_gapmer_reporting_ostream_);
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
-    stream << "encrichment check\t\t" << discarded << '\t' << bool(res) << '\t'
+    stream << "enrichment check\t\t" << discarded << '\t' << bool(res) << '\t'
            << caller << '\t' << test_fn << '\t' << res << '\n';
   }
 }
@@ -791,8 +792,8 @@ void seed_finder<t_configuration>::count_short_gapmers(
     for (uint64_t v = 0; v < v_lim; ++v) {
       gapmer_type const gg(v, k - 1, 0, 0);
       if (auto const res{check_count(gg, 0, counts_k, counts_k1)}; not res) {
-        report_encrichment_check_failure(gg, res, "count_short_gapmers",
-                                         "check_count");
+        report_enrichment_check_failure(gg, res, "count_short_gapmers",
+                                        "check_count");
       }
     }
     uint8_t gap_s = middle_gap_only ? (k - 1) / 2 : 1;
@@ -805,8 +806,8 @@ void seed_finder<t_configuration>::count_short_gapmers(
           gapmer_type gg(v, k - 1, gap_s, gap_l);
           if (auto const res{check_count(gg, offset, counts_k, counts_k1)};
               not res) {
-            report_encrichment_check_failure(gg, res, "count_short_gapmers",
-                                             "check_count");
+            report_enrichment_check_failure(gg, res, "count_short_gapmers",
+                                            "check_count");
           }
         }
       }
@@ -852,8 +853,8 @@ void seed_finder<t_configuration>::extend_counted(
 
             auto const enrichment_res{check_enrichment(count)};
             if (not enrichment_res) {
-              report_encrichment_check_failure(oo, enrichment_res, "extend",
-                                               "extend_counted");
+              report_enrichment_check_failure(oo, enrichment_res, "extend",
+                                              "extend_counted");
               return;
             }
 
@@ -1023,7 +1024,7 @@ void seed_finder<t_configuration>::find_seeds() {
     for (uint64_t v = 0; v < v_lim; ++v) {
       gapmer_type const gg(v, lookup_k_, 0, 0);
       if (auto const res{filter_count(gg, 0, counts, aa)}; not res) {
-        report_encrichment_check_failure(gg, res, "find_seeds", "filter_count");
+        report_enrichment_check_failure(gg, res, "find_seeds", "filter_count");
       }
     }
     uint8_t gap_s = middle_gap_only ? lookup_k_ / 2 : 1;
@@ -1035,8 +1036,8 @@ void seed_finder<t_configuration>::find_seeds() {
         for (uint64_t v = 0; v < v_lim; ++v) {
           gapmer_type const gg(v, lookup_k_, 0, 0);
           if (auto const res{filter_count(gg, offset, counts, aa)}; not res) {
-            report_encrichment_check_failure(gg, res, "find_seeds",
-                                             "filter_count");
+            report_enrichment_check_failure(gg, res, "find_seeds",
+                                            "filter_count");
           }
         }
       }
