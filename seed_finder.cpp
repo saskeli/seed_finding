@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -116,6 +117,8 @@ struct configuration {
   uint16_t max_k{20};
   double mem_limit{};
   bool enable_smoothing{true};
+  bool enable_clustering{false};
+  bool should_output_options{false};
 
   configuration()
       :
@@ -132,6 +135,8 @@ std::ostream& operator<<(std::ostream& os, configuration const& conf) {
   os << "sig_path:                  " << conf.sig_path << '\n';
   os << "prefix:                    " << conf.prefix << '\n';
   os << "dot_output:                " << conf.dot_output << '\n';
+  os << "discarded_gapmer_output_path: " << conf.discarded_gapmer_output_path
+     << '\n';
   os << "middle_gap_only:           " << conf.middle_gap_only << '\n';
   os << "prune:                     " << conf.prune << '\n';
   os << "should_output_all_matches: " << conf.should_output_all_matches << '\n';
@@ -146,6 +151,8 @@ std::ostream& operator<<(std::ostream& os, configuration const& conf) {
   os << "max_k:                     " << conf.max_k << '\n';
   os << "mem_limit:                 " << conf.mem_limit << '\n';
   os << "enable_smoothing:          " << conf.enable_smoothing << '\n';
+  os << "enable_clustering:         " << conf.enable_clustering << '\n';
+  os << "should_output_options:     " << conf.should_output_options << '\n';
 
   return os;
 }
@@ -208,10 +215,13 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     sf::args::value_flag threads_(parser, "threads",
                                   "Number of threads to use.", {'t', "threads"},
                                   retval.threads);
-    sf::args::value_flag prefix_(parser, "output_prefix",
-                                 "Prefix for alignment output, If not given, "
-                                 "no alignments will be output.",
-                                 {"pref"}, retval.prefix);
+    args::Flag enable_clustering_(parser, "cluster",
+                                  "Cluster the candidate seeds", {"cluster"});
+    sf::args::value_flag prefix_(
+        parser, "output_prefix",
+        "Prefix for alignment output, If not given, "
+        "no alignments will be output. Requires --cluster.",
+        {"pref"}, retval.prefix);
     sf::args::value_flag print_lim_(
         parser, "max_s",
         "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
@@ -245,6 +255,9 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     sf::args::value_flag discarded_gapmer_output_path_(
         parser, "path", "Output discarded gapmers to the given path",
         {"output-discarded-gapmers"}, retval.discarded_gapmer_output_path);
+    args::Flag should_output_options_(parser, "output_options",
+                                      "Output the parsed options to stderr.",
+                                      {"output-options"});
 
     // Parse and check.
     try {
@@ -268,6 +281,8 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     if (should_output_all_matches_) retval.should_output_all_matches = true;
     if (disable_smoothing_) retval.enable_smoothing = false;
     if (enable_pruning_) retval.prune = true;
+    if (enable_clustering_) retval.enable_clustering = true;
+    if (should_output_options_) retval.should_output_options = true;
   }
 
   if (retval.print_lim == 0) {
@@ -416,19 +431,29 @@ int main(int argc, char const* argv[]) {
                                              finder.get_seeds(), conf.max_k);
     }
 
-    auto sc{make_seed_clusterer<middle_gap_only, max_gap>(
-        finder.get_seeds(), signal_reads, background_reads, conf.p_ext,
-        conf.h1_weight, finder.signal_to_total_length_ratio())};
-    std::cout << "seed\tsignal_count\tbackground_count\tp_value\tpriority"
-              << std::endl;
-    for (size_t i = 0; i < conf.print_lim; ++i) {
-      if (not sc.has_next()) {
-        break;
+    if (conf.enable_clustering) {
+      auto sc{make_seed_clusterer<middle_gap_only, max_gap>(
+          finder.get_seeds(), signal_reads, background_reads, conf.p_ext,
+          conf.h1_weight, finder.signal_to_total_length_ratio())};
+      std::cout << "seed\tsignal_count\tbackground_count\tp_value\tpriority"
+                << std::endl;
+      for (size_t i = 0; i < conf.print_lim; ++i) {
+        if (not sc.has_next()) {
+          break;
+        }
+        if (conf.max_aligns == i) {
+          conf.prefix = "";
+        }
+        sc.output_cluster(conf.prefix, conf.should_output_all_matches);
       }
-      if (conf.max_aligns == i) {
-        conf.prefix = "";
-      }
-      sc.output_cluster(conf.prefix, conf.should_output_all_matches);
+    } else {
+      auto& seeds{finder.get_seeds()};
+      std::sort(seeds.begin(), seeds.end(),
+                [](auto const& lhs, auto const& rhs) { return lhs.p < rhs.p; });
+      std::cout << "seed\tsignal_count\tbackground_count\tp_value\n";
+      for (auto const& seed : seeds)
+        std::cout << seed.g << '\t' << seed.sig_count << '\t' << seed.bg_count
+                  << '\t' << seed.p << '\n';
     }
   });
 
