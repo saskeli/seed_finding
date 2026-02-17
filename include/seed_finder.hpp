@@ -362,7 +362,7 @@ class seed_finder {
 
   void filter_source(enrichment_result_map& aa,
                      enrichment_result_map const& bb) const;
-  void filter(enrichment_result_map& mm) const;
+  void filter_same_length(enrichment_result_map& mm) const;
 
  public:
   seed_finder(packed_read_vector const& signal_reads,
@@ -736,8 +736,8 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
           auto const ext_res{
               validate_extension(gg, oo, enrichment_res, other_enrichment_res)};
           // If res is true, the first gapmer is kept.
-          report_discarded(oo, gg, ext_res, other_enrichment_res, enrichment_res,
-                           "filter_huddinge_neighbourhood");
+          report_discarded(oo, gg, ext_res, other_enrichment_res,
+                           enrichment_res, "filter_huddinge_neighbourhood");
 
           if (ext_res) {
             prev_critical([&] { prev_counts->mark_discarded(gg, offset); });
@@ -1083,7 +1083,8 @@ void seed_finder<t_configuration>::filter_source(
  * @param m   gapmers to filter
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::filter(enrichment_result_map& mm) const {
+void seed_finder<t_configuration>::filter_same_length(
+    enrichment_result_map& mm) const {
   gapmer_set del_set;
   auto e = mm.end();
   for (auto it = mm.begin(); it != e; ++it) {
@@ -1106,6 +1107,7 @@ void seed_finder<t_configuration>::filter(enrichment_result_map& mm) const {
     }
   }
   for (auto d : del_set) {
+    // FIXME: report filtered?
     mm.erase(d);
   }
   std::cerr << "    filtered to " << mm.size() << " mers\n";
@@ -1167,7 +1169,7 @@ void seed_finder<t_configuration>::find_seeds() {
     }
     aa.clear();
     if constexpr (filter_mers) {
-      filter(bb);
+      filter_same_length(bb);
     }
     swap(aa, bb);
     std::print(std::cerr, "{} → {} candidates.\n", +(k - 1), seeds_.size());
