@@ -3,13 +3,14 @@
 #include <boost/math/policies/error_handling.hpp>
 #include <boost/math/policies/policy.hpp>
 #include <boost/math/special_functions/beta.hpp>
+#include <boost/multiprecision/cpp_bin_float.hpp>
 #include <cerrno>
 
 
 namespace sf::math {
 
 // FIXME: Check if long double actually is larger than double.
-typedef long double p_value_type;
+typedef boost::multiprecision::cpp_bin_float_oct p_value_type;
 
 
 struct result {
