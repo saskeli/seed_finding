@@ -138,7 +138,7 @@ TEST_HEADERS = \
 .PHONY: clean all debug test cover
 
 
-all: motivating huddinge seed_finder comp
+all: motivating huddinge seed_finder comp read_log
 
 debug: seed_finder_deb huddinge_deb
 
