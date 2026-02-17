@@ -417,7 +417,7 @@ int main(int argc, char const* argv[]) {
                                         lb::writing_open_mode::OVERWRITE}));
         discarded_gapmer_output_stream
             << "operation\tseed\tdiscarded_seed\tstatus\tcaller\ttesting_"
-               "function\tdescription\n";
+               "function\treason\tdescription\n";
         finder.set_discarded_gapmer_reporting_ostream(
             discarded_gapmer_output_stream);
       }

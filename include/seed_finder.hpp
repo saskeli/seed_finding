@@ -450,12 +450,14 @@ inline void seed_finder<t_configuration>::report_discarded(
       stream << rhs << '\t' << lhs;
 
     stream << '\t' << bool(res) << "\t\t" << test_fn << '\t';
+    stream << res.strategy << "; " << res.status << '\t';
 
-    stream << res.strategy << "; " << res.status << "; ";
     if (res)
-      stream << " (lhs: " << lhs_info << " rhs: " << rhs_info << ')';
+      stream << "lhs: " << lhs_info << " rhs: " << rhs_info;
     else
-      stream << " (lhs: " << rhs_info << " rhs: " << lhs_info << ')';
+      stream << "lhs: " << rhs_info << " rhs: " << lhs_info;
+
+    stream << '\n';
   }
 }
 
@@ -494,7 +496,8 @@ inline void seed_finder<t_configuration>::report_enrichment_check_failure(
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
     stream << "enrichment check\t\t" << discarded << '\t' << bool(res) << '\t'
-           << caller << '\t' << test_fn << '\t' << res << '\n';
+           << caller << '\t' << test_fn << '\t' << res.status << '\t'
+           << res.result << '\n';
   }
 }
 
@@ -508,7 +511,7 @@ void seed_finder<t_configuration>::report_pruned(seed_type seed, uint16_t kk,
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
     stream << "pruning\t\t" << seed.g << '\t' << false << "\t\t" << test_fn
-           << '\t';
+           << "\tpruned\t";
     std::print(stream, "k: {} p: {} signal count: {} background count: {}\n",
                kk, seed.p, seed.sig_count, seed.bg_count);
   }
