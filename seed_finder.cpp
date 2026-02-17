@@ -451,7 +451,7 @@ int main(int argc, char const* argv[]) {
       std::cout << "seed\tsignal_count\tbackground_count\tp_value\n";
       std::size_t ii{};
       for (auto const& seed : seeds) {
-        if (ii <= conf.print_lim) break;
+        if (conf.print_lim <= ii) break;
         std::cout << seed.g << '\t' << seed.sig_count << '\t' << seed.bg_count
                   << '\t' << seed.p << '\n';
         ++ii;
