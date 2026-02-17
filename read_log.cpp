@@ -7,8 +7,10 @@
 #include <charconv>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <functional>
 #include <iostream>
+#include <libbio/assert.hh>
 #include <print>
 #include <string>
 #include <string_view>
@@ -43,6 +45,7 @@ struct field_value_reader {
       throw args::ValidationError("Field index must be positive");
     }
 
+    --dst.field;
     dst.value = sv.substr(1 + comma_pos);
   }
 };
@@ -72,6 +75,8 @@ int main(int argc, char** argv) {
   args::ArgumentParser parser(
       "Read a TSV-formatted log file from stdin and filter lines according to "
       "the given options.");
+  args::ValueFlagList<std::size_t> output_field_indices_(
+      parser, "index", "Output only the given fields", {'f', "field"});
   args::ValueFlagList<field_value<std::string>, std::vector,
                       field_value_reader<std::string>>
       field_equals_(parser, "equals", "Given field equals the passed value",
@@ -97,22 +102,23 @@ int main(int argc, char** argv) {
   }
 
   std::string buffer;
+  std::vector<std::size_t> output_field_indices{};
   std::vector<std::string_view> fields;
   std::size_t lineno{};
 
-  auto const check_fields([&](auto& args, auto const& test) -> bool {
-    for (auto const& fv : args::get(args)) {
-      std::size_t field_idx(fv.field - 1); // Checked earlier.
-      if (fields.size() <= field_idx) {
-        std::print(std::cerr, "WARNING: Field count on line {} was {}.\n",
-                   lineno, fields.size());
-        return false;
-      }
-
-      if (not test(fv.value, fields[field_idx])) return false;
+  auto const output([&] -> void {
+    if (output_field_indices.empty()) {
+      std::cout << buffer << '\n';
+      return;
     }
 
-    return true;
+    bool is_first{true};
+    for (auto const idx : output_field_indices) {
+      if (not is_first) std::cout << '\t';
+      is_first = false;
+      std::cout << fields[idx];
+    }
+    std::cout << '\n';
   });
 
   std::size_t expected_field_count{};
@@ -120,7 +126,54 @@ int main(int argc, char** argv) {
     ++lineno;
     split_tabs(buffer, fields);
     expected_field_count = fields.size();
+
+    for (auto const idx : args::get(output_field_indices_)) {
+      if (not idx) {
+        std::cerr << "ERROR: Output field indices must be positive, got " << idx
+                  << ".\n";
+        return 1;
+      }
+
+      auto const idx_{idx - 1};
+      if (expected_field_count <= idx_) {
+        std::cerr << "ERROR: Got output field index " << idx
+                  << " but expected field count is" << expected_field_count
+                  << ".\n";
+        return 1;
+      }
+      output_field_indices.push_back(idx_);
+    }
+
+    output();
+  } else {
+    return 0;
   }
+
+  auto const check_tested_field_indices{
+      [expected_field_count](auto& args) -> void {
+        for (auto const& fv : args::get(args)) {
+          std::size_t field_idx(fv.field);
+          if (expected_field_count <= field_idx) {
+            std::cerr << "ERROR: Got output field index " << field_idx
+                      << " but expected field count is" << expected_field_count
+                      << ".\n";
+            std::exit(1);
+          }
+        }
+      }};
+
+  check_tested_field_indices(field_equals_);
+  check_tested_field_indices(field_contains_);
+
+  auto const check_fields([&](auto& args, auto const& test) -> bool {
+    for (auto const& fv : args::get(args)) {
+      std::size_t field_idx(fv.field);
+      libbio_assert_lt(field_idx, fields.size());
+      if (not test(fv.value, fields[field_idx])) return false;
+    }
+
+    return true;
+  });
 
   while (std::getline(std::cin, buffer)) {
     ++lineno;
@@ -130,7 +183,7 @@ int main(int argc, char** argv) {
       std::print(std::cerr,
                  "WARNING: Unexpected field count on line {} (expected: {} "
                  "actual: {})\n",
-                 fields.size(), expected_field_count, fields.size());
+                 lineno, expected_field_count, fields.size());
       continue;
     }
 
@@ -141,7 +194,7 @@ int main(int argc, char** argv) {
                          }))
       continue;
 
-    std::cout << buffer << '\n';
+    output();
   }
 
   return 0;
