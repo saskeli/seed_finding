@@ -154,6 +154,7 @@ int main(int argc, char** argv) {
     }
 
     output();
+    break;
   }
 
   // Check if a header was found.
