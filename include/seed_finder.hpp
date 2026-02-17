@@ -358,7 +358,7 @@ class seed_finder {
         background_reads_{background_reads},
         p_{p},
         p_ext_{p_ext},
-        fold_lim_{std::pow(2, log_fold}),
+        fold_lim_{std::pow(2, log_fold)},
         memory_limit_{memory_limit},
         k_lim_{max_k},
         lookup_k_{lookup_k},
