@@ -136,8 +136,8 @@ inline std::ostream& operator<<(std::ostream& os,
 
 template <typename t_value>
 std::ostream& operator<<(std::ostream& os, enrichment_result<t_value> er) {
-  std::print(os, "SC: {} BC: {} AC test p-value: {}", er.signal_count,
-             er.background_count, er.ac_test_result);
+  os << "SC: " << er.signal_count << " BC: " << er.background_count
+     << " AC test p-value: " << er.ac_test_result;
   return os;
 }
 
@@ -520,8 +520,9 @@ void seed_finder<t_configuration>::report_pruned(seed_type seed, uint16_t kk,
 
     stream << "pruning\t\t" << seed.g << '\t' << false << "\t\t" << test_fn
            << "\tpruned\t";
-    std::print(stream, "k: {} p: {} signal count: {} background count: {}\n",
-               kk, seed.p, seed.sig_count, seed.bg_count);
+    stream << "k: " << kk << " p: " << seed.p
+           << " signal count: " << seed.sig_count
+           << " background_count: " << seed.bg_count << '\n';
   }
 }
 
