@@ -8,8 +8,12 @@
 
 namespace sf::math {
 
+// FIXME: Check if long double actually is larger than double.
+typedef long double p_value_type;
+
+
 struct result {
-  double value{};
+  p_value_type value{};
   int error{};
 
   operator bool() const { return 0 == error; }
@@ -26,7 +30,7 @@ inline result beta_incomplete(double aa, double bb, double xx) {
                       bmp::evaluation_error<bmp::errno_on_error>>
       error_policy;
 
-  typedef double parameter_type;
+  typedef p_value_type parameter_type;
 
   parameter_type const aa_{aa};
   parameter_type const bb_{bb};
@@ -34,7 +38,8 @@ inline result beta_incomplete(double aa, double bb, double xx) {
 
   errno = 0; // Clear to make sure.
   auto const res{bm::ibeta(aa_, bb_, xx_, error_policy{})};
-  double const res_(res); // For narrowing in case we use some other parameter type.
+  p_value_type const res_(
+      res); // For narrowing in case we use some other parameter type.
   return result{res_, errno};
 }
 

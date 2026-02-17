@@ -29,10 +29,14 @@
 
 
 namespace sf::detail {
+
+typedef math::p_value_type p_value_type;
+
+
 // FIXME: Consider using the same value type (e.g. double) for all counts.
 template <typename t_value>
 struct enrichment_result {
-  double ac_test_result{};
+  p_value_type ac_test_result{};
   t_value signal_count{};
   t_value background_count{};
 
@@ -82,7 +86,8 @@ enum class extension_validation_strategy {
 
 
 struct extension_validation_result {
-  double binomial_test_result{};
+  double
+      binomial_test_result{};  // FIXME: Use p_value_type? Also in make() below.
   extension_validation_status status;
   extension_validation_strategy strategy;
 
@@ -195,13 +200,16 @@ inline std::ostream& operator<<(std::ostream& os,
 
 namespace sf {
 
+typedef detail::p_value_type p_value_type;
+
+
 template <typename t_gapmer>
 struct seed {
   typedef t_gapmer gapmer_type;
 
   gapmer_type g{};
   // FIXME: Replace these with enrichment_result?
-  double p{};
+  p_value_type p{};
   uint64_t sig_count{};
   uint64_t bg_count{};
 };
@@ -247,7 +255,7 @@ class seed_finder {
 
   // FIXME: remove.
   struct seed_meta {
-    double p{};
+    p_value_type p{};
     uint64_t sig_count{};
     uint64_t bg_count{};
   };
@@ -278,8 +286,8 @@ class seed_finder {
   // Unfortunately we need to use mutable here to be able to report
   // range errors in a sensible way.
   mutable std::atomic_uint64_t math_range_errors_{};
-  double p_{};
-  double p_ext_{};
+  p_value_type p_{};
+  double p_ext_{};  // FIXME: Use p_value_type?
   double fold_lim_{};
   double signal_to_total_length_ratio_{};
   double memory_limit_{};
@@ -366,7 +374,7 @@ class seed_finder {
 
  public:
   seed_finder(packed_read_vector const& signal_reads,
-              packed_read_vector const& background_reads, double p,
+              packed_read_vector const& background_reads, p_value_type p,
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01,
               uint8_t lookup_k = 10, bool prune = false)
@@ -748,8 +756,9 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
             critical([&] { counts.mark_discarded(oo, o_offset); });
           }
         } else {
+          // FIXME: This is never reached?
           // FIXME: report discarded.
-          double o_r{};
+          p_value_type o_r{};
           if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
             critical([&] { counts.mark_discarded(gg, offset); });
           } else {
