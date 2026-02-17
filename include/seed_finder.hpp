@@ -733,13 +733,13 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
           if (!betai_res) report_math_error(betai_res);
 
           enrichment_result other_enrichment_res{betai_res.value, osc, obc};
-          auto const res{
+          auto const ext_res{
               validate_extension(gg, oo, enrichment_res, other_enrichment_res)};
           // If res is true, the first gapmer is kept.
-          report_discarded(oo, gg, res, other_enrichment_res, enrichment_res,
+          report_discarded(oo, gg, ext_res, other_enrichment_res, enrichment_res,
                            "filter_huddinge_neighbourhood");
 
-          if (res) {
+          if (ext_res) {
             prev_critical([&] { prev_counts->mark_discarded(gg, offset); });
           } else {
             critical([&] { counts.mark_discarded(oo, o_offset); });
