@@ -200,6 +200,7 @@ struct seed {
   typedef t_gapmer gapmer_type;
 
   gapmer_type g{};
+  // FIXME: Replace these with enrichment_result?
   double p{};
   uint64_t sig_count{};
   uint64_t bg_count{};
@@ -308,6 +309,10 @@ class seed_finder {
   inline void report_enrichment_check_failure(
       gapmer_type discarded, enrichment_check_result<t_value> res,
       char const* caller, char const* test_fn) const;
+
+  // Thread safe.
+  inline void report_pruned(seed_type seed, uint16_t k,
+                            char const* test_fn) const;
 
   template <typename t_value>
   [[nodiscard]] extension_validation_result validate_extension(
@@ -488,6 +493,22 @@ inline void seed_finder<t_configuration>::report_enrichment_check_failure(
 
     stream << "enrichment check\t\t" << discarded << '\t' << bool(res) << '\t'
            << caller << '\t' << test_fn << '\t' << res << '\n';
+  }
+}
+
+
+// Thread safe.
+template <typename t_configuration>
+void seed_finder<t_configuration>::report_pruned(seed_type seed, uint16_t kk,
+                                                 char const* test_fn) const {
+  if constexpr (enable_reporting_discarded_seeds) {
+    libbio_assert(discarded_gapmer_reporting_ostream_);
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
+
+    stream << "pruning\t\t" << seed.g << '\t' << false << "\t\t" << test_fn
+           << '\t';
+    std::print(stream, "k: {} p: {} signal count: {} background count: {}\n",
+               kk, seed.p, seed.sig_count, seed.bg_count);
   }
 }
 
@@ -894,6 +915,7 @@ void seed_finder<t_configuration>::extend_counted(
         [&](gapmer_type oo) {
           if (not oo.is_canonical()) {
             oo = oo.reverse_complement();
+            // FIXME: report filtered?
           }
 
           if (not bb.contains(oo)) {
@@ -942,7 +964,7 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
                                           uint16_t k, bool prune) const {
   std::cerr << "    Extend " << aa.size() << " mers.\n";
 
-  const constexpr double fill_limit = 0.4;
+  constexpr double fill_limit{0.4};
   gapmer_set del_set;
 
   auto const init_counters{[&](gapmer_type oo) {
@@ -959,10 +981,32 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
     for (auto kv : aa) {
       prio.emplace_back(seed_from_enrichment_result(kv.first, kv.second));
     }
+
     // Sort by fold change.
     std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
       return (lhs.sig_count / lhs.bg_count) > (rhs.sig_count / rhs.bg_count);
     });
+
+    // Initialise counters for the Huddinge neighbours of the sorted gapmers.
+    {
+      auto it{prio.begin()};
+      auto const end{prio.end()};
+
+      // Initialise the counters.
+      while (it != end) {
+        it->g.template huddinge_neighbours<true, true, false>(init_counters);
+        if (counts.fill_rate() >= fill_limit) {
+          break;
+        }
+        ++it;
+      }
+
+      // Report the pruned gapmers.
+      while (it != end) {
+        report_pruned(*it, k, "extend");
+        ++it;
+      }
+    }
 
     for (auto res : prio) {
       res.g.template huddinge_neighbours<true, true, false>(init_counters);
@@ -999,7 +1043,9 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
           [&](gapmer_type o) {
             if (not o.is_canonical()) {
               o = o.reverse_complement();
+              // FIXME: report filtered?
             }
+
             if (bb.contains(o)) {
               auto const res{validate_extension(kv.first, o, kv.second, bb[o])};
               report_discarded(kv.first, o, res, kv.second, bb[o], "extend");
