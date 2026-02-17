@@ -751,7 +751,8 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
           enrichment_result other_enrichment_res{betai_res.value, osc, obc};
           auto const res{
               validate_extension(gg, oo, enrichment_res, other_enrichment_res)};
-          report_discarded(gg, oo, res, enrichment_res, other_enrichment_res,
+          // If res is true, the first gapmer is kept.
+          report_discarded(oo, gg, res, other_enrichment_res, enrichment_res,
                            "filter_huddinge_neighbourhood");
 
           if (res) {
@@ -955,10 +956,12 @@ void seed_finder<t_configuration>::extend_counted(
                 enrichment_res.result.template to_enrichment_result<double>()};
             auto const res{
                 validate_extension(kv.first, oo, kv.second, enrichment_res_fp)};
-            report_discarded(kv.first, oo, res, kv.second, enrichment_res,
-                             "extend_counted");
             if (res) {
               bb[oo] = enrichment_res_fp;
+            } else {
+              // If res is false, the second gapmer is kept.
+              report_discarded(oo, kv.first, res, enrichment_res, kv.second,
+                               "extend_counted");
             }
           }
         });
@@ -1065,11 +1068,11 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
             }
 
             if (bb.contains(oo)) {
-              auto const res{validate_extension(kv.first, oo, kv.second, bb[oo])};
-              report_discarded(kv.first, oo, res, kv.second, bb[oo], "extend");
-              if (res) {
-                keep = false;
-              }
+              auto const res{
+                  validate_extension(kv.first, oo, kv.second, bb[oo])};
+              if (res) keep = false;
+              // If res is true, the first gapmer is kept.
+              report_discarded(oo, kv.first, res, bb[oo], kv.second, "extend");
             }
           });
 
