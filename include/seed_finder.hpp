@@ -270,21 +270,21 @@ class seed_finder {
 
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
-  std::vector<seed_type> seeds_;
+  std::vector<seed_type> seeds_{};
   std::ostream* discarded_gapmer_reporting_ostream_{};
-  uint64_t sig_size_;
-  uint64_t bg_size_;
+  uint64_t sig_size_{};
+  uint64_t bg_size_{};
   // Unfortunately we need to use mutable here to be able to report
   // range errors in a sensible way.
   mutable std::atomic_uint64_t math_range_errors_{};
-  double p_;
-  double p_ext_;
-  double fold_lim_;
-  double signal_to_total_length_ratio_;
-  double memory_limit_;
-  uint8_t k_lim_;
-  uint8_t lookup_k_;
-  bool prune_;
+  double p_{};
+  double p_ext_{};
+  double fold_lim_{};
+  double signal_to_total_length_ratio_{};
+  double memory_limit_{};
+  uint8_t k_lim_{};
+  uint8_t lookup_k_{};
+  bool prune_{};
 
   static inline seed_type seed_from_seed_meta(gapmer_type g_, seed_meta mm);
 
@@ -363,18 +363,15 @@ class seed_finder {
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01,
               uint8_t lookup_k = 10, bool prune = false)
-      : signal_reads_(signal_reads),
-        background_reads_(background_reads),
-        seeds_(),
-        sig_size_(),
-        bg_size_(),
-        p_(p),
-        p_ext_(p_ext),
-        fold_lim_(std::pow(2, log_fold)),
-        memory_limit_(memory_limit),
-        k_lim_(max_k),
-        lookup_k_(lookup_k),
-        prune_(prune) {
+      : signal_reads_{signal_reads},
+        background_reads_{background_reads},
+        p_{p},
+        p_ext_{p_ext},
+        fold_lim_{std::pow(2, log_fold)},
+        memory_limit_{memory_limit},
+        k_lim_{max_k},
+        lookup_k_{lookup_k},
+        prune_{prune} {
     // For calculating the sum of the read lengths.
     auto const read_length_sum{[](packed_read_vector const& reads) {
       return std::accumulate(reads.begin(), reads.end(), std::uint64_t{},
