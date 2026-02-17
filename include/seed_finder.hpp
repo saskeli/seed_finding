@@ -19,6 +19,7 @@
 #include "count_base.hpp"
 #include "gapmer.hpp"
 #include "gapmer_count.hpp"
+#include "math.hpp"
 #include "packed_read.hpp"
 #include "partial_count.hpp"
 #include "util.hpp"
@@ -546,9 +547,9 @@ template <bool t_calculate_ac_test_for_bb, typename t_value>
   if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
     if (aa_er.signal_count < bb_er.signal_count) {
       if constexpr (t_calculate_ac_test_for_bb) {
-        bb_er.ac_test_result = error_suppressed_beta_inc(
-            bb_er.signal_count, bb_er.background_count,
-            signal_to_total_length_ratio_);
+        bb_er.ac_test_result =
+            math::beta_incomplete(bb_er.signal_count, bb_er.background_count,
+                                  signal_to_total_length_ratio_);
       }
       return true;
     }
@@ -557,8 +558,8 @@ template <bool t_calculate_ac_test_for_bb, typename t_value>
 
   if constexpr (t_calculate_ac_test_for_bb) {
     bb_er.ac_test_result =
-        error_suppressed_beta_inc(bb_er.signal_count, bb_er.background_count,
-                                  signal_to_total_length_ratio_);
+        math::beta_incomplete(bb_er.signal_count, bb_er.background_count,
+                              signal_to_total_length_ratio_);
   }
   return bb_er.ac_test_result < aa_er.ac_test_result;
 }
@@ -588,8 +589,7 @@ template <typename t_value>
   // web-server for the generic analysis of large data sets of counts,
   // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
   // https://doi.org/10.1093/bioinformatics/bty640)
-  double const rr{
-      error_suppressed_beta_inc(sc, bc, signal_to_total_length_ratio_)};
+  double const rr{math::beta_incomplete(sc, bc, signal_to_total_length_ratio_)};
   return {{rr, sc, bc},
           rr <= p_ ? enrichment_check_status::success
                    : enrichment_check_status::ac_test_failed};
@@ -669,8 +669,8 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
         }
 
         if constexpr (t_should_extend) {
-          double const o_r{error_suppressed_beta_inc(
-              osc, obc, signal_to_total_length_ratio_)};
+          double const o_r{
+              math::beta_incomplete(osc, obc, signal_to_total_length_ratio_)};
 
           enrichment_result other_enrichment_res{o_r, osc, obc};
           auto const res{

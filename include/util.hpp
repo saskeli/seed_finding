@@ -1,9 +1,5 @@
 #pragma once
 
-#include <gsl/gsl_cdf.h>
-#include <gsl/gsl_sf_gamma.h>
-#include <gsl/gsl_sf_result.h>
-
 #include <array>
 #include <concepts>
 #include <cstdint>
@@ -43,6 +39,7 @@ const static constexpr std::array<uint8_t, 256> rc_byte = []() constexpr {
   }
   return ret;
 }();
+
 
 template <class G, typename F, bool middle_gap_only = true, uint8_t max_gap = 6>
 void gap_mer_generation(uint8_t k, F& callback) {
@@ -132,6 +129,7 @@ void gap_mer_generation(uint8_t k, F& callback) {
   }
 }
 
+
 template <class G, typename F, bool middle_gap_only = true, uint8_t max_gap = 6>
 void gap_mer_neighbour_generation(G g, F& callback) {
   auto second_callback = [&](G o) {
@@ -142,6 +140,7 @@ void gap_mer_neighbour_generation(G g, F& callback) {
   gap_mer_generation<G, decltype(second_callback), middle_gap_only, max_gap>(
       g.length(), second_callback);
 }
+
 
 template <class G, bool middle_gap_only, uint16_t max_gap>
 bool compare_generation(G g, std::unordered_set<std::string>& a,
@@ -156,17 +155,12 @@ bool compare_generation(G g, std::unordered_set<std::string>& a,
   return a == b;
 }
 
+
 template <class G, bool middle_gap_only, uint16_t max_gap>
 bool compare_generation(G g) {
   std::unordered_set<std::string> a;
   std::unordered_set<std::string> b;
   return compare_generation<G, middle_gap_only, max_gap>(g, a, b);
-}
-
-inline double error_suppressed_beta_inc(double a, double b, double x) {
-  gsl_sf_result res;
-  int err = gsl_sf_beta_inc_e(a, b, x, &res);
-  return err ? 0 : res.val;
 }
 
 
