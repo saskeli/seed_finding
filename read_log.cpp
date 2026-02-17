@@ -83,14 +83,14 @@ int main(int argc, char** argv) {
 
   try {
     parser.ParseCLI(argc, argv);
-  } catch (args::Help const &) {
+  } catch (args::Help const&) {
     std::cout << parser;
     return 0;
-  } catch (args::ParseError const &e) {
+  } catch (args::ParseError const& e) {
     std::cerr << e.what() << std::endl;
     std::cerr << parser;
     return 1;
-  } catch (args::ValidationError const &e) {
+  } catch (args::ValidationError const& e) {
     std::cerr << e.what() << std::endl;
     std::cerr << parser;
     return 1;
@@ -115,9 +115,24 @@ int main(int argc, char** argv) {
     return true;
   });
 
+  std::size_t expected_field_count{};
+  if (std::getline(std::cin, buffer)) {
+    ++lineno;
+    split_tabs(buffer, fields);
+    expected_field_count = fields.size();
+  }
+
   while (std::getline(std::cin, buffer)) {
     ++lineno;
     split_tabs(buffer, fields);
+
+    if (fields.size() != expected_field_count) {
+      std::print(std::cerr,
+                 "WARNING: Unexpected field count on line {} (expected: {} "
+                 "actual: {})\n",
+                 fields.size(), expected_field_count, fields.size());
+      continue;
+    }
 
     if (not check_fields(field_equals_, std::equal_to{})) continue;
     if (not check_fields(field_contains_,
