@@ -361,9 +361,11 @@ class seed_finder {
                       enrichment_result_map& bb,
                       partial_count_type const& p_counter) const;
 
-  void extend(enrichment_result_map& aa, enrichment_result_map& bb,
+  void extend(enrichment_result_map const& aa, enrichment_result_map& bb,
               partial_count_type& p_counter, uint16_t k, bool prune) const;
 
+  void filter_source(enrichment_result_map& aa,
+                     enrichment_result_map const& bb) const;
   void filter(enrichment_result_map& mm) const;
 
  public:
@@ -970,7 +972,7 @@ void seed_finder<t_configuration>::extend_counted(
 
 
 /**
- * Find k length extensions from a, and store valid extensions in b.
+ * Find k length extensions from aa and store valid extensions in bb.
  *
  * @param aa     k - 1 length mers to extend.
  * @param bb     storage for valid k-mers.
@@ -979,14 +981,13 @@ void seed_finder<t_configuration>::extend_counted(
  * @param prune  Should only one pass of extensions be done.
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
+void seed_finder<t_configuration>::extend(enrichment_result_map const& aa,
                                           enrichment_result_map& bb,
                                           partial_count_type& counts,
                                           uint16_t k, bool prune) const {
   std::cerr << "    Extend " << aa.size() << " mers.\n";
 
   constexpr double fill_limit{0.4};
-  gapmer_set del_set;
 
   auto const init_counters{[&](gapmer_type oo) {
     if (not bb.contains(oo)) {
@@ -1054,37 +1055,44 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
   std::cerr << "\tFiltering extension…\n";
   extend_counted(aa, bb, counts);
   counts.clear();
+}
 
-  if constexpr (filter_mers) {
-    std::cerr << "\tFiltering sources…\n";
-    for (auto kv : aa) {
-      bool keep = true;
+/**
+ * Filter source gapmers’ H1 neighbourhood if gapmer in question has been
+ * successfully extended.
+ */
+template <typename t_configuration>
+void seed_finder<t_configuration>::filter_source(
+    enrichment_result_map& aa, enrichment_result_map const& bb) const {
+  gapmer_set del_set;
+  std::cerr << "\tFiltering sources…\n";
+  for (auto kv : aa) {
+    bool keep = true;
 
-      kv.first.template huddinge_neighbours<true, true, false>(
-          [&](gapmer_type oo) {
-            if (not oo.is_canonical()) {
-              report_not_canonical(oo, "extending", "extend");
-              oo = oo.reverse_complement();
-            }
+    kv.first.template huddinge_neighbours<true, true, false>(
+        [&](gapmer_type oo) {
+          if (not oo.is_canonical()) {
+            report_not_canonical(oo, "extending", "extend");
+            oo = oo.reverse_complement();
+          }
 
-            if (bb.contains(oo)) {
-              auto const res{
-                  validate_extension(kv.first, oo, kv.second, bb[oo])};
-              if (res) keep = false;
-              // If res is true, the first gapmer is kept.
-              report_discarded(oo, kv.first, res, bb[oo], kv.second, "extend");
-            }
-          });
+          if (bb.contains(oo)) {
+            auto const res{validate_extension(kv.first, oo, kv.second, bb[oo])};
+            if (res) keep = false;
+            // If res is true, the first gapmer is kept.
+            report_discarded(oo, kv.first, res, bb[oo], kv.second,
+                             "filter_source");
+          }
+        });
 
-      if (not keep) {
-        del_set.insert(kv.first);
-      }
+    if (not keep) {
+      del_set.insert(kv.first);
     }
+  }
 
-    for (auto d : del_set) {
-      aa.erase(d);
-    }
-  }  // if constexpr (filter_mers)
+  for (auto d : del_set) {
+    aa.erase(d);
+  }
 }
 
 
@@ -1169,6 +1177,9 @@ void seed_finder<t_configuration>::find_seeds() {
   for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
     std::cerr << +(k - 1) << " → \n";
     extend(aa, bb, partial_counts, k, prune_);
+    if constexpr (filter_mers) {
+      filter_source(aa, bb);
+    }
     std::print(std::cerr, "    {} {} candidates\n", aa.size(), +(k - 1));
     std::print(std::cerr, "    {} {} potentials\n", bb.size(), +k);
     for (auto pp : aa) {
