@@ -122,8 +122,17 @@ int main(int argc, char** argv) {
   });
 
   std::size_t expected_field_count{};
-  if (std::getline(std::cin, buffer)) {
+  while (std::getline(std::cin, buffer)) {
     ++lineno;
+
+    if (buffer.empty()) {
+      std::cerr << "ERROR: Line " << lineno << " was empty.\n";
+      return 1;
+    }
+
+    // Skip the header if there was one.
+    if ('#' == buffer.front()) continue;
+
     split_tabs(buffer, fields);
     expected_field_count = fields.size();
 
@@ -145,9 +154,10 @@ int main(int argc, char** argv) {
     }
 
     output();
-  } else {
-    return 0;
   }
+
+  // Check if a header was found.
+  if (0 == lineno) return 0;
 
   auto const check_tested_field_indices{
       [expected_field_count](auto& args) -> void {
