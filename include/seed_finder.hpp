@@ -314,10 +314,6 @@ class seed_finder {
   inline void report_pruned(seed_type seed, uint16_t k,
                             char const* test_fn) const;
 
-  // Thread safe.
-  inline void report_not_canonical(gapmer_type gg, char const* operation,
-                                   char const* test_fn) const;
-
   template <typename t_value>
   [[nodiscard]] extension_validation_result validate_extension(
       gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
@@ -515,20 +511,6 @@ void seed_finder<t_configuration>::report_pruned(seed_type seed, uint16_t kk,
            << '\t';
     std::print(stream, "k: {} p: {} signal count: {} background count: {}\n",
                kk, seed.p, seed.sig_count, seed.bg_count);
-  }
-}
-
-
-// Thread safe.
-template <typename t_configuration>
-void seed_finder<t_configuration>::report_not_canonical(
-    gapmer_type gg, char const* operation, char const* test_fn) const {
-  if constexpr (enable_reporting_discarded_seeds) {
-    libbio_assert(discarded_gapmer_reporting_ostream_);
-    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
-
-    stream << operation << "\t\t" << gg << '\t' << false << "\t\t" << test_fn
-           << "\t\n";
   }
 }
 
@@ -935,7 +917,6 @@ void seed_finder<t_configuration>::extend_counted(
     kv.first.template huddinge_neighbours<true, true, false>(
         [&](gapmer_type oo) {
           if (not oo.is_canonical()) {
-            report_not_canonical(oo, "extending", "extend_counted");
             oo = oo.reverse_complement();
           }
 
@@ -1072,7 +1053,6 @@ void seed_finder<t_configuration>::filter_source(
     kv.first.template huddinge_neighbours<true, true, false>(
         [&](gapmer_type oo) {
           if (not oo.is_canonical()) {
-            report_not_canonical(oo, "extending", "extend");
             oo = oo.reverse_complement();
           }
 
