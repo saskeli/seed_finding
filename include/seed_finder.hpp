@@ -464,12 +464,12 @@ inline void seed_finder<t_configuration>::report_math_error(
       break;
     case EDOM: {
       libbio::osyncstream(std::cerr)
-          << "WARNING: Domain error occured when using a math function.\n";
+          << "WARNING: Domain error occurred when using a math function.\n";
       break;
     }
     default: {
       libbio::osyncstream(std::cerr)
-          << "WARNING: Unknown error occured when using a math function.\n";
+          << "WARNING: Unknown error occurred when using a math function.\n";
       break;
     }
   }
