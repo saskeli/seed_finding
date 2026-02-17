@@ -2,7 +2,10 @@
 
 #include <gsl/gsl_cdf.h>
 #include <gsl/gsl_errno.h>
+#include <sys/types.h>
 
+#include <atomic>
+#include <cerrno>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -271,6 +274,9 @@ class seed_finder {
   std::ostream* discarded_gapmer_reporting_ostream_{};
   uint64_t sig_size_;
   uint64_t bg_size_;
+  // Unfortunately we need to use mutable here to be able to report
+  // range errors in a sensible way.
+  mutable std::atomic_uint64_t math_range_errors_{};
   double p_;
   double p_ext_;
   double fold_lim_;
@@ -285,6 +291,9 @@ class seed_finder {
   template <typename t_value>
   static inline seed_type seed_from_enrichment_result(
       gapmer_type g_, enrichment_result<t_value> er);
+
+  // Thread safe.
+  void report_math_error(math::result res) const;
 
   // Thread safe.
   template <typename t_lhs_info, typename t_rhs_info>
@@ -396,6 +405,8 @@ class seed_finder {
   double signal_to_total_length_ratio() const {
     return signal_to_total_length_ratio_;
   }
+
+  uint64_t range_error_count() const { return math_range_errors_; }
 };
 
 
@@ -441,6 +452,29 @@ inline void seed_finder<t_configuration>::report_discarded(
       stream << " (lhs: " << lhs_info << " rhs: " << rhs_info << ')';
     else
       stream << " (lhs: " << rhs_info << " rhs: " << lhs_info << ')';
+  }
+}
+
+
+// Thread safe.
+template <typename t_configuration>
+inline void seed_finder<t_configuration>::report_math_error(
+    math::result res) const {
+  switch (res.error) {
+    case ERANGE:
+      // Allowed since math_range_errors_ is mutable.
+      math_range_errors_.fetch_add(1, std::memory_order_relaxed);
+      break;
+    case EDOM: {
+      libbio::osyncstream(std::cerr)
+          << "WARNING: Domain error occured when using a math function.\n";
+      break;
+    }
+    default: {
+      libbio::osyncstream(std::cerr)
+          << "WARNING: Unknown error occured when using a math function.\n";
+      break;
+    }
   }
 }
 
@@ -547,9 +581,11 @@ template <bool t_calculate_ac_test_for_bb, typename t_value>
   if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
     if (aa_er.signal_count < bb_er.signal_count) {
       if constexpr (t_calculate_ac_test_for_bb) {
-        bb_er.ac_test_result =
-            math::beta_incomplete(bb_er.signal_count, bb_er.background_count,
-                                  signal_to_total_length_ratio_);
+        auto const res{math::beta_incomplete(bb_er.signal_count,
+                                             bb_er.background_count,
+                                             signal_to_total_length_ratio_)};
+        if (!res) report_math_error(res);
+        bb_er.ac_test_result = res.value;
       }
       return true;
     }
@@ -557,9 +593,11 @@ template <bool t_calculate_ac_test_for_bb, typename t_value>
   }
 
   if constexpr (t_calculate_ac_test_for_bb) {
-    bb_er.ac_test_result =
-        math::beta_incomplete(bb_er.signal_count, bb_er.background_count,
-                              signal_to_total_length_ratio_);
+    auto const res{math::beta_incomplete(bb_er.signal_count,
+                                         bb_er.background_count,
+                                         signal_to_total_length_ratio_)};
+    if (!res) report_math_error(res);
+    bb_er.ac_test_result = res.value;
   }
   return bb_er.ac_test_result < aa_er.ac_test_result;
 }
@@ -589,10 +627,11 @@ template <typename t_value>
   // web-server for the generic analysis of large data sets of counts,
   // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
   // https://doi.org/10.1093/bioinformatics/bty640)
-  double const rr{math::beta_incomplete(sc, bc, signal_to_total_length_ratio_)};
-  return {{rr, sc, bc},
-          rr <= p_ ? enrichment_check_status::success
-                   : enrichment_check_status::ac_test_failed};
+  auto const res{math::beta_incomplete(sc, bc, signal_to_total_length_ratio_)};
+  if (!res) report_math_error(res);
+  return {{res.value, sc, bc},
+          res.value <= p_ ? enrichment_check_status::success
+                          : enrichment_check_status::ac_test_failed};
 }
 
 
@@ -669,10 +708,11 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
         }
 
         if constexpr (t_should_extend) {
-          double const o_r{
+          auto const betai_res{
               math::beta_incomplete(osc, obc, signal_to_total_length_ratio_)};
+          if (!betai_res) report_math_error(betai_res);
 
-          enrichment_result other_enrichment_res{o_r, osc, obc};
+          enrichment_result other_enrichment_res{betai_res.value, osc, obc};
           auto const res{
               validate_extension(gg, oo, enrichment_res, other_enrichment_res)};
           report_discarded(gg, oo, res, enrichment_res, other_enrichment_res,

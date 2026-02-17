@@ -424,6 +424,13 @@ int main(int argc, char const* argv[]) {
     }
 
     finder.find_seeds();
+
+    if (auto const range_error_count{finder.range_error_count()};
+        range_error_count) {
+      std::cerr << "WARNING: Got " << range_error_count
+                << " range errors when finding seeds.\n";
+    }
+
     if (not conf.dot_output.empty()) {
       sf::Dot_Writer::write_dot<gapmer_type>(conf.dot_output,
                                              finder.get_seeds(), conf.max_k);

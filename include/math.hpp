@@ -1,16 +1,41 @@
 #pragma once
 
-#include <gsl/gsl_cdf.h>
-#include <gsl/gsl_sf_gamma.h>
-#include <gsl/gsl_sf_result.h>
+#include <boost/math/policies/error_handling.hpp>
+#include <boost/math/policies/policy.hpp>
+#include <boost/math/special_functions/beta.hpp>
+#include <cerrno>
 
 
 namespace sf::math {
 
-inline double beta_incomplete(double aa, double bb, double xx) {
-  gsl_sf_result res;
-  int err = gsl_sf_beta_inc_e(aa, bb, xx, &res);
-  return err ? 0 : res.val;
+struct result {
+  double value{};
+  int error{};
+
+  operator bool() const { return 0 == error; }
+};
+
+
+inline result beta_incomplete(double aa, double bb, double xx) {
+  namespace bm = boost::math;
+  namespace bmp = boost::math::policies;
+
+  typedef bmp::policy<bmp::domain_error<bmp::errno_on_error>,
+                      bmp::pole_error<bmp::errno_on_error>,
+                      bmp::overflow_error<bmp::errno_on_error>,
+                      bmp::evaluation_error<bmp::errno_on_error>>
+      error_policy;
+
+  typedef double parameter_type;
+
+  parameter_type const aa_{aa};
+  parameter_type const bb_{bb};
+  parameter_type const xx_{xx};
+
+  errno = 0; // Clear to make sure.
+  auto const res{bm::ibeta(aa_, bb_, xx_, error_policy{})};
+  double const res_(res); // For narrowing in case we use some other parameter type.
+  return result{res_, errno};
 }
 
 }  // namespace sf::math
