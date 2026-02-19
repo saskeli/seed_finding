@@ -108,6 +108,7 @@ struct configuration {
   bool should_output_all_matches{false};
   double p{0.0001};
   double p_ext{0.01};
+  double significance_level{0.001};
   double log_fold{2};
   double h1_weight{1};
   size_t print_lim{20};
@@ -142,6 +143,7 @@ std::ostream& operator<<(std::ostream& os, configuration const& conf) {
   os << "should_output_all_matches: " << conf.should_output_all_matches << '\n';
   os << "p:                         " << conf.p << '\n';
   os << "p_ext:                     " << conf.p_ext << '\n';
+  os << "significance_level:        " << conf.significance_level << '\n';
   os << "log_fold:                  " << conf.log_fold << '\n';
   os << "h1_weight:                 " << conf.h1_weight << '\n';
   os << "print_lim:                 " << conf.print_lim << '\n';
@@ -200,6 +202,9 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         parser, "p_value",
         "p value to use for extension when background counts are zero.",
         {"p-ext"}, retval.p_ext);
+    sf::args::value_flag significance_level_(
+        parser, "significancel_level", "FWER significance level threshold",
+        {"significance"}, retval.significance_level);
     sf::args::value_flag log_fold_(
         parser, "fold_change",
         "Discard all mers with log fold change smaller than this.", {"lf"},
@@ -406,8 +411,9 @@ int main(int argc, char const* argv[]) {
         discarded_gapmer_output_stream};
 
     seed_finder_type finder(signal_reads, background_reads, conf.p,
-                            conf.log_fold, conf.max_k, conf.mem_limit,
-                            conf.p_ext, conf.lookup_k, conf.prune);
+                            conf.significance_level, conf.log_fold, conf.max_k,
+                            conf.mem_limit, conf.p_ext, conf.lookup_k,
+                            conf.prune);
 
     if constexpr (enable_discarded_gapmer_output) {
       if (not conf.discarded_gapmer_output_path.empty()) {
@@ -452,16 +458,18 @@ int main(int argc, char const* argv[]) {
         sc.output_cluster(conf.prefix, conf.should_output_all_matches);
       }
     } else {
-      auto& seeds{finder.get_seeds()};
-      std::sort(seeds.begin(), seeds.end(),
-                [](auto const& lhs, auto const& rhs) { return lhs.p < rhs.p; });
+      auto const res{finder.adjust_seed_p_values()};
+      std::cerr << res.passed_count << " seeds passed at significance level "
+                << conf.significance_level << ", " << res.discarded_count
+                << " were discarded.\n";
+      auto const& seeds{finder.get_seeds()};
+
       std::cout << "seed\tsignal_count\tbackground_count\tp_value\n";
-      std::size_t ii{};
-      for (auto const& seed : seeds) {
-        if (conf.print_lim <= ii) break;
+      auto const limit{std::min(res.passed_count, conf.print_lim)};
+      for (std::size_t ii{}; ii < limit; ++ii) {
+        auto const& seed{seeds[ii]};
         std::cout << seed.g << '\t' << seed.sig_count << '\t' << seed.bg_count
                   << '\t' << seed.p << '\n';
-        ++ii;
       }
     }
   });

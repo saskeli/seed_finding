@@ -287,6 +287,7 @@ class seed_finder {
   // range errors in a sensible way.
   mutable std::atomic_uint64_t math_range_errors_{};
   p_value_type p_{};
+  p_value_type significance_level_{};
   double p_ext_{};  // FIXME: Use p_value_type?
   double fold_lim_{};
   double signal_to_total_length_ratio_{};
@@ -375,12 +376,13 @@ class seed_finder {
  public:
   seed_finder(packed_read_vector const& signal_reads,
               packed_read_vector const& background_reads, p_value_type p,
-              double log_fold = 0.5, uint8_t max_k = 10,
-              double memory_limit = 4, double p_ext = 0.01,
+              p_value_type significance_level, double log_fold = 0.5,
+              uint8_t max_k = 10, double memory_limit = 4, double p_ext = 0.01,
               uint8_t lookup_k = 10, bool prune = false)
       : signal_reads_{signal_reads},
         background_reads_{background_reads},
         p_{p},
+        significance_level_{significance_level},
         p_ext_{p_ext},
         fold_lim_{std::pow(2, log_fold)},
         memory_limit_{memory_limit},
@@ -407,11 +409,17 @@ class seed_finder {
 
   void find_seeds();
 
+  struct adjust_seed_p_values_result {
+    std::size_t passed_count{};
+    std::size_t discarded_count{};
+  };
+
+  adjust_seed_p_values_result adjust_seed_p_values();
+
   void set_discarded_gapmer_reporting_ostream(std::ostream& stream) {
     discarded_gapmer_reporting_ostream_ = &stream;
   }
 
-  std::vector<seed_type>& get_seeds() { return seeds_; }
   const std::vector<seed_type>& get_seeds() const { return seeds_; }
 
   double signal_to_total_length_ratio() const {
@@ -1196,5 +1204,62 @@ void seed_finder<t_configuration>::find_seeds() {
     }
     std::print(std::cerr, "{} → {} candidates.\n", +k_lim_, seeds_.size());
   }
+}
+
+
+// Returns the number of seeds that passed the significance level test.
+template <typename t_configuration>
+auto seed_finder<t_configuration>::adjust_seed_p_values()
+    -> adjust_seed_p_values_result {
+  // We use the Holm–Šidák method. To that end, we first sort the seeds and
+  // then adjust the p-value until the significance level threshold has been
+  // reached.
+  auto const seed_count{seeds_.size()};
+
+  auto const p_value_cmp{
+      [](auto const& lhs, auto const& rhs) { return lhs.p < rhs.p; }};
+  std::sort(seeds_.begin(), seeds_.end(), p_value_cmp);
+
+  auto const holm_sidak_threshold([&](std::size_t ii) {
+    auto const exponent{p_value_type{1} / p_value_type{seed_count}};
+    auto const base{p_value_type{1} - significance_level_};
+    return p_value_type{1} - pow(base, exponent);  // Use ADL.
+  });
+
+  auto const holm_sidak_adjust([&](std::size_t ii) {
+    // We assume that the previous seed has been adjusted.
+    auto const pp{seeds_[ii].p};
+    auto const base{p_value_type{1} - pp};
+    p_value_type const exponent{seed_count - ii};
+    auto const lhs{p_value_type{1} - pow(base, exponent)};
+
+    if (0 == ii) {
+      return lhs;
+    } else {
+      return std::max(lhs, seeds_[ii - 1].p);
+    }
+  });
+
+  auto const begin{seeds_.begin()};
+  auto it{begin};
+  auto const end{seeds_.end()};
+  std::size_t ii{};
+  while (it != end) {
+    //auto const threshold{significance_level_ / (seed_count - ii)}; // Holm–Bonferroni
+    auto const threshold{holm_sidak_threshold(ii)};  // Holm–Šidák
+    if (not(it->p <= threshold)) break;
+
+    // Adjust the p-value.
+    it->p = holm_sidak_adjust(ii);
+
+    ++ii;
+  }
+
+  std::sort(begin, it, p_value_cmp);
+
+  libbio_assert_lte(begin, it);
+  libbio_assert_lte(it, end);
+  return {std::size_t(std::distance(begin, it)),
+          std::size_t(std::distance(it, end))};
 }
 }  // namespace sf
