@@ -1281,8 +1281,9 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
   struct holm_bonferroni_adjustment : public adjustment_method {
     using adjustment_method::adjustment_method;
 
-    p_value_type threshold(std::size_t ii) const {
-      return this->significance_level_ / (this->seed_count_ - ii);
+    bool check(std::size_t ii, p_value_type pv) const {
+      auto const threshold{this->significance_level_ / (this->seed_count_ - ii)};
+      return (pv <= threshold);
     }
 
     p_value_type adjust(std::size_t ii) const {
@@ -1301,19 +1302,21 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
   struct holm_sidak_adjustment : adjustment_method {
     using adjustment_method::adjustment_method;
 
-    p_value_type threshold(std::size_t ii) const {
-      auto const exponent{p_value_type{1} /
-                          (p_value_type{this->seed_count_} - p_value_type{ii})};
-      auto const base{p_value_type{1} - this->significance_level_};
-      return p_value_type{1} - pow(base, exponent);  // Use ADL.
+    bool check(std::size_t ii, p_value_type pv) const {
+      p_value_type const denominator{this->seed_count_ - ii};
+      auto const threshold{log1p(-this->significance_level_)}; // Use ADL.
+      auto const pp{log1p(-pv)}; // Use ADL.
+      return threshold / denominator <= pp;
     }
 
     p_value_type adjust(std::size_t ii) const {
       // We assume that the previous seed has been adjusted.
-      auto const pp{this->seeds_[ii].p};
-      auto const base{p_value_type{1} - pp};
-      p_value_type const exponent{this->seed_count_ - ii};
-      auto const lhs{p_value_type{1} - pow(base, exponent)};
+
+      p_value_type const multiplier{this->seed_count_ - ii};
+      auto const pv{this->seeds_[ii].p};
+      auto const pp{log1p(-pv)}; // Use ADL.
+      auto const mp{multiplier * pp};
+      auto const lhs{-expm1(mp)}; // Use ADL.
 
       if (0 == ii) {
         return lhs;
@@ -1330,8 +1333,7 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
   auto const do_adjust([&](auto&& method) {
     std::size_t ii{};
     while (it != end) {
-      auto const threshold{method.threshold(ii)};
-      if (not(it->p <= threshold)) break;
+      if (not(method.check(ii, it->p))) break;
 
       // Adjust the p-value.
       it->p = method.adjust(ii);
