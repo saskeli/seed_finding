@@ -14,6 +14,7 @@
 #include <libbio/assert.hh>
 #include <libbio/syncstream.hh>
 #include <ostream>
+#include <stdexcept>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -203,6 +204,27 @@ namespace sf {
 typedef detail::p_value_type p_value_type;
 
 
+enum class p_value_correction_method_type { none, holm_bonferroni, holm_sidak };
+
+inline std::ostream& operator<<(std::ostream& os,
+                                p_value_correction_method_type method) {
+  switch (method) {
+    case p_value_correction_method_type::none:
+      os << "none";
+      break;
+
+    case p_value_correction_method_type::holm_bonferroni:
+      os << "Holm-Bonferroni";
+      break;
+
+    case p_value_correction_method_type::holm_sidak:
+      os << "Holm–Šidák";
+      break;
+  }
+  return os;
+}
+
+
 template <typename t_gapmer>
 struct seed {
   typedef t_gapmer gapmer_type;
@@ -277,9 +299,11 @@ class seed_finder {
 
   typedef gapmer_map<enrichment_result<double>> enrichment_result_map;
 
+  typedef std::vector<seed_type> seed_vector;
+
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
-  std::vector<seed_type> seeds_{};
+  seed_vector seeds_{};
   std::ostream* discarded_gapmer_reporting_ostream_{};
   uint64_t sig_size_{};
   uint64_t bg_size_{};
@@ -294,6 +318,8 @@ class seed_finder {
   double memory_limit_{};
   uint8_t k_lim_{};
   uint8_t lookup_k_{};
+  p_value_correction_method_type p_value_correction_method_{
+      p_value_correction_method_type::none};
   bool prune_{};
 
   static inline seed_type seed_from_seed_meta(gapmer_type g_, seed_meta mm);
@@ -380,8 +406,10 @@ class seed_finder {
  public:
   seed_finder(packed_read_vector const& signal_reads,
               packed_read_vector const& background_reads, p_value_type p,
-              p_value_type significance_level, double log_fold = 0.5,
-              uint8_t max_k = 10, double memory_limit = 4, double p_ext = 0.01,
+              p_value_type significance_level,
+              p_value_correction_method_type p_value_correction_method,
+              double log_fold = 0.5, uint8_t max_k = 10,
+              double memory_limit = 4, double p_ext = 0.01,
               uint8_t lookup_k = 10, bool prune = false)
       : signal_reads_{signal_reads},
         background_reads_{background_reads},
@@ -392,6 +420,7 @@ class seed_finder {
         memory_limit_{memory_limit},
         k_lim_{max_k},
         lookup_k_{lookup_k},
+        p_value_correction_method_{p_value_correction_method},
         prune_{prune} {
     // For calculating the sum of the read lengths.
     auto const read_length_sum{[](packed_read_vector const& reads) {
@@ -1234,45 +1263,93 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
   // We use the Holm–Šidák method. To that end, we first sort the seeds and
   // then adjust the p-value until the significance level threshold has been
   // reached.
-  auto const seed_count{seeds_.size()};
-
   auto const p_value_cmp{
       [](auto const& lhs, auto const& rhs) { return lhs.p < rhs.p; }};
   std::sort(seeds_.begin(), seeds_.end(), p_value_cmp);
 
-  auto const holm_sidak_threshold([&](std::size_t ii) {
-    auto const exponent{p_value_type{1} / p_value_type{seed_count}};
-    auto const base{p_value_type{1} - significance_level_};
-    return p_value_type{1} - pow(base, exponent);  // Use ADL.
-  });
+  struct adjustment_method {
+    seed_vector const& seeds_;
+    p_value_type significance_level_{};
+    std::size_t seed_count_{};
 
-  auto const holm_sidak_adjust([&](std::size_t ii) {
-    // We assume that the previous seed has been adjusted.
-    auto const pp{seeds_[ii].p};
-    auto const base{p_value_type{1} - pp};
-    p_value_type const exponent{seed_count - ii};
-    auto const lhs{p_value_type{1} - pow(base, exponent)};
+    adjustment_method(seed_vector const& seeds, p_value_type significance_level)
+        : seeds_{seeds},
+          significance_level_{significance_level},
+          seed_count_{seeds.size()} {}
+  };
 
-    if (0 == ii) {
-      return lhs;
-    } else {
-      return std::max(lhs, seeds_[ii - 1].p);
+  struct holm_bonferroni_adjustment : public adjustment_method {
+    using adjustment_method::adjustment_method;
+
+    p_value_type threshold(std::size_t ii) const {
+      return this->significance_level_ / (this->seed_count_ - ii);
     }
-  });
+
+    p_value_type adjust(std::size_t ii) const {
+      // We assume that the previous seed has been adjusted.
+      auto const lhs{p_value_type{this->seed_count_ - ii} * this->seeds_[ii].p};
+      auto const adjusted{std::min(lhs, p_value_type{1})};
+
+      if (0 == ii) {
+        return adjusted;
+      } else {
+        return std::max(adjusted, this->seeds_[ii - 1].p);
+      }
+    }
+  };
+
+  struct holm_sidak_adjustment : adjustment_method {
+    using adjustment_method::adjustment_method;
+
+    p_value_type threshold(std::size_t ii) const {
+      auto const exponent{p_value_type{1} /
+                          (p_value_type{this->seed_count_} - p_value_type{ii})};
+      auto const base{p_value_type{1} - this->significance_level_};
+      return p_value_type{1} - pow(base, exponent);  // Use ADL.
+    }
+
+    p_value_type adjust(std::size_t ii) const {
+      // We assume that the previous seed has been adjusted.
+      auto const pp{this->seeds_[ii].p};
+      auto const base{p_value_type{1} - pp};
+      p_value_type const exponent{this->seed_count_ - ii};
+      auto const lhs{p_value_type{1} - pow(base, exponent)};
+
+      if (0 == ii) {
+        return lhs;
+      } else {
+        return std::max(lhs, this->seeds_[ii - 1].p);
+      }
+    }
+  };
 
   auto const begin{seeds_.begin()};
   auto it{begin};
   auto const end{seeds_.end()};
-  std::size_t ii{};
-  while (it != end) {
-    //auto const threshold{significance_level_ / (seed_count - ii)}; // Holm–Bonferroni
-    auto const threshold{holm_sidak_threshold(ii)};  // Holm–Šidák
-    if (not(it->p <= threshold)) break;
 
-    // Adjust the p-value.
-    it->p = holm_sidak_adjust(ii);
+  auto const do_adjust([&](auto&& method) {
+    std::size_t ii{};
+    while (it != end) {
+      auto const threshold{method.threshold(ii)};
+      if (not(it->p <= threshold)) break;
 
-    ++ii;
+      // Adjust the p-value.
+      it->p = method.adjust(ii);
+
+      ++ii;
+      ++it;
+    }
+  });
+
+  switch (p_value_correction_method_) {
+    case sf::p_value_correction_method_type::holm_bonferroni:
+      do_adjust(holm_bonferroni_adjustment{seeds_, significance_level_});
+      break;
+    case sf::p_value_correction_method_type::holm_sidak:
+      do_adjust(holm_sidak_adjustment{seeds_, significance_level_});
+      break;
+    default:
+      throw std::runtime_error("Unexpected adjustment method");
   }
 
   std::sort(begin, it, p_value_cmp);

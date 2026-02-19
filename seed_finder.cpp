@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 
 #include "packed_read.hpp"
 #include "reader_adapter.hpp"
@@ -117,6 +118,8 @@ struct configuration {
   int threads{1};
   uint16_t max_k{20};
   double mem_limit{};
+  sf::p_value_correction_method_type p_value_correction_method{
+      sf::p_value_correction_method_type::none};
   bool enable_smoothing{true};
   bool enable_clustering{false};
   bool should_output_options{false};
@@ -152,6 +155,7 @@ std::ostream& operator<<(std::ostream& os, configuration const& conf) {
   os << "threads:                   " << conf.threads << '\n';
   os << "max_k:                     " << conf.max_k << '\n';
   os << "mem_limit:                 " << conf.mem_limit << '\n';
+  os << "p_value_correction_method: " << conf.p_value_correction_method << '\n';
   os << "enable_smoothing:          " << conf.enable_smoothing << '\n';
   os << "enable_clustering:         " << conf.enable_clustering << '\n';
   os << "should_output_options:     " << conf.should_output_options << '\n';
@@ -180,6 +184,13 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
       parser.helpParams = help_params;
     }
 
+    std::unordered_map<std::string, sf::p_value_correction_method_type> const
+        p_value_correction_method_mapping{
+            {"none", sf::p_value_correction_method_type::none},
+            {"holm-bonferroni",
+             sf::p_value_correction_method_type::holm_bonferroni},
+            {"holm-sidak", sf::p_value_correction_method_type::holm_sidak}};
+
     args::HelpFlag help_(parser, "help", "Display this help.", {'h', "help"});
     sf::args::version_flag version_(parser, "version",
                                     "Output the version number and exit.",
@@ -202,6 +213,10 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         parser, "p_value",
         "p value to use for extension when background counts are zero.",
         {"p-ext"}, retval.p_ext);
+    args::MapFlag<std::string, sf::p_value_correction_method_type>
+        p_value_correction_method_(
+            parser, "correction_method", "p-value correction method",
+            {"correction-method"}, p_value_correction_method_mapping);
     sf::args::value_flag significance_level_(
         parser, "significancel_level", "FWER significance level threshold",
         {"significance"}, retval.significance_level);
@@ -288,6 +303,8 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     if (enable_pruning_) retval.prune = true;
     if (enable_clustering_) retval.enable_clustering = true;
     if (should_output_options_) retval.should_output_options = true;
+    if (p_value_correction_method_)
+      retval.p_value_correction_method = args::get(p_value_correction_method_);
   }
 
   if (retval.print_lim == 0) {
@@ -410,10 +427,10 @@ int main(int argc, char const* argv[]) {
     lb::ostream_synchronizer discarded_gapmer_output_stream_synchronizer{
         discarded_gapmer_output_stream};
 
-    seed_finder_type finder(signal_reads, background_reads, conf.p,
-                            conf.significance_level, conf.log_fold, conf.max_k,
-                            conf.mem_limit, conf.p_ext, conf.lookup_k,
-                            conf.prune);
+    seed_finder_type finder(
+        signal_reads, background_reads, conf.p, conf.significance_level,
+        conf.p_value_correction_method, conf.log_fold, conf.max_k,
+        conf.mem_limit, conf.p_ext, conf.lookup_k, conf.prune);
 
     if constexpr (enable_discarded_gapmer_output) {
       if (not conf.discarded_gapmer_output_path.empty()) {
@@ -458,14 +475,21 @@ int main(int argc, char const* argv[]) {
         sc.output_cluster(conf.prefix, conf.should_output_all_matches);
       }
     } else {
-      auto const res{finder.adjust_seed_p_values()};
-      std::cerr << res.passed_count << " seeds passed at significance level "
-                << conf.significance_level << ", " << res.discarded_count
-                << " were discarded.\n";
-      auto const& seeds{finder.get_seeds()};
+      auto const limit{[&] {
+        if (sf::p_value_correction_method_type::none ==
+            conf.p_value_correction_method)
+          return conf.print_lim;
 
+        auto const res{finder.adjust_seed_p_values()};
+        std::cerr << res.passed_count << " seeds passed at significance level "
+                  << conf.significance_level << ", " << res.discarded_count
+                  << " were discarded.\n";
+
+        return std::min(res.passed_count, conf.print_lim);
+      }()};
+
+      auto const& seeds{finder.get_seeds()};
       std::cout << "seed\tsignal_count\tbackground_count\tp_value\n";
-      auto const limit{std::min(res.passed_count, conf.print_lim)};
       for (std::size_t ii{}; ii < limit; ++ii) {
         auto const& seed{seeds[ii]};
         std::cout << seed.g << '\t' << seed.sig_count << '\t' << seed.bg_count
