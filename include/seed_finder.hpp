@@ -323,6 +323,10 @@ class seed_finder {
   inline void report_pruned(seed_type seed, uint16_t k,
                             char const* test_fn) const;
 
+  // Thread safe.
+  inline void report_significance_level_not_reached(seed_type seed,
+                                                    char const* test_fn) const;
+
   template <typename t_value>
   [[nodiscard]] extension_validation_result validate_extension(
       gapmer_type aa, gapmer_type bb, enrichment_result<t_value> aa_er,
@@ -530,7 +534,23 @@ void seed_finder<t_configuration>::report_pruned(seed_type seed, uint16_t kk,
            << "\tpruned\t";
     stream << "k: " << kk << " p: " << seed.p
            << " signal count: " << seed.sig_count
-           << " background_count: " << seed.bg_count << '\n';
+           << " background count: " << seed.bg_count << '\n';
+  }
+}
+
+
+// Thread safe.
+template <typename t_configuration>
+void seed_finder<t_configuration>::report_significance_level_not_reached(
+    seed_type seed, char const* test_fn) const {
+  if constexpr (enable_reporting_discarded_seeds) {
+    libbio_assert(discarded_gapmer_reporting_ostream_);
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
+
+    stream << "p_value_adjustment\t\t" << seed.g << '\t' << false << "\t\t"
+           << test_fn << "\tdiscarded\t";
+    stream << "p: " << seed.p << " signal count: " << seed.sig_count
+           << " background count: " << seed.bg_count << '\n';
   }
 }
 
@@ -1259,7 +1279,17 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
 
   libbio_assert_lte(begin, it);
   libbio_assert_lte(it, end);
-  return {std::size_t(std::distance(begin, it)),
-          std::size_t(std::distance(it, end))};
+  adjust_seed_p_values_result const retval{
+      std::size_t(std::distance(begin, it)),
+      std::size_t(std::distance(it, end))};
+
+  if constexpr (enable_reporting_discarded_seeds) {
+    while (it != end) {
+      report_significance_level_not_reached(*it, "adjust_seed_p_values");
+      ++it;
+    }
+  }
+
+  return retval;
 }
 }  // namespace sf
