@@ -198,85 +198,104 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
                                     "Output the version number and exit.",
                                     {'V', "version"});
     args::CompletionFlag completion_(parser, {"complete"});
+
+    // Input options
+    args::Group const input_options_empty_line_(parser, "\n");
+    args::Group input_options_(parser, "Input options");
     sf::args::value_flag bg_path_(
-        parser, "path", "Background FASTA file, required for now.",
+        input_options_, "path", "Background FASTA file, required for now.",
         {'b', "background"}, retval.bg_path, args::Options::Required);
     args::Positional<std::string> sig_path_(
-        parser, "signal_path", "Signal FASTA file.", retval.sig_path,
+        input_options_, "signal_path", "Signal FASTA file.", retval.sig_path,
         args::Options::Required);
-    args::Flag gap_any_(parser, "gap_any",
-                        "Allow gaps at any location, not just in the middle.",
-                        {'a', "gap-at-any-location"});
-    sf::args::value_flag p_sig_(
-        parser, "p_value",
-        "p value to use for signal to background comparison.",
-        {'p', "p-signal"}, retval.p);
-    sf::args::value_flag p_ext_(
-        parser, "p_value",
-        "p value to use for extension when background counts are zero.",
-        {"p-ext"}, retval.p_ext);
-    args::MapFlag<std::string, sf::p_value_correction_method_type>
-        p_value_correction_method_(
-            parser, "correction_method", "p-value correction method",
-            {"correction-method"}, p_value_correction_method_mapping);
-    sf::args::value_flag significance_level_(
-        parser, "significancel_level", "FWER significance level threshold",
-        {"significance"}, retval.significance_level);
-    sf::args::value_flag log_fold_(
-        parser, "fold_change",
-        "Discard all mers with log fold change smaller than this.", {"lf"},
-        retval.log_fold);
-    sf::args::value_flag max_k_(parser, "length",
-                                "Maximum mer length in [6, 24] range.", {"mk"},
-                                retval.max_k);
-    sf::args::value_flag lookup_k_(
-        parser, "length",
-        "Limit for lookup table-based k-mer counting in [5, max_k] range. Use "
-        "zero to calculate automatically from available memory.",
-        {"lookup-k"}, retval.lookup_k);
-    sf::args::value_flag threads_(parser, "threads",
-                                  "Number of threads to use.", {'t', "threads"},
-                                  retval.threads);
-    args::Flag enable_clustering_(parser, "cluster",
-                                  "Cluster the candidate seeds", {"cluster"});
+
+    // Output options
+    args::Group const output_options_empty_line_(parser, "\n");
+    args::Group output_options_(parser, "Output options");
     sf::args::value_flag prefix_(
-        parser, "output_prefix",
+        output_options_, "output_prefix",
         "Prefix for alignment output, If not given, "
         "no alignments will be output. Requires --cluster.",
         {"pref"}, retval.prefix);
     sf::args::value_flag print_lim_(
-        parser, "max_s",
-        "Maximum number of “best” seeds to output (0 -> all seeds).", {"max-s"},
+        output_options_, "max_s",
+        "Maximum number of “best” seeds to output (0 → all seeds).", {"max-s"},
         retval.print_lim);
     sf::args::value_flag max_aligns_(
-        parser, "max_a",
-        "Maximum number of alignments to output. (0 -> max_s).", {"max-a"},
+        output_options_, "max_a",
+        "Maximum number of alignments to output. (0 → max_s).", {"max-a"},
         retval.max_aligns);
     args::Flag should_output_all_matches_(
-        parser, "output_all_matches",
+        output_options_, "output_all_matches",
         "Output also matches that are substrings of other matches.",
         {"output-all-matches"});
-    args::Flag disable_smoothing_(parser, "disable_smoothing",
+    sf::args::value_flag dot_path_(
+        output_options_, "path",
+        "Compute Huddinge graph and output to DOT file path.",
+        {"output-huddinge-graph"}, retval.dot_output);
+    sf::args::value_flag discarded_gapmer_output_path_(
+        output_options_, "path", "Output discarded gapmers to the given path",
+        {"output-discarded-gapmers"}, retval.discarded_gapmer_output_path);
+
+    // Processing options
+    args::Group const processing_options_empty_line_(parser, "\n");
+    args::Group processing_options_(parser, "Processing options");
+    args::Flag gap_any_(processing_options_, "gap_any",
+                        "Allow gaps at any location, not just in the middle.",
+                        {'a', "gap-at-any-location"});
+    sf::args::value_flag p_sig_(
+        processing_options_, "p_value",
+        "p value to use for signal to background comparison.",
+        {'p', "p-signal"}, retval.p);
+    sf::args::value_flag p_ext_(
+        processing_options_, "p_value",
+        "p value to use for extension when background counts are zero.",
+        {"p-ext"}, retval.p_ext);
+    args::MapFlag<std::string, sf::p_value_correction_method_type>
+        p_value_correction_method_(processing_options_, "correction_method",
+                                   "p-value correction method",
+                                   {"correction-method"},
+                                   p_value_correction_method_mapping);
+    sf::args::value_flag significance_level_(
+        processing_options_, "significancel_level",
+        "FWER significance level threshold", {"significance"},
+        retval.significance_level);
+    sf::args::value_flag log_fold_(
+        processing_options_, "fold_change",
+        "Discard all mers with log fold change smaller than this.", {"lf"},
+        retval.log_fold);
+    sf::args::value_flag max_k_(processing_options_, "length",
+                                "Maximum mer length in [6, 24] range.", {"mk"},
+                                retval.max_k);
+    sf::args::value_flag lookup_k_(
+        processing_options_, "length",
+        "Limit for lookup table-based k-mer counting in [5, max_k] range. Use "
+        "zero to calculate automatically from available memory.",
+        {"lookup-k"}, retval.lookup_k);
+    args::Flag enable_clustering_(processing_options_, "cluster",
+                                  "Cluster the candidate seeds", {"cluster"});
+    args::Flag disable_smoothing_(processing_options_, "disable_smoothing",
                                   "Disable smoothing of counted mers.",
                                   {'s', "no-smoothing"});
     args::Flag enable_pruning_(
-        parser, "enable pruning",
+        processing_options_, "enable pruning",
         "Enable pruning of extendable mers for partial counting.", {"pruning"});
+    sf::args::value_flag h1_weight_(
+        processing_options_, "weight",
+        "Relative impact of H1 neighbourhood enrichment on mer priority. (0 → "
+        "no impact, 1 → 0.5 H1 neighbourhod 0.5 mer enrichment)",
+        {"h1-weight"}, retval.h1_weight);
+
+    // Processing options
+    args::Group const running_options_empty_line_(parser, "\n");
+    args::Group running_options_(parser, "Running options");
+    sf::args::value_flag threads_(running_options_, "threads",
+                                  "Number of threads to use.", {'t', "threads"},
+                                  retval.threads);
     sf::args::value_flag mem_limit_(
-        parser, "gigabytes",
+        running_options_, "gigabytes",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
         retval.mem_limit);
-    sf::args::value_flag h1_weight_(
-        parser, "weight",
-        "Relative impact of H1 neighbourhood enrichment on mer priority. (0 -> "
-        "no impact, 1 -> 0.5 h1 neighbourhod 0.5 mer enrichment)",
-        {"h1-weight"}, retval.h1_weight);
-    sf::args::value_flag dot_path_(
-        parser, "path", "Compute Huddinge graph and output to dot file path.",
-        {"output-huddinge-graph"}, retval.dot_output);
-    sf::args::value_flag discarded_gapmer_output_path_(
-        parser, "path", "Output discarded gapmers to the given path",
-        {"output-discarded-gapmers"}, retval.discarded_gapmer_output_path);
     args::Flag should_output_options_(parser, "output_options",
                                       "Output the parsed options to stderr.",
                                       {"output-options"});
