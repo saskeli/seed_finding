@@ -2,7 +2,10 @@
 
 #include <gsl/gsl_cdf.h>
 #include <gsl/gsl_errno.h>
+#include <sys/types.h>
 
+#include <atomic>
+#include <cerrno>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
@@ -11,6 +14,7 @@
 #include <libbio/assert.hh>
 #include <libbio/syncstream.hh>
 #include <ostream>
+#include <stdexcept>
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
@@ -26,10 +30,14 @@
 
 
 namespace sf::detail {
+
+typedef math::p_value_type p_value_type;
+
+
 // FIXME: Consider using the same value type (e.g. double) for all counts.
 template <typename t_value>
 struct enrichment_result {
-  double ac_test_result{};
+  p_value_type ac_test_result{};
   t_value signal_count{};
   t_value background_count{};
 
@@ -79,7 +87,8 @@ enum class extension_validation_strategy {
 
 
 struct extension_validation_result {
-  double binomial_test_result{};
+  double
+      binomial_test_result{};  // FIXME: Use p_value_type? Also in make() below.
   extension_validation_status status;
   extension_validation_strategy strategy;
 
@@ -128,8 +137,8 @@ inline std::ostream& operator<<(std::ostream& os,
 
 template <typename t_value>
 std::ostream& operator<<(std::ostream& os, enrichment_result<t_value> er) {
-  std::print(os, "SC: {} BC: {} AC test p-value: {}", er.signal_count,
-             er.background_count, er.ac_test_result);
+  os << "SC: " << er.signal_count << " BC: " << er.background_count
+     << " AC test p-value: " << er.ac_test_result;
   return os;
 }
 
@@ -192,12 +201,37 @@ inline std::ostream& operator<<(std::ostream& os,
 
 namespace sf {
 
+typedef detail::p_value_type p_value_type;
+
+
+enum class p_value_correction_method_type { none, holm_bonferroni, holm_sidak };
+
+inline std::ostream& operator<<(std::ostream& os,
+                                p_value_correction_method_type method) {
+  switch (method) {
+    case p_value_correction_method_type::none:
+      os << "none";
+      break;
+
+    case p_value_correction_method_type::holm_bonferroni:
+      os << "Holm-Bonferroni";
+      break;
+
+    case p_value_correction_method_type::holm_sidak:
+      os << "Holm–Šidák";
+      break;
+  }
+  return os;
+}
+
+
 template <typename t_gapmer>
 struct seed {
   typedef t_gapmer gapmer_type;
 
   gapmer_type g{};
-  double p{};
+  // FIXME: Replace these with enrichment_result?
+  p_value_type p{};
   uint64_t sig_count{};
   uint64_t bg_count{};
 };
@@ -243,7 +277,7 @@ class seed_finder {
 
   // FIXME: remove.
   struct seed_meta {
-    double p{};
+    p_value_type p{};
     uint64_t sig_count{};
     uint64_t bg_count{};
   };
@@ -265,19 +299,27 @@ class seed_finder {
 
   typedef gapmer_map<enrichment_result<double>> enrichment_result_map;
 
+  typedef std::vector<seed_type> seed_vector;
+
   packed_read_vector const& signal_reads_;
   packed_read_vector const& background_reads_;
-  std::vector<seed_type> seeds_{};
+  seed_vector seeds_{};
   std::ostream* discarded_gapmer_reporting_ostream_{};
   uint64_t sig_size_{};
   uint64_t bg_size_{};
-  double p_{};
-  double p_ext_{};
+  // Unfortunately we need to use mutable here to be able to report
+  // range errors in a sensible way.
+  mutable std::atomic_uint64_t math_range_errors_{};
+  p_value_type p_{};
+  p_value_type significance_level_{};
+  double p_ext_{};  // FIXME: Use p_value_type?
   double fold_lim_{};
   double signal_to_total_length_ratio_{};
   double memory_limit_{};
   uint8_t k_lim_{};
   uint8_t lookup_k_{};
+  p_value_correction_method_type p_value_correction_method_{
+      p_value_correction_method_type::none};
   bool prune_{};
 
   static inline seed_type seed_from_seed_meta(gapmer_type g_, seed_meta mm);
@@ -285,6 +327,9 @@ class seed_finder {
   template <typename t_value>
   static inline seed_type seed_from_enrichment_result(
       gapmer_type g_, enrichment_result<t_value> er);
+
+  // Thread safe.
+  void report_math_error(math::result res) const;
 
   // Thread safe.
   template <typename t_lhs_info, typename t_rhs_info>
@@ -299,6 +344,14 @@ class seed_finder {
   inline void report_enrichment_check_failure(
       gapmer_type discarded, enrichment_check_result<t_value> res,
       char const* caller, char const* test_fn) const;
+
+  // Thread safe.
+  inline void report_pruned(seed_type seed, uint16_t k,
+                            char const* test_fn) const;
+
+  // Thread safe.
+  inline void report_significance_level_not_reached(seed_type seed,
+                                                    char const* test_fn) const;
 
   template <typename t_value>
   [[nodiscard]] extension_validation_result validate_extension(
@@ -343,25 +396,31 @@ class seed_finder {
                       enrichment_result_map& bb,
                       partial_count_type const& p_counter) const;
 
-  void extend(enrichment_result_map& aa, enrichment_result_map& bb,
+  void extend(enrichment_result_map const& aa, enrichment_result_map& bb,
               partial_count_type& p_counter, uint16_t k, bool prune) const;
 
-  void filter(enrichment_result_map& mm) const;
+  void filter_source(enrichment_result_map& aa,
+                     enrichment_result_map const& bb) const;
+  void filter_same_length(enrichment_result_map& mm) const;
 
  public:
   seed_finder(packed_read_vector const& signal_reads,
-              packed_read_vector const& background_reads, double p,
+              packed_read_vector const& background_reads, p_value_type p,
+              p_value_type significance_level,
+              p_value_correction_method_type p_value_correction_method,
               double log_fold = 0.5, uint8_t max_k = 10,
               double memory_limit = 4, double p_ext = 0.01,
               uint8_t lookup_k = 10, bool prune = false)
       : signal_reads_{signal_reads},
         background_reads_{background_reads},
         p_{p},
+        significance_level_{significance_level},
         p_ext_{p_ext},
         fold_lim_{std::pow(2, log_fold)},
         memory_limit_{memory_limit},
         k_lim_{max_k},
         lookup_k_{lookup_k},
+        p_value_correction_method_{p_value_correction_method},
         prune_{prune} {
     // For calculating the sum of the read lengths.
     auto const read_length_sum{[](packed_read_vector const& reads) {
@@ -383,16 +442,24 @@ class seed_finder {
 
   void find_seeds();
 
+  struct adjust_seed_p_values_result {
+    std::size_t passed_count{};
+    std::size_t discarded_count{};
+  };
+
+  adjust_seed_p_values_result adjust_seed_p_values();
+
   void set_discarded_gapmer_reporting_ostream(std::ostream& stream) {
     discarded_gapmer_reporting_ostream_ = &stream;
   }
 
-  std::vector<seed_type>& get_seeds() { return seeds_; }
   const std::vector<seed_type>& get_seeds() const { return seeds_; }
 
   double signal_to_total_length_ratio() const {
     return signal_to_total_length_ratio_;
   }
+
+  uint64_t range_error_count() const { return math_range_errors_; }
 };
 
 
@@ -432,12 +499,37 @@ inline void seed_finder<t_configuration>::report_discarded(
       stream << rhs << '\t' << lhs;
 
     stream << '\t' << bool(res) << "\t\t" << test_fn << '\t';
+    stream << res.strategy << "; " << res.status << '\t';
 
-    stream << res.strategy << "; " << res.status << "; ";
     if (res)
-      stream << " (lhs: " << lhs_info << " rhs: " << rhs_info << ')';
+      stream << "lhs: " << lhs_info << " rhs: " << rhs_info;
     else
-      stream << " (lhs: " << rhs_info << " rhs: " << lhs_info << ')';
+      stream << "lhs: " << rhs_info << " rhs: " << lhs_info;
+
+    stream << '\n';
+  }
+}
+
+
+// Thread safe.
+template <typename t_configuration>
+inline void seed_finder<t_configuration>::report_math_error(
+    math::result res) const {
+  switch (res.error) {
+    case ERANGE:
+      // Allowed since math_range_errors_ is mutable.
+      math_range_errors_.fetch_add(1, std::memory_order_relaxed);
+      break;
+    case EDOM: {
+      libbio::osyncstream(std::cerr)
+          << "WARNING: Domain error occurred when using a math function.\n";
+      break;
+    }
+    default: {
+      libbio::osyncstream(std::cerr)
+          << "WARNING: Unknown error occurred when using a math function.\n";
+      break;
+    }
   }
 }
 
@@ -453,7 +545,41 @@ inline void seed_finder<t_configuration>::report_enrichment_check_failure(
     libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
 
     stream << "enrichment check\t\t" << discarded << '\t' << bool(res) << '\t'
-           << caller << '\t' << test_fn << '\t' << res << '\n';
+           << caller << '\t' << test_fn << '\t' << res.status << '\t'
+           << res.result << '\n';
+  }
+}
+
+
+// Thread safe.
+template <typename t_configuration>
+void seed_finder<t_configuration>::report_pruned(seed_type seed, uint16_t kk,
+                                                 char const* test_fn) const {
+  if constexpr (enable_reporting_discarded_seeds) {
+    libbio_assert(discarded_gapmer_reporting_ostream_);
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
+
+    stream << "pruning\t\t" << seed.g << '\t' << false << "\t\t" << test_fn
+           << "\tpruned\t";
+    stream << "k: " << kk << " p: " << seed.p
+           << " signal count: " << seed.sig_count
+           << " background count: " << seed.bg_count << '\n';
+  }
+}
+
+
+// Thread safe.
+template <typename t_configuration>
+void seed_finder<t_configuration>::report_significance_level_not_reached(
+    seed_type seed, char const* test_fn) const {
+  if constexpr (enable_reporting_discarded_seeds) {
+    libbio_assert(discarded_gapmer_reporting_ostream_);
+    libbio::osyncstream stream{*discarded_gapmer_reporting_ostream_};
+
+    stream << "p_value_adjustment\t\t" << seed.g << '\t' << false << "\t\t"
+           << test_fn << "\tdiscarded\t";
+    stream << "p: " << seed.p << " signal count: " << seed.sig_count
+           << " background count: " << seed.bg_count << '\n';
   }
 }
 
@@ -544,9 +670,11 @@ template <bool t_calculate_ac_test_for_bb, typename t_value>
   if (aa_er.background_count <= 1.00001 && bb_er.background_count <= 1.00001) {
     if (aa_er.signal_count < bb_er.signal_count) {
       if constexpr (t_calculate_ac_test_for_bb) {
-        bb_er.ac_test_result =
-            math::beta_incomplete(bb_er.signal_count, bb_er.background_count,
-                                  signal_to_total_length_ratio_);
+        auto const res{math::beta_incomplete(bb_er.signal_count,
+                                             bb_er.background_count,
+                                             signal_to_total_length_ratio_)};
+        if (!res) report_math_error(res);
+        bb_er.ac_test_result = res.value;
       }
       return true;
     }
@@ -554,9 +682,11 @@ template <bool t_calculate_ac_test_for_bb, typename t_value>
   }
 
   if constexpr (t_calculate_ac_test_for_bb) {
-    bb_er.ac_test_result =
-        math::beta_incomplete(bb_er.signal_count, bb_er.background_count,
-                              signal_to_total_length_ratio_);
+    auto const res{math::beta_incomplete(bb_er.signal_count,
+                                         bb_er.background_count,
+                                         signal_to_total_length_ratio_)};
+    if (!res) report_math_error(res);
+    bb_er.ac_test_result = res.value;
   }
   return bb_er.ac_test_result < aa_er.ac_test_result;
 }
@@ -586,10 +716,11 @@ template <typename t_value>
   // web-server for the generic analysis of large data sets of counts,
   // Bioinformatics, Volume 35, Issue 1, January 2019, Pages 170–171,
   // https://doi.org/10.1093/bioinformatics/bty640)
-  double const rr{math::beta_incomplete(sc, bc, signal_to_total_length_ratio_)};
-  return {{rr, sc, bc},
-          rr <= p_ ? enrichment_check_status::success
-                   : enrichment_check_status::ac_test_failed};
+  auto const res{math::beta_incomplete(sc, bc, signal_to_total_length_ratio_)};
+  if (!res) report_math_error(res);
+  return {{res.value, sc, bc},
+          res.value <= p_ ? enrichment_check_status::success
+                          : enrichment_check_status::ac_test_failed};
 }
 
 
@@ -666,23 +797,26 @@ void seed_finder<t_configuration>::filter_huddinge_neighbourhood(
         }
 
         if constexpr (t_should_extend) {
-          double const o_r{
+          auto const betai_res{
               math::beta_incomplete(osc, obc, signal_to_total_length_ratio_)};
+          if (!betai_res) report_math_error(betai_res);
 
-          enrichment_result other_enrichment_res{o_r, osc, obc};
-          auto const res{
+          enrichment_result other_enrichment_res{betai_res.value, osc, obc};
+          auto const ext_res{
               validate_extension(gg, oo, enrichment_res, other_enrichment_res)};
-          report_discarded(gg, oo, res, enrichment_res, other_enrichment_res,
-                           "filter_huddinge_neighbourhood");
+          // If res is true, the first gapmer is kept.
+          report_discarded(oo, gg, ext_res, other_enrichment_res,
+                           enrichment_res, "filter_huddinge_neighbourhood");
 
-          if (res) {
+          if (ext_res) {
             prev_critical([&] { prev_counts->mark_discarded(gg, offset); });
           } else {
             critical([&] { counts.mark_discarded(oo, o_offset); });
           }
         } else {
+          // FIXME: This is never reached?
           // FIXME: report discarded.
-          double o_r{};
+          p_value_type o_r{};
           if (should_filter<true>(gg, oo, sc, bc, osc, obc, rr, o_r)) {
             critical([&] { counts.mark_discarded(gg, offset); });
           } else {
@@ -875,10 +1009,12 @@ void seed_finder<t_configuration>::extend_counted(
                 enrichment_res.result.template to_enrichment_result<double>()};
             auto const res{
                 validate_extension(kv.first, oo, kv.second, enrichment_res_fp)};
-            report_discarded(kv.first, oo, res, kv.second, enrichment_res,
-                             "extend_counted");
             if (res) {
               bb[oo] = enrichment_res_fp;
+            } else {
+              // If res is false, the second gapmer is kept.
+              report_discarded(oo, kv.first, res, enrichment_res, kv.second,
+                               "extend_counted");
             }
           }
         });
@@ -887,7 +1023,7 @@ void seed_finder<t_configuration>::extend_counted(
 
 
 /**
- * Find k length extensions from a, and store valid extensions in b.
+ * Find k length extensions from aa and store valid extensions in bb.
  *
  * @param aa     k - 1 length mers to extend.
  * @param bb     storage for valid k-mers.
@@ -896,14 +1032,13 @@ void seed_finder<t_configuration>::extend_counted(
  * @param prune  Should only one pass of extensions be done.
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
+void seed_finder<t_configuration>::extend(enrichment_result_map const& aa,
                                           enrichment_result_map& bb,
                                           partial_count_type& counts,
                                           uint16_t k, bool prune) const {
   std::cerr << "    Extend " << aa.size() << " mers.\n";
 
-  const constexpr double fill_limit = 0.4;
-  gapmer_set del_set;
+  constexpr double fill_limit{0.4};
 
   auto const init_counters{[&](gapmer_type oo) {
     if (not bb.contains(oo)) {
@@ -919,10 +1054,32 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
     for (auto kv : aa) {
       prio.emplace_back(seed_from_enrichment_result(kv.first, kv.second));
     }
+
     // Sort by fold change.
     std::sort(prio.begin(), prio.end(), [](const auto& lhs, const auto& rhs) {
       return (lhs.sig_count / lhs.bg_count) > (rhs.sig_count / rhs.bg_count);
     });
+
+    // Initialise counters for the Huddinge neighbours of the sorted gapmers.
+    {
+      auto it{prio.begin()};
+      auto const end{prio.end()};
+
+      // Initialise the counters.
+      while (it != end) {
+        it->g.template huddinge_neighbours<true, true, false>(init_counters);
+        if (counts.fill_rate() >= fill_limit) {
+          break;
+        }
+        ++it;
+      }
+
+      // Report the pruned gapmers.
+      while (it != end) {
+        report_pruned(*it, k, "extend");
+        ++it;
+      }
+    }
 
     for (auto res : prio) {
       res.g.template huddinge_neighbours<true, true, false>(init_counters);
@@ -949,35 +1106,43 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
   std::cerr << "\tFiltering extension…\n";
   extend_counted(aa, bb, counts);
   counts.clear();
+}
 
-  if constexpr (filter_mers) {
-    std::cerr << "\tFiltering sources…\n";
-    for (auto kv : aa) {
-      bool keep = true;
+/**
+ * Filter source gapmers’ H1 neighbourhood if gapmer in question has been
+ * successfully extended.
+ */
+template <typename t_configuration>
+void seed_finder<t_configuration>::filter_source(
+    enrichment_result_map& aa, enrichment_result_map const& bb) const {
+  gapmer_set del_set;
+  std::cerr << "\tFiltering sources…\n";
+  for (auto kv : aa) {
+    bool keep = true;
 
-      kv.first.template huddinge_neighbours<true, true, false>(
-          [&](gapmer_type o) {
-            if (not o.is_canonical()) {
-              o = o.reverse_complement();
-            }
-            if (bb.contains(o)) {
-              auto const res{validate_extension(kv.first, o, kv.second, bb[o])};
-              report_discarded(kv.first, o, res, kv.second, bb[o], "extend");
-              if (res) {
-                keep = false;
-              }
-            }
-          });
+    kv.first.template huddinge_neighbours<true, true, false>(
+        [&](gapmer_type oo) {
+          if (not oo.is_canonical()) {
+            oo = oo.reverse_complement();
+          }
 
-      if (not keep) {
-        del_set.insert(kv.first);
-      }
+          if (bb.contains(oo)) {
+            auto const res{validate_extension(kv.first, oo, kv.second, bb[oo])};
+            if (res) keep = false;
+            // If res is true, the first gapmer is kept.
+            report_discarded(oo, kv.first, res, bb[oo], kv.second,
+                             "filter_source");
+          }
+        });
+
+    if (not keep) {
+      del_set.insert(kv.first);
     }
+  }
 
-    for (auto d : del_set) {
-      aa.erase(d);
-    }
-  }  // if constexpr (filter_mers)
+  for (auto d : del_set) {
+    aa.erase(d);
+  }
 }
 
 
@@ -988,7 +1153,8 @@ void seed_finder<t_configuration>::extend(enrichment_result_map& aa,
  * @param m   gapmers to filter
  */
 template <typename t_configuration>
-void seed_finder<t_configuration>::filter(enrichment_result_map& mm) const {
+void seed_finder<t_configuration>::filter_same_length(
+    enrichment_result_map& mm) const {
   gapmer_set del_set;
   auto e = mm.end();
   for (auto it = mm.begin(); it != e; ++it) {
@@ -1011,6 +1177,7 @@ void seed_finder<t_configuration>::filter(enrichment_result_map& mm) const {
     }
   }
   for (auto d : del_set) {
+    // FIXME: report filtered?
     mm.erase(d);
   }
   std::cerr << "    filtered to " << mm.size() << " mers\n";
@@ -1062,6 +1229,9 @@ void seed_finder<t_configuration>::find_seeds() {
   for (uint8_t k = lookup_k_ + 1; k <= k_lim_; ++k) {
     std::cerr << +(k - 1) << " → \n";
     extend(aa, bb, partial_counts, k, prune_);
+    if constexpr (filter_mers) {
+      filter_source(aa, bb);
+    }
     std::print(std::cerr, "    {} {} candidates\n", aa.size(), +(k - 1));
     std::print(std::cerr, "    {} {} potentials\n", bb.size(), +k);
     for (auto pp : aa) {
@@ -1069,7 +1239,7 @@ void seed_finder<t_configuration>::find_seeds() {
     }
     aa.clear();
     if constexpr (filter_mers) {
-      filter(bb);
+      filter_same_length(bb);
     }
     swap(aa, bb);
     std::print(std::cerr, "{} → {} candidates.\n", +(k - 1), seeds_.size());
@@ -1083,5 +1253,133 @@ void seed_finder<t_configuration>::find_seeds() {
     }
     std::print(std::cerr, "{} → {} candidates.\n", +k_lim_, seeds_.size());
   }
+}
+
+
+// Returns the number of seeds that passed the significance level test.
+template <typename t_configuration>
+auto seed_finder<t_configuration>::adjust_seed_p_values()
+    -> adjust_seed_p_values_result {
+  // We use the Holm–Šidák method. To that end, we first sort the seeds and
+  // then adjust the p-value until the significance level threshold has been
+  // reached.
+  auto const p_value_cmp{
+      [](auto const& lhs, auto const& rhs) { return lhs.p < rhs.p; }};
+  std::sort(seeds_.begin(), seeds_.end(), p_value_cmp);
+
+  struct adjustment_method {
+    seed_vector const& seeds_;
+    p_value_type significance_level_{};
+    std::size_t seed_count_{};
+
+    adjustment_method(seed_vector const& seeds, p_value_type significance_level)
+        : seeds_{seeds},
+          significance_level_{significance_level},
+          seed_count_{seeds.size()} {}
+  };
+
+  struct holm_bonferroni_adjustment : public adjustment_method {
+    using adjustment_method::adjustment_method;
+
+    bool check(std::size_t ii, p_value_type pv) const {
+      auto const threshold{this->significance_level_ / (this->seed_count_ - ii)};
+      return (pv <= threshold);
+    }
+
+    p_value_type adjust(std::size_t ii) const {
+      // We assume that the previous seed has been adjusted.
+      auto const lhs{p_value_type{this->seed_count_ - ii} * this->seeds_[ii].p};
+      auto const adjusted{std::min(lhs, p_value_type{1})};
+
+      if (0 == ii) {
+        return adjusted;
+      } else {
+        return std::max(adjusted, this->seeds_[ii - 1].p);
+      }
+    }
+  };
+
+  struct holm_sidak_adjustment : adjustment_method {
+    using adjustment_method::adjustment_method;
+
+    bool check(std::size_t ii, p_value_type pv) const {
+      p_value_type const denominator{this->seed_count_ - ii};
+      auto const threshold{log1p(-this->significance_level_)}; // Use ADL.
+      auto const pp{log1p(-pv)}; // Use ADL.
+      return threshold / denominator <= pp;
+    }
+
+    p_value_type adjust(std::size_t ii) const {
+      // We assume that the previous seed has been adjusted.
+      // The adjustment is defined as p̃₍ᵢ₎ = max{p̃₍ᵢ₋₁₎, 1 - (1 - p₍ᵢ₎)ⁿ⁻ⁱ}
+      // where n is the total number of p-values and i is the p-value index
+      // starting from zero. Calculating this can easily result in an underflow,
+      // so we use log transformation as follows:
+      //
+      //            p̃'₍ᵢ₎ = 1 - (1 - p₍ᵢ₎)ⁿ⁻ⁱ (p̃'₍ᵢ₎ defined here)
+      // ⇔      1 - p̃'₍ᵢ₎ = (1 - p₍ᵢ₎)ⁿ⁻ⁱ
+      // ⇔ ln (1 - p̃'₍ᵢ₎) = (n - i) ln (1 - p₍ᵢ₎)
+      // ⇔          p̃'₍ᵢ₎ = -(exp((n - i) ln (1 - p₍ᵢ₎)) - 1).
+      //
+      // (At least for p-values not equal to one; should work in practice for
+      // values closer to zero than to one.) Hence we can use log1p and expm1.
+      p_value_type const multiplier{this->seed_count_ - ii};
+      auto const pv{this->seeds_[ii].p};
+      auto const pp{log1p(-pv)}; // Use ADL.
+      auto const mp{multiplier * pp};
+      auto const lhs{-expm1(mp)}; // Use ADL.
+
+      if (0 == ii) {
+        return lhs;
+      } else {
+        return std::max(lhs, this->seeds_[ii - 1].p);
+      }
+    }
+  };
+
+  auto const begin{seeds_.begin()};
+  auto it{begin};
+  auto const end{seeds_.end()};
+
+  auto const do_adjust([&](auto&& method) {
+    std::size_t ii{};
+    while (it != end) {
+      if (not(method.check(ii, it->p))) break;
+
+      // Adjust the p-value.
+      it->p = method.adjust(ii);
+
+      ++ii;
+      ++it;
+    }
+  });
+
+  switch (p_value_correction_method_) {
+    case sf::p_value_correction_method_type::holm_bonferroni:
+      do_adjust(holm_bonferroni_adjustment{seeds_, significance_level_});
+      break;
+    case sf::p_value_correction_method_type::holm_sidak:
+      do_adjust(holm_sidak_adjustment{seeds_, significance_level_});
+      break;
+    default:
+      throw std::runtime_error("Unexpected adjustment method");
+  }
+
+  std::sort(begin, it, p_value_cmp);
+
+  libbio_assert_lte(begin, it);
+  libbio_assert_lte(it, end);
+  adjust_seed_p_values_result const retval{
+      std::size_t(std::distance(begin, it)),
+      std::size_t(std::distance(it, end))};
+
+  if constexpr (enable_reporting_discarded_seeds) {
+    while (it != end) {
+      report_significance_level_not_reached(*it, "adjust_seed_p_values");
+      ++it;
+    }
+  }
+
+  return retval;
 }
 }  // namespace sf
