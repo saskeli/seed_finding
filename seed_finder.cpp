@@ -120,7 +120,7 @@ struct configuration {
   double mem_limit{};
   sf::p_value_correction_method_type p_value_correction_method{
       sf::p_value_correction_method_type::none};
-  bool enable_smoothing{true};
+  bool enable_smoothing{false};
   bool enable_clustering{false};
   bool should_output_options{false};
 
@@ -229,7 +229,7 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         "Compute Huddinge graph and output to DOT file path.",
         {"output-huddinge-graph"}, retval.dot_output);
     sf::args::value_flag alignment_output_prefix_(
-        output_options_, "output_prefix",
+        output_options_, "path",
         "Prefix for alignment output, If not given, "
         "no alignments will be output. Requires --cluster.",
         {"alignment-output-prefix"}, retval.prefix);
@@ -272,14 +272,14 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         "Limit for lookup table-based k-mer counting in [5, max_k] range. Use "
         "zero to calculate automatically from available memory.",
         {"lookup-k"}, retval.lookup_k);
-    args::Flag enable_clustering_(processing_options_, "cluster",
-                                  "Cluster the candidate seeds", {"cluster"});
-    args::Flag disable_smoothing_(processing_options_, "disable_smoothing",
-                                  "Disable smoothing of counted mers.",
-                                  {'s', "no-smoothing"});
+    args::Flag enable_smoothing_(processing_options_, "enable_smoothing",
+                                 "Enable smoothing of mer counts.",
+                                 {"smooth-counts"});
     args::Flag enable_pruning_(
         processing_options_, "enable pruning",
         "Enable pruning of extendable mers for partial counting.", {"prune"});
+    args::Flag enable_clustering_(processing_options_, "cluster",
+                                  "Cluster the candidate seeds", {"cluster"});
     sf::args::value_flag h1_weight_(
         processing_options_, "weight",
         "Relative impact of H1 neighbourhood enrichment on mer priority. (0 → "
@@ -299,6 +299,8 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     args::Flag should_output_options_(running_options_, "show_options",
                                       "Output the parsed options to stderr.",
                                       {"show-options"});
+
+    args::Group const final_empty_line_(parser, "\n");
 
     // Parse and check.
     try {
@@ -320,7 +322,7 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     retval.sig_path = args::get(sig_path_);
     if (gap_any_) retval.middle_gap_only = false;
     if (should_output_all_matches_) retval.should_output_all_matches = true;
-    if (disable_smoothing_) retval.enable_smoothing = false;
+    if (enable_smoothing_) retval.enable_smoothing = true;
     if (enable_pruning_) retval.prune = true;
     if (enable_clustering_) retval.enable_clustering = true;
     if (should_output_options_) retval.should_output_options = true;
