@@ -1311,7 +1311,18 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
 
     p_value_type adjust(std::size_t ii) const {
       // We assume that the previous seed has been adjusted.
-
+      // The adjustment is defined as p̃₍ᵢ₎ = max{p̃₍ᵢ₋₁₎, 1 - (1 - p₍ᵢ₎)ⁿ⁻ⁱ}
+      // where n is the total number of p-values and i is the p-value index
+      // starting from zero. Calculating this can easily result in an underflow,
+      // so we use log transformation as follows:
+      //
+      //            p̃'₍ᵢ₎ = 1 - (1 - p₍ᵢ₎)ⁿ⁻ⁱ (p̃'₍ᵢ₎ defined here)
+      // ⇔      1 - p̃'₍ᵢ₎ = (1 - p₍ᵢ₎)ⁿ⁻ⁱ
+      // ⇔ ln (1 - p̃'₍ᵢ₎) = (n - i) ln (1 - p₍ᵢ₎)
+      // ⇔          p̃'₍ᵢ₎ = -(exp((n - i) ln (1 - p₍ᵢ₎)) - 1).
+      //
+      // (At least for p-values not equal to one; should work in practice for
+      // values closer to zero than to one.) Hence we can use log1p and expm1.
       p_value_type const multiplier{this->seed_count_ - ii};
       auto const pv{this->seeds_[ii].p};
       auto const pp{log1p(-pv)}; // Use ADL.
