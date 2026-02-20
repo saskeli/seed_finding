@@ -9,7 +9,6 @@
 
 namespace sf::math {
 
-// FIXME: Check if long double actually is larger than double.
 typedef boost::multiprecision::cpp_bin_float_oct p_value_type;
 
 
