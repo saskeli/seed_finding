@@ -253,7 +253,8 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         {"p-ext"}, retval.p_ext);
     args::MapFlag<std::string, sf::p_value_correction_method_type>
         p_value_correction_method_(processing_options_, "correction_method",
-                                   "p-value correction method",
+                                   "p-value correction method, one of “none”, "
+                                   "“holm-bonferroni”, “holm-sidak”.",
                                    {"correction-method"},
                                    p_value_correction_method_mapping);
     sf::args::value_flag significance_level_(
