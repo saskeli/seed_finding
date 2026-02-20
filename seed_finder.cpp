@@ -212,11 +212,6 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
     // Output options
     args::Group const output_options_empty_line_(parser, "\n");
     args::Group output_options_(parser, "Output options");
-    sf::args::value_flag prefix_(
-        output_options_, "output_prefix",
-        "Prefix for alignment output, If not given, "
-        "no alignments will be output. Requires --cluster.",
-        {"pref"}, retval.prefix);
     sf::args::value_flag print_lim_(
         output_options_, "max_s",
         "Maximum number of “best” seeds to output (0 → all seeds).", {"max-s"},
@@ -233,6 +228,11 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         output_options_, "path",
         "Compute Huddinge graph and output to DOT file path.",
         {"output-huddinge-graph"}, retval.dot_output);
+    sf::args::value_flag alignment_output_prefix_(
+        output_options_, "output_prefix",
+        "Prefix for alignment output, If not given, "
+        "no alignments will be output. Requires --cluster.",
+        {"alignment-output-prefix"}, retval.prefix);
     sf::args::value_flag discarded_gapmer_output_path_(
         output_options_, "path", "Output discarded gapmers to the given path",
         {"output-discarded-gapmers"}, retval.discarded_gapmer_output_path);
@@ -265,8 +265,8 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         "Discard all mers with log fold change smaller than this.", {"lf"},
         retval.log_fold);
     sf::args::value_flag max_k_(processing_options_, "length",
-                                "Maximum mer length in [6, 24] range.", {"mk"},
-                                retval.max_k);
+                                "Maximum mer length in [6, 24] range.",
+                                {"max-k"}, retval.max_k);
     sf::args::value_flag lookup_k_(
         processing_options_, "length",
         "Limit for lookup table-based k-mer counting in [5, max_k] range. Use "
@@ -279,7 +279,7 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
                                   {'s', "no-smoothing"});
     args::Flag enable_pruning_(
         processing_options_, "enable pruning",
-        "Enable pruning of extendable mers for partial counting.", {"pruning"});
+        "Enable pruning of extendable mers for partial counting.", {"prune"});
     sf::args::value_flag h1_weight_(
         processing_options_, "weight",
         "Relative impact of H1 neighbourhood enrichment on mer priority. (0 → "
@@ -296,9 +296,9 @@ configuration parse_command_line_arguments(int argc, char const* argv[]) {
         running_options_, "gigabytes",
         "Approximate memory limit for lookup tables in gigabytes.", {"mem"},
         retval.mem_limit);
-    args::Flag should_output_options_(parser, "output_options",
+    args::Flag should_output_options_(running_options_, "show_options",
                                       "Output the parsed options to stderr.",
-                                      {"output-options"});
+                                      {"show-options"});
 
     // Parse and check.
     try {
