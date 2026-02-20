@@ -135,30 +135,32 @@ struct configuration {
 
 
 std::ostream& operator<<(std::ostream& os, configuration const& conf) {
-  os << "bg_path:                   " << conf.bg_path << '\n';
-  os << "sig_path:                  " << conf.sig_path << '\n';
-  os << "prefix:                    " << conf.prefix << '\n';
-  os << "dot_output:                " << conf.dot_output << '\n';
-  os << "discarded_gapmer_output_path: " << conf.discarded_gapmer_output_path
+  os << "Background path:              " << conf.bg_path << '\n';
+  os << "Signal path:                  " << conf.sig_path << '\n';
+  os << "Prefix:                       " << conf.prefix << '\n';
+  os << "DOT output:                   " << conf.dot_output << '\n';
+  os << "Discarded gapmer output path: " << conf.discarded_gapmer_output_path
      << '\n';
-  os << "middle_gap_only:           " << conf.middle_gap_only << '\n';
-  os << "prune:                     " << conf.prune << '\n';
-  os << "should_output_all_matches: " << conf.should_output_all_matches << '\n';
-  os << "p:                         " << conf.p << '\n';
-  os << "p_ext:                     " << conf.p_ext << '\n';
-  os << "significance_level:        " << conf.significance_level << '\n';
-  os << "log_fold:                  " << conf.log_fold << '\n';
-  os << "h1_weight:                 " << conf.h1_weight << '\n';
-  os << "print_lim:                 " << conf.print_lim << '\n';
-  os << "lookup_k:                  " << conf.lookup_k << '\n';
-  os << "max_aligns:                " << conf.max_aligns << "\n";
-  os << "threads:                   " << conf.threads << '\n';
-  os << "max_k:                     " << conf.max_k << '\n';
-  os << "mem_limit:                 " << conf.mem_limit << '\n';
-  os << "p_value_correction_method: " << conf.p_value_correction_method << '\n';
-  os << "enable_smoothing:          " << conf.enable_smoothing << '\n';
-  os << "enable_clustering:         " << conf.enable_clustering << '\n';
-  os << "should_output_options:     " << conf.should_output_options << '\n';
+  os << "Middle gap only:              " << conf.middle_gap_only << '\n';
+  os << "Prune:                        " << conf.prune << '\n';
+  os << "Output all matches:           " << conf.should_output_all_matches
+     << '\n';
+  os << "p:                            " << conf.p << '\n';
+  os << "p_ext:                        " << conf.p_ext << '\n';
+  os << "Significance level:           " << conf.significance_level << '\n';
+  os << "log_fold:                     " << conf.log_fold << '\n';
+  os << "H1 Weight:                    " << conf.h1_weight << '\n';
+  os << "Print limit:                  " << conf.print_lim << '\n';
+  os << "lookup_k:                     " << conf.lookup_k << '\n';
+  os << "max_aligns:                   " << conf.max_aligns << "\n";
+  os << "Threads:                      " << conf.threads << '\n';
+  os << "max_k:                        " << conf.max_k << '\n';
+  os << "Memory limit:                 " << conf.mem_limit << '\n';
+  os << "p-value correction method:    " << conf.p_value_correction_method
+     << '\n';
+  os << "Enable smoothing:             " << conf.enable_smoothing << '\n';
+  os << "Enable clustering:            " << conf.enable_clustering << '\n';
+  os << "Should output options:        " << conf.should_output_options << '\n';
 
   return os;
 }
