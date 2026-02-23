@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2025 Saska Dönges
+ * This code is licensed under MIT license (see LICENSE for details).
+ */
+
 #include <SeqIO/SeqIO.hh>
 #include <iostream>
 #include <regex>

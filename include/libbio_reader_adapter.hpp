@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2025 Tuukka Norri
+ * This code is licensed under MIT license (see LICENSE for details).
+ */
+
 #pragma once
 
 #include <cstddef>

@@ -1,3 +1,7 @@
+/*
+ * Copyright (c) 2025 Saska Dönges, Tuukka Norri
+ * This code is licensed under MIT license (see LICENSE for details).
+ */
 
 #include <array>
 #include <cstdint>

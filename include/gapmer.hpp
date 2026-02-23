@@ -1,3 +1,8 @@
+/*
+ * Copyright (c) 2025-2026 Saska Dönges, Tuukka Norri
+ * This code is licensed under MIT license (see LICENSE for details).
+ */
+
 #pragma once
 
 #include <unistd.h>
