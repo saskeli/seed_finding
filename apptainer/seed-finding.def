@@ -20,12 +20,11 @@ From: ubuntu:24.04
 		g++-14 \
 		git \
 		libboost-all-dev \
-		libgsl-dev \
 		make \
 		pkg-config \
 		ragel \
 		zlib1g-dev
-	
+
 	apt-get clean
 
 %runscript

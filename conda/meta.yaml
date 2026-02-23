@@ -15,7 +15,6 @@ requirements:
     - {{ compiler('cxx') }}
     - autoconf >=2.72
     - automake # Needed for aclocal only.
-    - gsl >=2.8
     - libboost >=1.83.0
     - libboost-headers >=1.83.0
     - m4 >=1.4.18
@@ -24,7 +23,6 @@ requirements:
     - zlib >=1.2.13
   run:
     - {{ pin_compatible('_openmp_mutex', max_pin = None) }}
-    - {{ pin_compatible('gsl', max_pin = None) }}
     - {{ pin_compatible('libboost', max_pin = None) }}
     - {{ pin_compatible('libopenblas', max_pin = None) }}
     - {{ pin_compatible('zlib', max_pin = None) }}

@@ -1,7 +1,5 @@
 #pragma once
 
-#include <gsl/gsl_cdf.h>
-#include <gsl/gsl_errno.h>
 #include <sys/types.h>
 
 #include <atomic>
@@ -430,7 +428,6 @@ class seed_finder {
                              });
     }};
 
-    gsl_set_error_handler_off();
     sig_size_ = read_length_sum(signal_reads_);
     bg_size_ = read_length_sum(background_reads_);
     signal_to_total_length_ratio_ = double(sig_size_) / (sig_size_ + bg_size_);
@@ -613,8 +610,8 @@ template <typename t_value>
     }
 
     // Binomial test.
-    double const p_ext{
-        gsl_cdf_binomial_Q(bb_er.signal_count, 0.25, aa_er.signal_count)};
+    auto const p_ext{math::binomial_cdf_upper_tail(bb_er.signal_count, 0.25,
+                                                   aa_er.signal_count)};
     if (p_ext_ <= p_ext) {
       return extension_validation_result::make(
           strategy, extension_validation_status::binomial_test_failed, p_ext);
@@ -1282,7 +1279,8 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
     using adjustment_method::adjustment_method;
 
     bool check(std::size_t ii, p_value_type pv) const {
-      auto const threshold{this->significance_level_ / (this->seed_count_ - ii)};
+      auto const threshold{this->significance_level_ /
+                           (this->seed_count_ - ii)};
       return (pv <= threshold);
     }
 
@@ -1304,8 +1302,8 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
 
     bool check(std::size_t ii, p_value_type pv) const {
       p_value_type const denominator{this->seed_count_ - ii};
-      auto const threshold{log1p(-this->significance_level_)}; // Use ADL.
-      auto const pp{log1p(-pv)}; // Use ADL.
+      auto const threshold{log1p(-this->significance_level_)};  // Use ADL.
+      auto const pp{log1p(-pv)};  // Use ADL.
       return threshold / denominator <= pp;
     }
 
@@ -1325,9 +1323,9 @@ auto seed_finder<t_configuration>::adjust_seed_p_values()
       // values closer to zero than to one.) Hence we can use log1p and expm1.
       p_value_type const multiplier{this->seed_count_ - ii};
       auto const pv{this->seeds_[ii].p};
-      auto const pp{log1p(-pv)}; // Use ADL.
+      auto const pp{log1p(-pv)};  // Use ADL.
       auto const mp{multiplier * pp};
-      auto const lhs{-expm1(mp)}; // Use ADL.
+      auto const lhs{-expm1(mp)};  // Use ADL.
 
       if (0 == ii) {
         return lhs;

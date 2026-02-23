@@ -54,7 +54,7 @@ INCLUDE += \
 	-isystem deps/sdsl-lite/include \
 	-isystem deps/seqio/include \
 
-LIBS += -lboost_iostreams -lz -lgsl -lgslcblas -lm
+LIBS += -lboost_iostreams -lz -lm
 
 ## Used directly.
 ## Some tools such as conda-build set CPPFLAGS, etc. so we store their values for libbio before modifying.
