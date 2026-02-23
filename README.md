@@ -37,14 +37,13 @@ The following software and libraries are required. The tested versions are also 
 - [aclocal (part of automake 1.16.5)](https://www.gnu.org/software/automake/)
 - [Boost 1.83.0](https://www.boost.org)
 - [GNU Make 4.3](https://www.gnu.org/software/make/)
-- [GNU Scientific Library 2.8](https://www.gnu.org/software/gsl/)
 - [Ragel 6.10](http://www.colm.net/open-source/ragel/)
 - [zlib 1.2.13](https://zlib.net)
 
 On Ubuntu, the following command should install all the required packages.
 
 ```
-apt-get install -y --no-install-recommends autoconf automake build-essential gcc-14 g++-14 git libboost-all-dev libgsl-dev make pkg-config ragel zlib1g-dev
+apt-get install -y --no-install-recommends autoconf automake build-essential gcc-14 g++-14 git libboost-all-dev make pkg-config ragel zlib1g-dev
 ```
 
 After installing the prerequisites, the software can be built with e.g. `make -j16`.
