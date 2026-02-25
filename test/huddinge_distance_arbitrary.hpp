@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2025 Tuukka Norri
+ * Copyright (c) 2025-2026 Tuukka Norri
  * This code is licensed under MIT license (see LICENSE for details).
  */
 
@@ -18,6 +18,7 @@
 #include "../include/huddinge_distance.hpp"
 #include "../include/pack_characters.hpp"
 #include "gtest/gtest.h"
+#include "nucleotide.hpp"
 #include "test.hpp"
 
 namespace {
@@ -28,9 +29,49 @@ namespace {
 	typedef std::vector <std::uint64_t> buffer_type;
 
 	constexpr static std::array const dna4_huddinge_characters{'n', 'A', 'C', 'G', 'T'};
+	constexpr static std::array const dna16_huddinge_characters{
+		'n',
+		'A', 'C', 'G', 'T',
+		'R', 'Y', 'S', 'W', 'K', 'M',
+		'B', 'D', 'H', 'V',
+		'N'
+	};
 
 
-	struct dna4_huddinge_string_length
+	std::uint8_t dna16_character_to_mask(char const cc)
+	{
+		enum value {
+			A_ = 0x1,
+			C_ = 0x2,
+			G_ = 0x4,
+			T_ = 0x8
+		};
+
+		switch (cc)
+		{
+			case 'n': return 0x0;
+			case 'A': return A_;
+			case 'C': return C_;
+			case 'G': return G_;
+			case 'T': return T_;
+			case 'R': return A_ | G_;
+			case 'Y': return C_ | T_;
+			case 'S': return G_ | C_;
+			case 'W': return A_ | T_;
+			case 'K': return G_ | T_;
+			case 'M': return A_ | C_;
+			case 'B': return C_ | G_ | T_;
+			case 'D': return A_ | G_ | T_;
+			case 'H': return A_ | C_ | T_;
+			case 'V': return A_ | C_ | G_;
+			case 'N': return A_ | C_ | G_ | T_;
+			default:
+				throw std::runtime_error("Unexpected character");
+		}
+	}
+
+
+	struct dna_huddinge_string_length
 	{
 		std::size_t value{};
 
@@ -38,14 +79,19 @@ namespace {
 	};
 
 
-	struct dna4_huddinge_string_pair_length
+	struct dna_huddinge_string_pair_length
 	{
-		dna4_huddinge_string_length lhs;
-		dna4_huddinge_string_length rhs;
+		dna_huddinge_string_length lhs;
+		dna_huddinge_string_length rhs;
 	};
 
 
-	struct dna4_huddinge_string_pair
+	template <sf::dna_alphabet t_alphabet>
+	struct dna_huddinge_string_pair {};
+
+
+	template <>
+	struct dna_huddinge_string_pair <sf::dna_alphabet::dna4>
 	{
 		constexpr static auto const &characters{dna4_huddinge_characters};
 
@@ -54,7 +100,22 @@ namespace {
 	};
 
 
-	std::ostream &operator<<(std::ostream &os, dna4_huddinge_string_pair const &sp)
+	template <>
+	struct dna_huddinge_string_pair <sf::dna_alphabet::dna16>
+	{
+		constexpr static auto const &characters{dna16_huddinge_characters};
+
+		std::string lhs;
+		std::string rhs;
+	};
+
+
+	typedef dna_huddinge_string_pair <sf::dna_alphabet::dna4>  dna4_huddinge_string_pair;
+	typedef dna_huddinge_string_pair <sf::dna_alphabet::dna16> dna16_huddinge_string_pair;
+
+
+	template <sf::dna_alphabet t_alphabet>
+	std::ostream &operator<<(std::ostream &os, dna_huddinge_string_pair <t_alphabet> const &sp)
 	{
 		os << "lhs: " << sp.lhs << " rhs: " << sp.rhs;
 		return os;
@@ -116,7 +177,10 @@ namespace {
 		return huddinge_distance_naive_(lhs, rhs, [](auto const ll, auto const rr) -> bool {
 			if (ll == rr)
 				return 'n' != ll;
-			return false;
+
+			auto const ll_(dna16_character_to_mask(ll));
+			auto const rr_(dna16_character_to_mask(rr));
+			return ll_ & rr_;
 		});
 	}
 
@@ -144,7 +208,7 @@ namespace {
 	}
 
 
-	sf::huddinge_distance_return_value huddinge_distance(std::string_view lhs, std::string_view rhs)
+	sf::huddinge_distance_return_value huddinge_distance_dna4(std::string_view lhs, std::string_view rhs)
 	{
 		auto const lhs_mask{make_gap_mask(lhs)};
 		auto const rhs_mask{make_gap_mask(rhs)};
@@ -169,18 +233,49 @@ namespace {
 			});
 		});
 	}
+
+
+	sf::huddinge_distance_return_value huddinge_distance_dna16(std::string_view lhs, std::string_view rhs)
+	{
+		buffer_type lhs_buffer;
+		buffer_type rhs_buffer;
+		sf::pack_characters_dna16(lhs, lhs_buffer);
+		sf::pack_characters_dna16(rhs, rhs_buffer);
+
+		auto const forward_span([&](std::string_view sv, buffer_type const &buffer, auto &&cb){
+			switch ((sv.size() + 15) / 16)
+			{
+				case 1:
+					return cb(span_t <1>(buffer.data(), 1));
+				case 2:
+					return cb(span_t <2>(buffer.data(), 2));
+				case 3:
+					return cb(span_t <3>(buffer.data(), 3));
+				case 4:
+					return cb(span_t <4>(buffer.data(), 4));
+				default:
+					throw std::runtime_error("Unexpected input size");
+			}
+		});
+
+		return forward_span(lhs, lhs_buffer, [&](auto const lhs_buffer_){
+			return forward_span(rhs, rhs_buffer, [&](auto const rhs_buffer_){
+				return sf::huddinge_distance_4bit(lhs_buffer_, rhs_buffer_, lhs.size(), rhs.size());
+			});
+		});
+	}
 }
 
 
 namespace rc {
 
 	template <>
-	struct Arbitrary <dna4_huddinge_string_length>
+	struct Arbitrary <dna_huddinge_string_length>
 	{
-		static Gen <dna4_huddinge_string_length> arbitrary()
+		static Gen <dna_huddinge_string_length> arbitrary()
 		{
 			// Generate non-empty strings with 64 characters at most.
-			return gen::construct <dna4_huddinge_string_length>(
+			return gen::construct <dna_huddinge_string_length>(
 				gen::inRange(std::size_t{1}, std::size_t{64})
 			);
 		}
@@ -188,28 +283,29 @@ namespace rc {
 
 
 	template <>
-	struct Arbitrary <dna4_huddinge_string_pair_length>
+	struct Arbitrary <dna_huddinge_string_pair_length>
 	{
-		static Gen <dna4_huddinge_string_pair_length> arbitrary()
+		static Gen <dna_huddinge_string_pair_length> arbitrary()
 		{
 			// Generate non-empty strings with 64 characters at most.
-			return gen::construct <dna4_huddinge_string_pair_length>(
-				gen::arbitrary <dna4_huddinge_string_length>(),
-				gen::arbitrary <dna4_huddinge_string_length>()
+			return gen::construct <dna_huddinge_string_pair_length>(
+				gen::arbitrary <dna_huddinge_string_length>(),
+				gen::arbitrary <dna_huddinge_string_length>()
 			);
 		}
 	};
 
 
-	template <>
-	struct Arbitrary <dna4_huddinge_string_pair>
+	template <sf::dna_alphabet t_alphabet>
+	struct Arbitrary <dna_huddinge_string_pair <t_alphabet>>
 	{
-		static Gen <dna4_huddinge_string_pair> arbitrary()
+		static Gen <dna_huddinge_string_pair <t_alphabet>> arbitrary()
 		{
-			return gen::mapcat(gen::arbitrary <dna4_huddinge_string_pair_length>(), [](auto const lengths){
-				return gen::construct <dna4_huddinge_string_pair>(
-					gen::container <std::string>(lengths.lhs, gen::elementOf(dna4_huddinge_string_pair::characters)),
-					gen::container <std::string>(lengths.rhs, gen::elementOf(dna4_huddinge_string_pair::characters))
+			return gen::mapcat(gen::arbitrary <dna_huddinge_string_pair_length>(), [](auto const lengths){
+				typedef dna_huddinge_string_pair <t_alphabet> return_type;
+				return gen::construct <return_type>(
+					gen::container <std::string>(lengths.lhs, gen::elementOf(return_type::characters)),
+					gen::container <std::string>(lengths.rhs, gen::elementOf(return_type::characters))
 				);
 			});
 		}
@@ -217,8 +313,15 @@ namespace rc {
 }
 
 
-RC_GTEST_PROP(huddinge_distance_arbitrary, CalculateDistance, (dna4_huddinge_string_pair sp)) {
+RC_GTEST_PROP(huddinge_distance_arbitrary, CalculateDistanceDNA4, (dna4_huddinge_string_pair sp)) {
 	auto const expected{huddinge_distance_naive(sp.lhs, sp.rhs)};
-	auto const actual{huddinge_distance(sp.lhs, sp.rhs)};
+	auto const actual{huddinge_distance_dna4(sp.lhs, sp.rhs)};
+	ASSERT_EQ(expected.distance, actual.distance) << "  lhs:      " << sp.lhs << "\n  rhs:      " << sp.rhs << "\n  expected: " << expected << "\n  actual:   " << actual;
+}
+
+
+RC_GTEST_PROP(huddinge_distance_arbitrary, CalculateDistanceDNA16, (dna16_huddinge_string_pair sp)) {
+	auto const expected{huddinge_distance_naive(sp.lhs, sp.rhs)};
+	auto const actual{huddinge_distance_dna16(sp.lhs, sp.rhs)};
 	ASSERT_EQ(expected.distance, actual.distance) << "  lhs:      " << sp.lhs << "\n  rhs:      " << sp.rhs << "\n  expected: " << expected << "\n  actual:   " << actual;
 }
