@@ -44,7 +44,7 @@ template <dna_alphabet t_alphabet>
 constexpr inline uint8_t alphabet_size_v{alphabet_size<t_alphabet>::value};
 
 
-// Functions templates.
+// Function templates.
 template <dna_alphabet t_alphabet, bool t_is_lenient = false>
 std::uint64_t pack_characters_(std::string_view sv, packed_word_vector& dst,
                                std::uint64_t dst_pos = 0);
