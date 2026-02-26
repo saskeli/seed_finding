@@ -199,8 +199,6 @@ class huddinge_distance_calculator_4bit {
   };
   // clang-format on
 
-  constexpr static value_type s_higher_mask{UINT64_C(0xCCCC'CCCC'CCCC'CCCC)};
-  constexpr static value_type s_second_mask{UINT64_C(0x2222'2222'2222'2222)};
   constexpr static value_type s_first_mask{UINT64_C(0x1111'1111'1111'1111)};
 
   static_assert(16 == libbio::array_size(s_shift_left_amounts));
