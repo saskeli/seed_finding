@@ -19,6 +19,7 @@
 #include <set>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -29,6 +30,7 @@
 #include "gtest/gtest.h"
 #include "nucleotide.hpp"
 #include "pack_characters.hpp"
+#include "rapidcheck/Assertions.h"
 #include "test.hpp"
 
 
@@ -152,7 +154,11 @@ struct gapmer_data {
 
   gapmer_type to_gapmer() const;
   operator gapmer_type() const { return to_gapmer(); }
-  void write_to_buffer(std::vector<uint64_t>& buffer) const;
+  void write_to_buffer_(char* buffer, char gap_symbol = '.') const;
+  void write_to_buffer(std::vector<uint64_t>& buffer,
+                       char gap_symbol = '.') const;
+  void write_to_buffer(std::vector<char>& buffer, char gap_symbol = '.') const;
+  void write_to_buffer(std::string& buffer, char gap_symbol = '.') const;
   uint8_t gap_start() const {
     return suffix_length ? length - suffix_length : 0;
   }
@@ -241,12 +247,39 @@ auto gapmer_data<t_gapmer>::to_gapmer() const -> gapmer_type {
 
 
 template <typename t_gapmer>
-void gapmer_data<t_gapmer>::write_to_buffer(
-    std::vector<uint64_t>& buffer) const {
+void gapmer_data<t_gapmer>::write_to_buffer(std::vector<char>& buffer,
+                                            char gap_symbol) const {
   if (!length) return;
+  buffer.clear();
+  buffer.resize(length + gap_length + 1, 0);  // FIXME: Do we need the sentinel?
+  write_to_buffer_(buffer.data(), gap_symbol);
+}
 
-  buffer.resize((length + gap_length - 1) / 8 + 1, 0);
+
+template <typename t_gapmer>
+void gapmer_data<t_gapmer>::write_to_buffer(std::string& buffer,
+                                            char gap_symbol) const {
+  if (!length) return;
+  buffer.clear();
+  buffer.resize(length + gap_length, 0);
+  write_to_buffer_(buffer.data(), gap_symbol);
+}
+
+
+template <typename t_gapmer>
+void gapmer_data<t_gapmer>::write_to_buffer(std::vector<uint64_t>& buffer,
+                                            char gap_symbol) const {
+  if (!length) return;
+  buffer.clear();
+  buffer.resize((length + gap_length - 1) / 8 + 1,
+                0);  // FIXME: Do we need the sentinel?
   auto* dst(reinterpret_cast<char*>(buffer.data()));
+  write_to_buffer_(dst, gap_symbol);
+}
+
+
+template <typename t_gapmer>
+void gapmer_data<t_gapmer>::write_to_buffer_(char* dst, char gap_symbol) const {
   auto sequence_{std::rotr(sequence, 2 * (length - 1))};
   uint8_t i{};
 
@@ -261,7 +294,7 @@ void gapmer_data<t_gapmer>::write_to_buffer(
   output_to_limit(gap_start());
 
   for (uint8_t j{}; j < gap_length; ++j) {
-    dst[i] = '.';
+    dst[i] = gap_symbol;
     ++i;
   }
 
@@ -377,7 +410,7 @@ struct Arbitrary<gapmer_data_<t_gapmer, t_constraint...>> {
           return gen::mapcat(
               suffix_length_gen,
               [length](uint8_t const suffix_length) {  // Suffix length depends
-                                                       // on total length.
+                // on total length.
                 auto gap_length_gen(
                     suffix_length
                         ? gen::inRange<uint8_t>(1, gapmer_type::max_gap + 1)
@@ -386,7 +419,7 @@ struct Arbitrary<gapmer_data_<t_gapmer, t_constraint...>> {
                     gap_length_gen,
                     [length, suffix_length](
                         auto const gap_length) {  // Gap length depends on
-                                                  // suffix length.
+                      // suffix length.
                       auto const value_limit(uint64_t(1) << (2 * length));
                       return gen::map(gen::inRange(uint64_t{}, value_limit),
                                       [length, suffix_length,
@@ -1044,7 +1077,8 @@ RC_GTEST_PROP(gapmer_arbitrary, FromPackedCharacterStringConstructor,
     rhs = char(lhs);
 
   // Assign the input characters to packed_text.
-  auto const pack_res{sf::pack_characters(std::string_view{plain_text_}, packed_text)};
+  auto const pack_res{
+      sf::pack_characters(std::string_view{plain_text_}, packed_text)};
   EXPECT_EQ(pack_res, test_input.text.size());
 
   RC_LOG() << "Plain text: ";
@@ -1237,5 +1271,31 @@ SF_RC_TEST_PROP(gapmer_arbitrary, GenerateHuddingeNeighbourhood,
 
     SF_FAIL();
   }
+}
+
+
+// FIXME: Add Write2BitCodedToBuffer
+
+
+RC_GTEST_PROP(gapmer_arbitrary, Write4BitCodedToBuffer,
+              (gapmer_data_<default_gapmer_type,
+                            gapmer_min_length_constraint{1}> const gd)) {
+  SF_RC_TAG(gd.length, gd.gap_length);
+
+  typedef default_gapmer_type gapmer_type;
+
+  std::string expected;
+  gd.write_to_buffer(expected, 'n');
+
+  gapmer_type const gg{gd};
+  std::array<std::uint64_t, 4> actual_4bit{};
+  RC_ASSERT(gd.length <= 16 * actual_4bit.size());
+  gg.write_4bit_coded_to_buffer(std::span{actual_4bit});
+
+  std::string actual;
+  sf::unpack_characters_<dna_alphabet::dna16>(
+      packed_word_span{actual_4bit}, gd.length + gd.gap_length, actual);
+
+  RC_ASSERT(expected == actual);
 }
 }  // namespace sf

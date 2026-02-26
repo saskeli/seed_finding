@@ -90,7 +90,7 @@ class gapmer {
   };
 
   template <typename t_append>
-  void do_stringify(t_append &&append_cb) const;
+  void do_stringify(t_append&& append_cb) const;
 
   // FIXME: Consider making all_gap_neighbours, middle_gap_neighbours private.
   // For now they are public so that unit tests can access them.
@@ -101,11 +101,16 @@ class gapmer {
   template <bool no_smaller, bool no_same, bool no_larger>
   void all_gap_neighbours(auto&& callback) const;
 
-  /// Writes the 2-bit compressed string representation to the given buffer.
+  /// Writes the 2-bit compressed string representation to the given buffers.
   /// The caller is responsible for reserving enough memory.
   template <std::size_t t_n>
   void write_2bit_coded_to_buffer(std::span<uint64_t, t_n> span,
                                   std::span<uint64_t, t_n> mask_span) const;
+
+  /// Writes the 4-bit compressed string representation to the given buffer.
+  /// The caller is responsible for reserving enough memory.
+  template <std::size_t t_n>
+  void write_4bit_coded_to_buffer(std::span<uint64_t, t_n> span) const;
 
  public:
   constexpr gapmer() = default;  //< Construct an empty value.
@@ -710,9 +715,8 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
     auto&& callback) const {
   const uint64_t val = value();
   const uint8_t len = length();
-  assert(no_larger ||
-         len < max_k);  // It is the user’s responsibility to check the length
-                        // before listing the neighbours.
+  // It is the user’s responsibility to check the length before listing the neighbours.
+  assert(no_larger || len < max_k);
   assert(no_smaller || 5 <= len);
   const uint8_t gap_s = gap_start();
   const uint8_t prefix_len = gap_s;
@@ -1481,7 +1485,8 @@ void gapmer<middle_gap_only, t_max_gap>::huddinge_neighbours(
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <typename t_append_cb>
-void gapmer<middle_gap_only, t_max_gap>::do_stringify(t_append_cb &&append_cb) const {
+void gapmer<middle_gap_only, t_max_gap>::do_stringify(
+    t_append_cb&& append_cb) const {
   uint16_t ii;
   for (ii = 0; ii < gap_start(); ++ii) {
     uint16_t v = nuc(ii);
@@ -1501,9 +1506,7 @@ void gapmer<middle_gap_only, t_max_gap>::do_stringify(t_append_cb &&append_cb) c
 template <bool middle_gap_only, uint16_t t_max_gap>
 std::string gapmer<middle_gap_only, t_max_gap>::to_string() const {
   std::string retval;
-  do_stringify([&retval](char cc){
-    retval.push_back(cc);
-  });
+  do_stringify([&retval](char cc) { retval.push_back(cc); });
   return retval;
 }
 
@@ -1632,6 +1635,37 @@ void gapmer<middle_gap_only, t_max_gap>::write_2bit_coded_to_buffer(
 
 
 template <bool middle_gap_only, uint16_t t_max_gap>
+template <std::size_t t_n>
+void gapmer<middle_gap_only, t_max_gap>::write_4bit_coded_to_buffer(
+    std::span<uint64_t, t_n> buffer) const {
+  std::fill(buffer.begin(), buffer.end(), 0);
+
+  auto const ll{length()};
+  if (0 == ll) return;
+
+  auto data{std::rotr(data_, 2U * ll)};
+  auto const gs{gap_start()};
+  auto const gl{gap_length()};
+
+  std::uint8_t pos{};
+  for (std::uint8_t ii{}; ii < ll; ++ii) {
+    data = std::rotl(data, 2U);
+
+    if (gs == pos) pos += gl;
+    auto const dst_word{pos / 16U};
+    auto const dst_pos{pos % 16U};
+
+    auto const src_val{data & 0x3U};
+    auto const dst_val{UINT64_C(0x1000'0000'0000'0000) << src_val};
+    auto const positioned{dst_val >> (4U * dst_pos)};
+    buffer[dst_word] |= positioned;
+
+    ++pos;
+  }
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
 huddinge_distance_return_value
 gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
     gapmer const other) const {
@@ -1676,8 +1710,9 @@ gapmer<middle_gap_only, t_max_gap>::huddinge_distance(
 
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-std::ostream &operator<<(std::ostream &os, gapmer<middle_gap_only, t_max_gap> gg) {
-  gg.do_stringify([&os](char cc){ os << cc; });
+std::ostream& operator<<(std::ostream& os,
+                         gapmer<middle_gap_only, t_max_gap> gg) {
+  gg.do_stringify([&os](char cc) { os << cc; });
   return os;
 }
 }  // namespace sf

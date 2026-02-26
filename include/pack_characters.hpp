@@ -15,6 +15,7 @@
 
 namespace sf {
 enum class dna_alphabet { dna4, dna16 };
+typedef std::span<std::uint64_t const> packed_word_span;
 typedef std::vector<std::uint64_t> packed_word_vector;
 
 
@@ -50,8 +51,15 @@ std::uint64_t pack_characters_(std::string_view sv, packed_word_vector& dst,
                                std::uint64_t dst_pos = 0);
 
 template <dna_alphabet t_alphabet>
-void unpack_characters_(packed_word_vector const& src, std::uint64_t length,
+void unpack_characters_(packed_word_span const& src, std::uint64_t length,
                         std::string& dst);
+
+template <dna_alphabet t_alphabet>
+inline void unpack_characters_(packed_word_vector const& src,
+                               std::uint64_t length, std::string& dst) {
+  unpack_characters_<t_alphabet>(packed_word_span{src.data(), src.size()},
+                                 length, dst);
+}
 
 // Forward declarations of instantiations.
 extern template std::uint64_t pack_characters_<dna_alphabet::dna4>(
@@ -64,10 +72,10 @@ extern template std::uint64_t pack_characters_<dna_alphabet::dna16>(
     std::string_view sv, packed_word_vector& dst, std::uint64_t dst_pos);
 
 extern template void unpack_characters_<dna_alphabet::dna4>(
-    packed_word_vector const& src, std::uint64_t length, std::string& dst);
+    packed_word_span const& src, std::uint64_t length, std::string& dst);
 
 extern template void unpack_characters_<dna_alphabet::dna16>(
-    packed_word_vector const& src, std::uint64_t length, std::string& dst);
+    packed_word_span const& src, std::uint64_t length, std::string& dst);
 
 
 // DNA4

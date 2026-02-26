@@ -243,7 +243,7 @@ std::uint64_t pack_characters_(std::string_view sv, sf::packed_word_vector& dst,
 
 
 template <dna_alphabet t_alphabet>
-void unpack_characters_(packed_word_vector const& src, std::uint64_t length,
+void unpack_characters_(packed_word_span const& src, std::uint64_t length,
                         std::string& dst) {
   if (src.empty()) return;
 
@@ -281,9 +281,9 @@ template std::uint64_t pack_characters_<dna_alphabet::dna16>(
     std::string_view sv, packed_word_vector& dst, std::uint64_t dst_pos);
 
 template void unpack_characters_<dna_alphabet::dna4>(
-    packed_word_vector const& src, std::uint64_t length, std::string& dst);
+    packed_word_span const& src, std::uint64_t length, std::string& dst);
 
 template void unpack_characters_<dna_alphabet::dna16>(
-    packed_word_vector const& src, std::uint64_t length, std::string& dst);
+    packed_word_span const& src, std::uint64_t length, std::string& dst);
 
 }  // namespace sf
