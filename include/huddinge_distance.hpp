@@ -545,7 +545,7 @@ void huddinge_distance_calculator_2bit<t_tag>::shift_word_pair_and_compare(
     ++rhs_word_idx;
   }
 
-  if (rhs_word_idx != t_rhsn)
+  if (rhs_word_idx != rhs.size())
     shift_word_and_compare_<t_forward_direction, false>(
         scores, lhs[lhs_word_idx], rhs[rhs_word_idx], lhs_mask[lhs_word_idx],
         rhs_mask[rhs_word_idx], lhsl);
@@ -603,7 +603,7 @@ void huddinge_distance_calculator_4bit<t_tag>::shift_word_pair_and_compare(
     ++rhs_word_idx;
   }
 
-  if (rhs_word_idx != t_rhsn)
+  if (rhs_word_idx != rhs.size())
     shift_word_and_compare_<t_forward_direction, false>(
         scores, lhs[lhs_word_idx], rhs[rhs_word_idx], lhsl);
 
