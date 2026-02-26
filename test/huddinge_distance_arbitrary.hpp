@@ -26,6 +26,8 @@ namespace {
 	template <std::size_t t_size>
 	using span_t = std::span <std::uint64_t const, t_size>;
 
+	typedef span_t <std::dynamic_extent> dynamic_span_t;
+
 	typedef std::vector <std::uint64_t> buffer_type;
 
 	constexpr static std::array const dna4_huddinge_characters{'n', 'A', 'C', 'G', 'T'};
@@ -208,6 +210,7 @@ namespace {
 	}
 
 
+	template <bool t_use_dynamic_extent>
 	sf::huddinge_distance_return_value huddinge_distance_dna4(std::string_view lhs, std::string_view rhs)
 	{
 		auto const lhs_mask{make_gap_mask(lhs)};
@@ -227,14 +230,20 @@ namespace {
 				throw std::runtime_error("Unexpected input size");
 		});
 
-		return forward_spans(lhs, lhs_buffer, lhs_mask, [&](auto const lhs_buffer_, auto const lhs_mask_){
-			return forward_spans(rhs, rhs_buffer, rhs_mask, [&](auto const rhs_buffer_, auto const rhs_mask_){
-				return sf::huddinge_distance(lhs_buffer_, rhs_buffer_, lhs_mask_, rhs_mask_, lhs.size(), rhs.size());
+		if constexpr (t_use_dynamic_extent) {
+			return sf::huddinge_distance(dynamic_span_t{lhs_buffer}, dynamic_span_t{rhs_buffer}, dynamic_span_t{lhs_mask}, dynamic_span_t{rhs_mask}, lhs.size(), rhs.size());
+		}
+		else {
+			return forward_spans(lhs, lhs_buffer, lhs_mask, [&](auto const lhs_buffer_, auto const lhs_mask_){
+				return forward_spans(rhs, rhs_buffer, rhs_mask, [&](auto const rhs_buffer_, auto const rhs_mask_){
+					return sf::huddinge_distance(lhs_buffer_, rhs_buffer_, lhs_mask_, rhs_mask_, lhs.size(), rhs.size());
+				});
 			});
-		});
+		}
 	}
 
 
+	template <bool t_use_dynamic_extent>
 	sf::huddinge_distance_return_value huddinge_distance_dna16(std::string_view lhs, std::string_view rhs)
 	{
 		buffer_type lhs_buffer;
@@ -258,11 +267,16 @@ namespace {
 			}
 		});
 
-		return forward_span(lhs, lhs_buffer, [&](auto const lhs_buffer_){
-			return forward_span(rhs, rhs_buffer, [&](auto const rhs_buffer_){
-				return sf::huddinge_distance_4bit(lhs_buffer_, rhs_buffer_, lhs.size(), rhs.size());
+		if constexpr (t_use_dynamic_extent) {
+			return sf::huddinge_distance_4bit(dynamic_span_t{lhs_buffer}, dynamic_span_t{rhs_buffer}, lhs.size(), rhs.size());
+		}
+		else {
+			return forward_span(lhs, lhs_buffer, [&](auto const lhs_buffer_){
+				return forward_span(rhs, rhs_buffer, [&](auto const rhs_buffer_){
+					return sf::huddinge_distance_4bit(lhs_buffer_, rhs_buffer_, lhs.size(), rhs.size());
+				});
 			});
-		});
+		}
 	}
 }
 
@@ -315,13 +329,17 @@ namespace rc {
 
 RC_GTEST_PROP(huddinge_distance_arbitrary, CalculateDistanceDNA4, (dna4_huddinge_string_pair sp)) {
 	auto const expected{huddinge_distance_naive(sp.lhs, sp.rhs)};
-	auto const actual{huddinge_distance_dna4(sp.lhs, sp.rhs)};
+	auto const actual{huddinge_distance_dna4 <false>(sp.lhs, sp.rhs)};
+	auto const actual_{huddinge_distance_dna4 <true>(sp.lhs, sp.rhs)};
 	ASSERT_EQ(expected.distance, actual.distance) << "  lhs:      " << sp.lhs << "\n  rhs:      " << sp.rhs << "\n  expected: " << expected << "\n  actual:   " << actual;
+	ASSERT_EQ(actual, actual_) << "  lhs:      " << sp.lhs << "\n  rhs:      " << sp.rhs << "\n  actual: " << actual << "\n  actual_:   " << actual_;
 }
 
 
 RC_GTEST_PROP(huddinge_distance_arbitrary, CalculateDistanceDNA16, (dna16_huddinge_string_pair sp)) {
 	auto const expected{huddinge_distance_naive(sp.lhs, sp.rhs)};
-	auto const actual{huddinge_distance_dna16(sp.lhs, sp.rhs)};
+	auto const actual{huddinge_distance_dna16 <false>(sp.lhs, sp.rhs)};
+	auto const actual_{huddinge_distance_dna16 <true>(sp.lhs, sp.rhs)};
 	ASSERT_EQ(expected.distance, actual.distance) << "  lhs:      " << sp.lhs << "\n  rhs:      " << sp.rhs << "\n  expected: " << expected << "\n  actual:   " << actual;
+	ASSERT_EQ(actual, actual_) << "  lhs:      " << sp.lhs << "\n  rhs:      " << sp.rhs << "\n  actual: " << actual << "\n  actual_:   " << actual_;
 }

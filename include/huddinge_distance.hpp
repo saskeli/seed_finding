@@ -58,7 +58,7 @@ class huddinge_distance_calculator_2bit {
   using score_array_t =
       std::conditional_t<t_uses_fast_path, fast_path_score_array, score_array>;
 
-  template <std::uint8_t t_length>
+  template <std::size_t t_length>
   using span_t = std::span<value_type const, t_length>;
 
  private:
@@ -132,6 +132,8 @@ class huddinge_distance_calculator_2bit {
     return m_best_alignment;
   }
 
+  value_type max_defined_characters() const { return m_max_defined_characters; }
+
   template <std::size_t t_n>
   inline uint16_t count_defined_characters(span_t<t_n> mask) const;
 
@@ -145,7 +147,7 @@ class huddinge_distance_calculator_2bit {
       span_t<t_rhsn> rhs_mask, std::size_t const lhs_start_idx, uint16_t lhsl);
 
   template <bool t_forward_direction, std::size_t t_lhsn>
-  inline void shift_word_and_compare(uint64_t lhs, uint64_t rhs,
+  inline void shift_word_and_compare(span_t<t_lhsn> lhss, uint64_t rhs,
                                      uint64_t lhs_mask, uint64_t rhs_mask,
                                      uint16_t lhsl);
 };
@@ -171,7 +173,7 @@ class huddinge_distance_calculator_4bit {
   using score_array_t =
       std::conditional_t<t_uses_fast_path, fast_path_score_array, score_array>;
 
-  template <std::uint8_t t_length>
+  template <std::size_t t_length>
   using span_t = std::span<value_type const, t_length>;
 
  private:
@@ -236,6 +238,8 @@ class huddinge_distance_calculator_4bit {
     return m_best_alignment;
   }
 
+  value_type max_defined_characters() const { return m_max_defined_characters; }
+
   template <std::size_t t_n>
   inline uint16_t count_defined_characters(span_t<t_n> mask) const;
 
@@ -250,7 +254,8 @@ class huddinge_distance_calculator_4bit {
                                           uint16_t lhsl);
 
   template <bool t_forward_direction, std::size_t t_lhsn>
-  inline void shift_word_and_compare(uint64_t lhs, uint64_t rhs, uint16_t lhsl);
+  inline void shift_word_and_compare(span_t<t_lhsn> lhss, uint64_t rhs,
+                                     uint16_t lhsl);
 };
 
 
@@ -500,7 +505,7 @@ void huddinge_distance_calculator_2bit<t_tag>::shift_word_pair_and_compare(
 
   std::size_t lhs_word_idx{lhs_start_idx};
   std::size_t rhs_word_idx{};
-  while (lhs_word_idx < t_lhsn - 1 && rhs_word_idx < t_rhsn) {
+  while (lhs_word_idx < lhs.size() - 1 && rhs_word_idx < rhs.size()) {
     auto const lhs_word{s_apply.set(lhs[lhs_word_idx])};
     auto const lhs_next_word{s_apply.set(lhs[lhs_word_idx + 1])};
     auto const rhs_word{s_apply.set(rhs[rhs_word_idx])};
@@ -513,7 +518,7 @@ void huddinge_distance_calculator_2bit<t_tag>::shift_word_pair_and_compare(
       auto const lhs_shift_amounts{cb.load(s_shift_left_amounts)};
       auto const lhs_shifted{lhs_word << lhs_shift_amounts};
 
-      // Same with the next word. We have one due to lhs_word_idx_ < t_lhsn - 1.
+      // Same with the next word. We have one due to lhs_word_idx_ < lhs.size() - 1.
       auto const lhs_next_shift_amounts{cb.load(s_shift_right_amounts)};
       auto const lhs_next_shifted{hn::ShiftRight<2>(lhs_next_word) >>
                                   lhs_next_shift_amounts};
@@ -568,7 +573,7 @@ void huddinge_distance_calculator_4bit<t_tag>::shift_word_pair_and_compare(
 
   std::size_t lhs_word_idx{lhs_start_idx};
   std::size_t rhs_word_idx{};
-  while (lhs_word_idx < t_lhsn - 1 && rhs_word_idx < t_rhsn) {
+  while (lhs_word_idx < lhs.size() - 1 && rhs_word_idx < rhs.size()) {
     auto const lhs_word{s_apply.set(lhs[lhs_word_idx])};
     auto const lhs_next_word{s_apply.set(lhs[lhs_word_idx + 1])};
     auto const rhs_word{s_apply.set(rhs[rhs_word_idx])};
@@ -578,7 +583,7 @@ void huddinge_distance_calculator_4bit<t_tag>::shift_word_pair_and_compare(
       auto const lhs_shift_amounts{cb.load(s_shift_left_amounts)};
       auto const lhs_shifted{lhs_word << lhs_shift_amounts};
 
-      // Same with the next word. We have one due to lhs_word_idx_ < t_lhsn - 1.
+      // Same with the next word. We have one due to lhs_word_idx_ < lhs.size() - 1.
       auto const lhs_next_shift_amounts{cb.load(s_shift_right_amounts)};
       auto const lhs_next_shifted{hn::ShiftRight<4>(lhs_next_word) >>
                                   lhs_next_shift_amounts};
@@ -686,33 +691,57 @@ void huddinge_distance_calculator_4bit<t_tag>::shift_word_and_compare_(
 template <typename t_tag>
 template <bool t_forward_direction, std::size_t t_lhsn>
 void huddinge_distance_calculator_2bit<t_tag>::shift_word_and_compare(
-    uint64_t lhs, uint64_t rhs, uint64_t lhs_mask, uint64_t rhs_mask,
+    span_t<t_lhsn> lhss, uint64_t rhs, uint64_t lhs_mask, uint64_t rhs_mask,
     uint16_t lhsl) {
-  constexpr bool uses_fast_path{1 == t_lhsn};
-  alignas(HWY_ALIGNMENT) score_array_t<uses_fast_path> scores{};
+  auto const do_shift{[&](auto const uses_fast_path) {
+    alignas(HWY_ALIGNMENT) score_array_t<uses_fast_path> scores{};
+    auto const lhs{lhss.back()};
 
-  shift_word_and_compare_<t_forward_direction, uses_fast_path>(
-      scores, lhs, rhs, lhs_mask, rhs_mask, lhsl);
+    shift_word_and_compare_<t_forward_direction, uses_fast_path>(
+        scores, lhs, rhs, lhs_mask, rhs_mask, lhsl);
 
-  if constexpr (not uses_fast_path)
-    update_best_alignment<t_forward_direction>(
-        scores, (t_forward_direction ? -1 : 1) * 32 * int16_t(t_lhsn - 1));
+    if constexpr (not uses_fast_path)
+      update_best_alignment<t_forward_direction>(
+          scores,
+          (t_forward_direction ? -1 : 1) * 32 * int16_t(lhss.size() - 1));
+  }};
+
+  if constexpr (std::dynamic_extent == t_lhsn) {
+    if (1 == lhss.size())
+      do_shift(std::true_type{});
+    else
+      do_shift(std::false_type{});
+  } else {
+    do_shift(std::bool_constant<1 == t_lhsn>{});
+  }
 }
 
 
 template <typename t_tag>
 template <bool t_forward_direction, std::size_t t_lhsn>
 void huddinge_distance_calculator_4bit<t_tag>::shift_word_and_compare(
-    uint64_t lhs, uint64_t rhs, uint16_t lhsl) {
-  constexpr bool uses_fast_path{1 == t_lhsn};
-  alignas(HWY_ALIGNMENT) score_array_t<uses_fast_path> scores{};
+    span_t<t_lhsn> lhss, uint64_t rhs, uint16_t lhsl) {
+  auto const do_shift{[&](auto const uses_fast_path) {
+    alignas(HWY_ALIGNMENT) score_array_t<uses_fast_path> scores{};
+    auto const lhs{lhss.back()};
 
-  shift_word_and_compare_<t_forward_direction, uses_fast_path>(scores, lhs, rhs,
-                                                               lhsl);
+    shift_word_and_compare_<t_forward_direction, uses_fast_path>(scores, lhs,
+                                                                 rhs, lhsl);
 
-  if constexpr (not uses_fast_path)
-    update_best_alignment<t_forward_direction>(
-        scores, (t_forward_direction ? -1 : 1) * 16 * int16_t(t_lhsn - 1));
+    if constexpr (not uses_fast_path)
+      update_best_alignment<t_forward_direction>(
+          scores,
+          (t_forward_direction ? -1 : 1) * 16 * int16_t(lhss.size() - 1));
+  }};
+
+  if constexpr (std::dynamic_extent == t_lhsn) {
+    if (1 == lhss.size())
+      do_shift(std::true_type{});
+    else
+      do_shift(std::false_type{});
+  } else {
+    do_shift(std::bool_constant<1 == t_lhsn>{});
+  }
 }
 }  // namespace sf::detail
 
@@ -732,38 +761,40 @@ HWY_ATTR huddinge_distance_return_value huddinge_distance(
     std::span<uint64_t const, t_rhsn> rhs,
     std::span<uint64_t const, t_lhsn> lhs_mask,
     std::span<uint64_t const, t_rhsn> rhs_mask, uint16_t lhsl, uint16_t rhsl) {
-  static_assert(0 < t_lhsn);
-  static_assert(0 < t_rhsn);
-
-  // Sanity check; we expect the span sizes not to be larger than needed.
-  libbio_assert_eq(t_lhsn, (lhsl + 31) / 32);
-  libbio_assert_eq(t_rhsn, (rhsl + 31) / 32);
-
   namespace hn = hwy::HWY_NAMESPACE;
   typedef hn::ScalableTag<std::uint64_t> tag_type;
   typedef detail::huddinge_distance_calculator_2bit<tag_type>
       distance_calculator_type;
+
+  libbio_assert_eq(lhs.size(), lhs_mask.size());
+  libbio_assert_eq(rhs.size(), rhs_mask.size());
+
   distance_calculator_type dc;
 
   dc.determine_max_defined_characters(lhs_mask, rhs_mask);
 
+  if (0 == lhs.size() || 0 == rhs.size())
+    return huddinge_distance_return_value(dc.max_defined_characters(), 0);
+
   // Case where lhs is shifted to the left, i.e. has negative or zero position
   // w.r.t. rhs.
-  for (std::size_t lhs_word_idx{}; lhs_word_idx < t_lhsn - 1; ++lhs_word_idx)
+  for (std::size_t lhs_word_idx{}; lhs_word_idx < lhs.size() - 1;
+       ++lhs_word_idx)
     dc.shift_word_pair_and_compare<false>(lhs, rhs, lhs_mask, rhs_mask,
                                           lhs_word_idx, lhsl);
 
-  dc.shift_word_and_compare<false, t_lhsn>(
-      lhs.back(), rhs.front(), lhs_mask.back(), rhs_mask.front(), lhsl);
+  dc.shift_word_and_compare<false>(lhs, rhs.front(), lhs_mask.back(),
+                                   rhs_mask.front(), lhsl);
 
   // Case where lhs is shifted to the right, i.e. has positive or zero position
   // w.r.t. rhs. (To avoid complexity, we handle position zero twice.)
-  for (std::size_t rhs_word_idx{}; rhs_word_idx < t_rhsn - 1; ++rhs_word_idx)
+  for (std::size_t rhs_word_idx{}; rhs_word_idx < rhs.size() - 1;
+       ++rhs_word_idx)
     dc.shift_word_pair_and_compare<true>(rhs, lhs, rhs_mask, lhs_mask,
                                          rhs_word_idx, rhsl);
 
-  dc.shift_word_and_compare<true, t_rhsn>(
-      rhs.back(), lhs.front(), rhs_mask.back(), lhs_mask.front(), rhsl);
+  dc.shift_word_and_compare<true>(rhs, lhs.front(), rhs_mask.back(),
+                                  lhs_mask.front(), rhsl);
 
   return dc.best_alignment();
 }
@@ -776,13 +807,6 @@ template <std::size_t t_lhsn, std::size_t t_rhsn>
 HWY_ATTR huddinge_distance_return_value huddinge_distance_4bit(
     std::span<uint64_t const, t_lhsn> lhs,
     std::span<uint64_t const, t_rhsn> rhs, uint16_t lhsl, uint16_t rhsl) {
-  static_assert(0 < t_lhsn);
-  static_assert(0 < t_rhsn);
-
-  // Sanity check; we expect the span sizes not to be larger than needed.
-  libbio_assert_eq(t_lhsn, (lhsl + 15) / 16);
-  libbio_assert_eq(t_rhsn, (rhsl + 15) / 16);
-
   namespace hn = hwy::HWY_NAMESPACE;
   typedef hn::ScalableTag<std::uint64_t> tag_type;
   typedef detail::huddinge_distance_calculator_4bit<tag_type>
@@ -791,19 +815,24 @@ HWY_ATTR huddinge_distance_return_value huddinge_distance_4bit(
 
   dc.determine_max_defined_characters(lhs, rhs);
 
+  if (0 == lhs.size() || 0 == rhs.size())
+    return huddinge_distance_return_value(dc.max_defined_characters(), 0);
+
   // Case where lhs is shifted to the left, i.e. has negative or zero position
   // w.r.t. rhs.
-  for (std::size_t lhs_word_idx{}; lhs_word_idx < t_lhsn - 1; ++lhs_word_idx)
+  for (std::size_t lhs_word_idx{}; lhs_word_idx < lhs.size() - 1;
+       ++lhs_word_idx)
     dc.shift_word_pair_and_compare<false>(lhs, rhs, lhs_word_idx, lhsl);
 
-  dc.shift_word_and_compare<false, t_lhsn>(lhs.back(), rhs.front(), lhsl);
+  dc.shift_word_and_compare<false>(lhs, rhs.front(), lhsl);
 
   // Case where lhs is shifted to the right, i.e. has positive or zero position
   // w.r.t. rhs. (To avoid complexity, we handle position zero twice.)
-  for (std::size_t rhs_word_idx{}; rhs_word_idx < t_rhsn - 1; ++rhs_word_idx)
+  for (std::size_t rhs_word_idx{}; rhs_word_idx < rhs.size() - 1;
+       ++rhs_word_idx)
     dc.shift_word_pair_and_compare<true>(rhs, lhs, rhs_word_idx, rhsl);
 
-  dc.shift_word_and_compare<true, t_rhsn>(rhs.back(), lhs.front(), rhsl);
+  dc.shift_word_and_compare<true>(rhs, lhs.front(), rhsl);
 
   return dc.best_alignment();
 }
