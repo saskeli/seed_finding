@@ -13,8 +13,10 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <libbio/algorithm.hh>
 #include <span>
 #include <string>
+#include <type_traits>
 
 #include "bits.hpp"
 #include "huddinge_distance.hpp"
@@ -24,6 +26,7 @@
 #include <bitset>
 #include <cassert>
 #endif
+
 
 namespace sf {
 template <bool t_middle_gap_only = false, uint16_t t_max_gap = 10>
@@ -78,13 +81,14 @@ class gapmer {
   gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len,
          uint8_t gap_s, uint8_t gap_l);
 
+ public:
   uint64_t prefix() const;
   uint64_t suffix() const;
   uint64_t prefix(uint64_t i) const;
   uint64_t suffix(uint64_t i) const;
+  bool hamming_(uint64_t v, auto&& callback) const;
   gapmer hamming(uint64_t v, auto&& callback) const;
 
- public:
   struct hash {
     uint64_t operator()(gapmer gg) const { return uint64_t(gg); }
   };
@@ -96,10 +100,10 @@ class gapmer {
   // For now they are public so that unit tests can access them.
 
   template <bool no_smaller, bool no_same, bool no_larger>
-  void middle_gap_neighbours(auto&& callback) const;
+  bool middle_gap_neighbours(auto&& callback) const;
 
   template <bool no_smaller, bool no_same, bool no_larger>
-  void all_gap_neighbours(auto&& callback) const;
+  bool all_gap_neighbours(auto&& callback) const;
 
   /// Writes the 2-bit compressed string representation to the given buffers.
   /// The caller is responsible for reserving enough memory.
@@ -187,7 +191,7 @@ class gapmer {
 
   template <bool no_smaller = false, bool no_same = false,
             bool no_larger = false>
-  void huddinge_neighbours(auto&& callback) const;
+  bool huddinge_neighbours(auto&& callback) const;
 
   /// Calculate the Huddinge distance.
   huddinge_distance_return_value huddinge_distance(gapmer const other) const;
@@ -397,23 +401,37 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::suffix(uint64_t i) const {
   return value() & v;
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
-auto gapmer<middle_gap_only, t_max_gap>::hamming(uint64_t v,
-                                                 auto&& callback) const
-    -> gapmer {
-  callback(*this);
-  callback(gapmer(data_ ^ v));
+bool gapmer<middle_gap_only, t_max_gap>::hamming_(uint64_t v, auto&& cb) const {
+  auto callback{make_success_adapter<gapmer>(cb)};
+
+  if (not callback(*this)) return false;
+
+  if (not callback(gapmer(data_ ^ v))) return false;
+
   uint64_t vv = v << 1;
-  callback(gapmer(data_ ^ vv));
+  if (not callback(gapmer(data_ ^ vv))) return false;
+
   vv |= v;
-  callback(gapmer(data_ ^ vv));
+  if (not callback(gapmer(data_ ^ vv))) return false;
+
+  return true;
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+auto gapmer<middle_gap_only, t_max_gap>::hamming(uint64_t v, auto&& cb) const
+    -> gapmer {
+  hamming_(v, cb);
   return *this;
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool no_smaller, bool no_same, bool no_larger>
-void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
-    auto&& callback) const {
+bool gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
+    auto&& cb) const {
   const uint64_t val = value();
   const uint8_t len = length();
   // It is the user’s responsibility to check the length before listing the
@@ -425,13 +443,19 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
   const uint8_t suffix_len = len - gap_s;
   const uint8_t gap_l = gap_length();
 
+  auto const callback{[&cb](gapmer oo) -> bool {
+    auto adapter{make_success_adapter<gapmer>(cb)};
+    return adapter(oo);
+  }};
+
   // Version of callback that checks that the new mer is not the same as the
   // old one
-  auto val_cb = [&](gapmer o) {
-    if (*this != o) {
-      callback(o);
+  auto const val_cb{[&](gapmer oo) -> bool {
+    if (*this != oo) {
+      return callback(oo);
     }
-  };
+    return true;
+  }};
 
   uint8_t new_len = len + 1;
   uint64_t h_val = ONE << (len * 2);
@@ -462,17 +486,25 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
       n_val |= suffix();
       if (gap_l == 1) {
         // ACG.TGT -> ACGnTGT
-        gapmer(n_val, new_len).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len).hamming(h_val, callback)) return false;
       } else if (len % 2 == 0) {
         // ACG..TGT -> ACGn.TGT, ACG.nTGT
-        gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
-        gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len, gap_s + 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
+        if (not gapmer(n_val, new_len, gap_s, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
       } else if (suffix_len > prefix_len) {
         // AC..TGT -> ACn.TGT
-        gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len, gap_s + 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
       } else {
         // ACG..TG -> ACG.nTG
-        gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len, gap_s, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
       }
     }
 
@@ -483,7 +515,8 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
       // ACGTAT -> ACGTATn
       // ACG.TAT -> ACG.TATn
       // ACG.TA -> ACG.TAn
-      gapmer(val << 2, new_len, gap_s, gap_l).hamming(ONE, callback);
+      if (not gapmer(val << 2, new_len, gap_s, gap_l).hamming(ONE, callback))
+        return false;
     }
   }
 
@@ -494,7 +527,7 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
     for (uint64_t n = 1; n < 4; ++n) {
       uint64_t xor_val = n;
       for (size_t i = 0; i < len; ++i) {
-        callback(gapmer(data_ ^ xor_val));
+        if (not callback(gapmer(data_ ^ xor_val))) return false;
         xor_val <<= 2;
       }
     }
@@ -512,34 +545,40 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
         // AAA.GGG -> nAA..GGG
         // AAA.GG -> nAA..GG
         // AA.GGG -> nA.GGG
-        gapmer(pref >> 2, suffix(), prefix_len, suffix_len, gap_s, gap_l + 1)
-            .hamming(h_val, callback);
+        if (not gapmer(pref >> 2, suffix(), prefix_len, suffix_len, gap_s,
+                       gap_l + 1)
+                    .hamming(h_val, callback))
+          return false;
         if (suffix_len > prefix_len) {
           // AA.GGT -> nAA..GT
-          gapmer(pref, suffix(suffix_len - 1), prefix_len + 1, suffix_len - 1,
-                 gap_s + 1, gap_l + 1)
-              .hamming(h_val, callback);
+          if (not gapmer(pref, suffix(suffix_len - 1), prefix_len + 1,
+                         suffix_len - 1, gap_s + 1, gap_l + 1)
+                      .hamming(h_val, callback))
+            return false;
           // AA.GGT -> nAA.GG
         }
       }
       if (suffix_len > prefix_len) {
-        gapmer(pref, suffix() >> 2, prefix_len + 1, suffix_len - 1, gap_s + 1,
-               gap_l)
-            .hamming(h_val, callback);
+        if (not gapmer(pref, suffix() >> 2, prefix_len + 1, suffix_len - 1,
+                       gap_s + 1, gap_l)
+                    .hamming(h_val, callback))
+          return false;
       }
     } else {
       // ACTGTA -> nACTGT ***can be same***
-      gapmer(val >> 2, new_len).hamming(h_val, val_cb);
+      if (not gapmer(val >> 2, new_len).hamming(h_val, val_cb)) return false;
       // ACTGTA -> nAC.GTA
       // ACTGT -> nA.TGT
-      gapmer(prefix(len / 2 - 1), suffix((len + 1) / 2), len / 2, (len + 1) / 2,
-             len / 2, 1)
-          .hamming(h_val, callback);
+      if (not gapmer(prefix(len / 2 - 1), suffix((len + 1) / 2), len / 2,
+                     (len + 1) / 2, len / 2, 1)
+                  .hamming(h_val, callback))
+        return false;
       if (len % 2 != 0) {
         // ACTGT -> nAC.GT
-        gapmer(prefix(len / 2), suffix(len / 2), len / 2 + 1, len / 2,
-               len / 2 + 1, 1)
-            .hamming(h_val, callback);
+        if (not gapmer(prefix(len / 2), suffix(len / 2), len / 2 + 1, len / 2,
+                       len / 2 + 1, 1)
+                    .hamming(h_val, callback))
+          return false;
       }
     }
 
@@ -548,24 +587,28 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
     if (gap_l == 1) {
       // ACG.TGT -> ACGnTG
       h_val = ONE << (suffix_len * 2 - 2);
-      gapmer(prefix(), suffix() >> 2, prefix_len, suffix_len, 0, 0)
-          .hamming(h_val, callback);
+      if (not gapmer(prefix(), suffix() >> 2, prefix_len, suffix_len, 0, 0)
+                  .hamming(h_val, callback))
+        return false;
       // ACG.TGT -> CGnTGT
       h_val <<= 2;
-      gapmer(suffix(len - 1) >> (suffix_len * 2), suffix(), prefix_len - 1,
-             suffix_len + 1, 0, 0)
-          .hamming(h_val, callback);
+      if (not gapmer(suffix(len - 1) >> (suffix_len * 2), suffix(),
+                     prefix_len - 1, suffix_len + 1, 0, 0)
+                  .hamming(h_val, callback))
+        return false;
       if (prefix_len < suffix_len) {
         // AC.GTG -> ACn.TG
         h_val >>= 2;
-        gapmer(prefix(), suffix(prefix_len), prefix_len, suffix_len, gap_s + 1,
-               gap_l)
-            .hamming(h_val, callback);
+        if (not gapmer(prefix(), suffix(prefix_len), prefix_len, suffix_len,
+                       gap_s + 1, gap_l)
+                    .hamming(h_val, callback))
+          return false;
       } else if (suffix_len < prefix_len) {
         // ACG.TG -> AC.nTG
-        gapmer(prefix(suffix_len), suffix(), suffix_len, prefix_len, gap_s - 1,
-               gap_l)
-            .hamming(h_val, callback);
+        if (not gapmer(prefix(suffix_len), suffix(), suffix_len, prefix_len,
+                       gap_s - 1, gap_l)
+                    .hamming(h_val, callback))
+          return false;
       }
     } else if (gap_l > 1) {
       // ACG...TGT -> ACG..nTG
@@ -574,14 +617,17 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
       h_val = ONE << (suffix_len * 2 - 2);
       uint64_t pref = prefix();
       uint64_t suf = suffix() >> 2;
-      gapmer(pref, suf, prefix_len, suffix_len, gap_s, gap_l - 1)
-          .hamming(h_val, callback);
+      if (not gapmer(pref, suf, prefix_len, suffix_len, gap_s, gap_l - 1)
+                  .hamming(h_val, callback))
+        return false;
       if (prefix_len < suffix_len) {
         // AC...GTG -> ACn..GT
-        gapmer(pref, suf, prefix_len, suffix_len, gap_s + 1, gap_l - 1)
-            .hamming(h_val, callback);
+        if (not gapmer(pref, suf, prefix_len, suffix_len, gap_s + 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
         // AC...GTG -> ACn...TG
-        gapmer(val, len, gap_s + 1, gap_l).hamming(h_val, callback);
+        if (not gapmer(val, len, gap_s + 1, gap_l).hamming(h_val, callback))
+          return false;
       }
       // ACG...TGT -> CGn..TGT
       // AC...GTG -> Cn..GTG
@@ -590,15 +636,18 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
       pref <<= 2;
       pref &= (ONE << (prefix_len * 2)) - ONE;
       suf = suffix();
-      gapmer(pref, suf, prefix_len, suffix_len, gap_s, gap_l - 1)
-          .hamming(h_val, callback);
+      if (not gapmer(pref, suf, prefix_len, suffix_len, gap_s, gap_l - 1)
+                  .hamming(h_val, callback))
+        return false;
       if (suffix_len < prefix_len) {
         // ACG...TG -> AC...nTG
-        gapmer(val, len, gap_s - 1, gap_l).hamming(h_val, callback);
+        if (not gapmer(val, len, gap_s - 1, gap_l).hamming(h_val, callback))
+          return false;
         // ACG...TG -> CG..nTG
-        gapmer(pref >> 2, suf, prefix_len - 1, suffix_len + 1, gap_s - 1,
-               gap_l - 1)
-            .hamming(h_val, callback);
+        if (not gapmer(pref >> 2, suf, prefix_len - 1, suffix_len + 1,
+                       gap_s - 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
       }
     }
 
@@ -613,37 +662,42 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
         // ACG..TGC -> ACG...GCn
         // AC..TGC -> AC...GCn
         uint64_t suf = suffix(suffix_len - 1) << 2;
-        gapmer(prefix(), suf, prefix_len, suffix_len, gap_s, l_g_l)
-            .hamming(ONE, callback);
+        if (not gapmer(prefix(), suf, prefix_len, suffix_len, gap_s, l_g_l)
+                    .hamming(ONE, callback))
+          return false;
         if (prefix_len > suffix_len) {
           // ACG..TG -> AC...TGn
           uint64_t p = prefix(prefix_len - 1);
-          gapmer(p, suffix() << 2, prefix_len - 1, suffix_len + 1, gap_s - 1,
-                 l_g_l)
-              .hamming(ONE, callback);
+          if (not gapmer(p, suffix() << 2, prefix_len - 1, suffix_len + 1,
+                         gap_s - 1, l_g_l)
+                      .hamming(ONE, callback))
+            return false;
         }
       }
       if (prefix_len > suffix_len) {
         // ACG..TG -> CG...TGn
         uint64_t n_val = val << 2;
         n_val &= (ONE << (len * 2)) - ONE;
-        gapmer(n_val, len, gap_s - 1, gap_l).hamming(ONE, callback);
+        if (not gapmer(n_val, len, gap_s - 1, gap_l).hamming(ONE, callback))
+          return false;
       }
     } else {
       // ACGTGC -> CGTGCn
       uint64_t n_val = suffix(len - 1);
       n_val <<= 2;
-      gapmer(n_val, len).hamming(ONE, val_cb);
+      if (not gapmer(n_val, len).hamming(ONE, val_cb)) return false;
       // ACGTGC -> ACG.GCn
       // ACGTG -> AC.TGn
-      gapmer(prefix(len / 2), suffix((len - 1) / 2) << 2, len / 2,
-             len - len / 2, len / 2, 1)
-          .hamming(ONE, callback);
+      if (not gapmer(prefix(len / 2), suffix((len - 1) / 2) << 2, len / 2,
+                     len - len / 2, len / 2, 1)
+                  .hamming(ONE, callback))
+        return false;
       if (len % 2 > 0) {
         // ACGTG -> ACG.Gn
-        gapmer(prefix(len / 2 + 1), suffix(len / 2 - 1) << 2, len / 2 + 1,
-               len / 2, len / 2 + 1, 1)
-            .hamming(ONE, callback);
+        if (not gapmer(prefix(len / 2 + 1), suffix(len / 2 - 1) << 2,
+                       len / 2 + 1, len / 2, len / 2 + 1, 1)
+                    .hamming(ONE, callback))
+          return false;
       }
     }
   }
@@ -654,12 +708,13 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
     // Start:
     if (gap_s == 0) {
       // ACGTAC -> CGTAC
-      callback(gapmer(suffix(len - 1), len - 1));
+      if (not callback(gapmer(suffix(len - 1), len - 1))) return false;
     } else {
       // ACG..TC -> CG..TC
       // ACG..TCG -> CG..TCG
       if (len / 2 == suffix_len) {
-        callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l));
+        if (not callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l)))
+          return false;
       }
     }
 
@@ -670,11 +725,15 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
       uint8_t rem = half - 1;
       if (len % 2 == 0) {
         // ACGTAC -> ACG.AC, AC.TAC
-        callback(gapmer(prefix(half), suffix(rem), half, rem, half, 1));
-        callback(gapmer(prefix(rem), suffix(half), rem, half, rem, 1));
+        if (not callback(gapmer(prefix(half), suffix(rem), half, rem, half, 1)))
+          return false;
+        if (not callback(gapmer(prefix(rem), suffix(half), rem, half, rem, 1)))
+          return false;
       } else {
         // ACGTA -> AC.TA
-        callback(gapmer(prefix(half), suffix(half), half, half, half, 1));
+        if (not callback(
+                gapmer(prefix(half), suffix(half), half, half, half, 1)))
+          return false;
       }
     } else {
       if (gap_l < max_gap) {
@@ -683,14 +742,16 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
         if (prefix_len == len / 2) {
           // ACG..TGC -> ACG...GC
           // AC..TGC -> AC...GC
-          callback(
-              gapmer(prefix(half), suffix(s_l), half, s_l, gap_s, gap_l + 1));
+          if (not callback(gapmer(prefix(half), suffix(s_l), half, s_l, gap_s,
+                                  gap_l + 1)))
+            return false;
         }
         if (suffix_len == len / 2) {
           // ACG..TGC -> AC...TGC
           // ACG..TG -> AC...TG
-          callback(gapmer(prefix(s_l), suffix(half), s_l, half, gap_s - 1,
-                          gap_l + 1));
+          if (not callback(gapmer(prefix(s_l), suffix(half), s_l, half,
+                                  gap_s - 1, gap_l + 1)))
+            return false;
         }
       }
     }
@@ -698,21 +759,23 @@ void gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
     // End
     if (gap_s == 0) {
       // CATTATT -> CATTAT
-      callback(gapmer(prefix(len - 1), len - 1));
+      if (not callback(gapmer(prefix(len - 1), len - 1))) return false;
     } else {
       // CAT..ATT -> CAT..AT
       // CA..TAT -> CA..TA
       if (prefix_len == len / 2) {
-        callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l));
+        if (not callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l)))
+          return false;
       }
     }
   }
+
+  return true;
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool no_smaller, bool no_same, bool no_larger>
-void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
-    auto&& callback) const {
+bool gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(auto&& cb) const {
   const uint64_t val = value();
   const uint8_t len = length();
   // It is the user’s responsibility to check the length before listing the neighbours.
@@ -722,6 +785,11 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
   const uint8_t prefix_len = gap_s;
   const uint8_t suffix_len = len - gap_s;
   const uint8_t gap_l = gap_length();
+
+  auto const callback{[&cb](gapmer oo) -> bool {
+    auto adapter{make_success_adapter<gapmer>(cb)};
+    return adapter(oo);
+  }};
 
   // Version of callback that checks that the new mer is not the same as the
   // old one
@@ -743,13 +811,15 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
     // length is even or unven length with gap closer to start.
     if (gap_l == 0) {
       // ACGTT -> nACGTT, n.*ACGTT
-      gapmer(val, new_len).hamming(h_val, callback);
+      if (not gapmer(val, new_len).hamming(h_val, callback)) return false;
       for (uint8_t gl = 1; gl <= max_gap; ++gl) {
-        gapmer(val, new_len, 1, gl).hamming(h_val, callback);
+        if (not gapmer(val, new_len, 1, gl).hamming(h_val, callback))
+          return false;
       }
     } else {
       // ACGT.G -> nACGT.G
-      gapmer(val, new_len, gap_s + 1, gap_l).hamming(h_val, callback);
+      if (not gapmer(val, new_len, gap_s + 1, gap_l).hamming(h_val, callback))
+        return false;
     }
 
     // Middle:
@@ -763,11 +833,15 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
       n_val |= suffix();
       if (gap_l == 1) {
         // A.CGTGT -> AnCGTGT
-        gapmer(n_val, new_len).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len).hamming(h_val, callback)) return false;
       } else {
         // A..CGTGT -> An.CGTGT, A.nCGTGT
-        gapmer(n_val, new_len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
-        gapmer(n_val, new_len, gap_s, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len, gap_s + 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
+        if (not gapmer(n_val, new_len, gap_s, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
       }
     }
 
@@ -777,15 +851,17 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
     uint64_t n_val = val << 2;
     if (gap_l == 0) {
       // ACGTAT -> ACGTATn, ACGTAT.*n
-      gapmer(n_val, new_len).hamming(ONE, callback);
+      if (not gapmer(n_val, new_len).hamming(ONE, callback)) return false;
       for (uint8_t gl = 1; gl <= max_gap; ++gl) {
-        gapmer(n_val, new_len, len, gl).hamming(ONE, callback);
+        if (not gapmer(n_val, new_len, len, gl).hamming(ONE, callback))
+          return false;
       }
     } else {
       // ACG...TAT -> ACG..TATn
       // ACG...TA -> ACG...TAn
       // AC...TAT -> AC...TATn
-      gapmer(n_val, new_len, gap_s, gap_l).hamming(ONE, callback);
+      if (not gapmer(n_val, new_len, gap_s, gap_l).hamming(ONE, callback))
+        return false;
     }
   }
 
@@ -796,7 +872,7 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
     for (uint64_t n = 1; n < 4; ++n) {
       uint64_t xor_val = n;
       for (size_t i = 0; i < len; ++i) {
-        callback(gapmer(data_ ^ xor_val));
+        if (not callback(gapmer(data_ ^ xor_val))) return false;
         xor_val <<= 2;
       }
     }
@@ -812,64 +888,77 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
       if (gap_s == len - 1) {
         // ACGT.G -> nACGT
         uint64_t n_val = prefix();
-        gapmer(n_val, new_len).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len).hamming(h_val, callback)) return false;
         // ACGT.G -> n.*ACGT
         for (uint8_t gl = 1; gl <= max_gap; ++gl) {
-          gapmer(n_val, new_len, 1, gl).hamming(h_val, callback);
+          if (not gapmer(n_val, new_len, 1, gl).hamming(h_val, callback))
+            return false;
         }
       } else {
         // ACG.TGT -> nACG.TG
-        gapmer(val >> 2, new_len, gap_s + 1, gap_l).hamming(h_val, callback);
+        if (not gapmer(val >> 2, new_len, gap_s + 1, gap_l)
+                    .hamming(h_val, callback))
+          return false;
         if (gap_s == 1) {
           // A.CGTG -> n..*CGTG
           uint64_t suf = suffix();
           for (uint8_t gl = gap_l + 1; gl <= max_gap; ++gl) {
-            gapmer(suf, len, 1, gl).hamming(h_val, callback);
+            if (not gapmer(suf, len, 1, gl).hamming(h_val, callback))
+              return false;
           }
         }
       }
       if (gap_l < max_gap) {
         if (gap_s == 1) {
           // A.CGTG -> n..CGTG
-          gapmer(prefix() >> 2, suffix(), prefix_len, suffix_len, 1, gap_l + 1)
-              .hamming(h_val, callback);
+          if (not gapmer(prefix() >> 2, suffix(), prefix_len, suffix_len, 1,
+                         gap_l + 1)
+                      .hamming(h_val, callback))
+            return false;
           // A.CGTG -> nA..GTG
-          gapmer(prefix(), suffix(suffix_len - 1), prefix_len + 1,
-                 suffix_len - 1, 2, gap_l + 1)
-              .hamming(h_val, callback);
+          if (not gapmer(prefix(), suffix(suffix_len - 1), prefix_len + 1,
+                         suffix_len - 1, 2, gap_l + 1)
+                      .hamming(h_val, callback))
+            return false;
         } else if (gap_s == len - 1) {
           // ACGT.G -> nACG..G
-          gapmer(prefix(prefix_len - 1), suffix(), prefix_len, 1, gap_s,
-                 gap_l + 1)
-              .hamming(h_val, callback);
+          if (not gapmer(prefix(prefix_len - 1), suffix(), prefix_len, 1, gap_s,
+                         gap_l + 1)
+                      .hamming(h_val, callback))
+            return false;
         } else {
           // ACG.TGT -> nACG..GT
-          gapmer(prefix(), suffix(suffix_len - 1), prefix_len + 1,
-                 suffix_len - 1, gap_s + 1, gap_l + 1)
-              .hamming(h_val, callback);
+          if (not gapmer(prefix(), suffix(suffix_len - 1), prefix_len + 1,
+                         suffix_len - 1, gap_s + 1, gap_l + 1)
+                      .hamming(h_val, callback))
+            return false;
           // ACG.TGT -> nAC..TGT
-          gapmer(prefix(prefix_len - 1), suffix(suffix_len), prefix_len,
-                 suffix_len, gap_s, gap_l + 1)
-              .hamming(h_val, callback);
+          if (not gapmer(prefix(prefix_len - 1), suffix(suffix_len), prefix_len,
+                         suffix_len, gap_s, gap_l + 1)
+                      .hamming(h_val, callback))
+            return false;
         }
       }
     } else {
       // ACGTGT -> nACGTG
       uint64_t n_val = prefix(len - 1);
-      gapmer(n_val, new_len).hamming(h_val, val_cb);
+      if (not gapmer(n_val, new_len).hamming(h_val, val_cb)) return false;
       // ACGTGT -> n.*CGTGT
       for (uint8_t gl = 1; gl <= max_gap; ++gl) {
-        gapmer(n_val, new_len, 1, gl).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len, 1, gl).hamming(h_val, callback))
+          return false;
       }
       n_val = suffix(len - 1);
       for (uint8_t gl = 1; gl <= max_gap; ++gl) {
-        gapmer(n_val, new_len, 1, gl).hamming(h_val, callback);
+        if (not gapmer(n_val, new_len, 1, gl).hamming(h_val, callback))
+          return false;
       }
       // ACGTGT -> nA.GTGT, nAC.TGT, nACG.GT, nACGT.T
       for (uint8_t gs = 2; gs < len; ++gs) {
         // TODO: This is slower than it needs to be.
-        gapmer(prefix(gs - 1), suffix(len - gs), gs, len - gs, gs, 1)
-            .hamming(h_val, callback);
+        if (not gapmer(prefix(gs - 1), suffix(len - gs), gs, len - gs, gs, 1)
+                    .hamming(h_val, callback))
+          return false;
       }
     }
 
@@ -879,10 +968,10 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
       if (gap_s == 1) {
         // A.GTGC -> nGTGC
         h_val = ONE << (len * 2 - 2);
-        gapmer(val, len).hamming(h_val, callback);
+        if (not gapmer(val, len).hamming(h_val, callback)) return false;
         // A.GTGC -> An.TGC
         h_val >>= 2;
-        gapmer(val, len, 2, 1).hamming(h_val, callback);
+        if (not gapmer(val, len, 2, 1).hamming(h_val, callback)) return false;
         // A.GTGC -> AnG.GC, AnGT.C
         uint64_t pref = prefix() << 4;
         uint8_t n_loc = 1;
@@ -891,49 +980,58 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
         uint8_t s_len = suffix_len - 2;
         uint64_t s_mask = (ONE << (s_len * 2)) - 1;
         for (; s_len > 0; --s_len) {
-          gapmer(pref, suf, len - s_len, s_len, len - s_len, 1)
-              .hamming(h_val, callback);
+          if (not gapmer(pref, suf, len - s_len, s_len, len - s_len, 1)
+                      .hamming(h_val, callback))
+            return false;
           pref <<= 2;
           pref |= nuc(n_loc++);
           s_mask >>= 2;
           suf &= s_mask;
         }
         // A.GTGC -> AnGTG
-        gapmer(prefix() << 2, suffix() >> 2, 2, len - 2, 0, 0)
-            .hamming(h_val, callback);
+        if (not gapmer(prefix() << 2, suffix() >> 2, 2, len - 2, 0, 0)
+                    .hamming(h_val, callback))
+          return false;
       } else if (gap_s == len - 1) {
         // ACGTG.C -> ACGTGn
-        gapmer(val, len).hamming(ONE, callback);
+        if (not gapmer(val, len).hamming(ONE, callback)) return false;
         // ACGTG.C -> ACGT.nC
         h_val = ONE << 2;
-        gapmer(val, len, gap_s - 1, 1).hamming(h_val, callback);
+        if (not gapmer(val, len, gap_s - 1, 1).hamming(h_val, callback))
+          return false;
         // ACGTG.C -> A.GTGnC, AC.TGnC, ACG.GnC
         uint64_t pref = prefix(len - 2);
         uint64_t suf = nuc(len - 1) | (nuc(len - 2) << 4);
         uint8_t sl = 3;
         for (uint8_t pl = len - 3; pl > 0; --pl) {
-          gapmer(pref >> 2, suf, pl, sl, pl, 1).hamming(h_val, callback);
+          if (not gapmer(pref >> 2, suf, pl, sl, pl, 1)
+                      .hamming(h_val, callback))
+            return false;
           suf |= (pref & 0b11) << (sl * 2);
           pref >>= 2;
           ++sl;
         }
-        gapmer(suf, len).hamming(h_val, callback);
+        if (not gapmer(suf, len).hamming(h_val, callback)) return false;
         // ACGTG.C -> CGTGnC
       } else {
         // AGC.GATG -> GCnGATG
         h_val = ONE << (suffix_len * 2);
         uint64_t pref = prefix() << 2;
         pref &= (ONE << (prefix_len * 2)) - ONE;
-        gapmer(pref, suffix(), prefix_len, suffix_len, 0, 0)
-            .hamming(h_val, callback);
+        if (not gapmer(pref, suffix(), prefix_len, suffix_len, 0, 0)
+                    .hamming(h_val, callback))
+          return false;
         // AGC.GATG -> AG.nGATG
-        gapmer(val, len, gap_s - 1, 1).hamming(h_val, callback);
+        if (not gapmer(val, len, gap_s - 1, 1).hamming(h_val, callback))
+          return false;
         // AGC.GATG -> AGCn.ATG
         h_val >>= 2;
-        gapmer(val, len, gap_s + 1, 1).hamming(h_val, callback);
+        if (not gapmer(val, len, gap_s + 1, 1).hamming(h_val, callback))
+          return false;
         // AGC.GATG -> AGCnGAT
-        gapmer(prefix(), suffix() >> 2, prefix_len, suffix_len, 0, 0)
-            .hamming(h_val, callback);
+        if (not gapmer(prefix(), suffix() >> 2, prefix_len, suffix_len, 0, 0)
+                    .hamming(h_val, callback))
+          return false;
         // AGC.GATG -> A.CnGATG, AGCnG.TG, AGCnGA.G
         h_val <<= 2;
         uint64_t suf = suffix() | (prefix() << (suffix_len * 2 + 2));
@@ -945,7 +1043,9 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
           suf_m >>= 2;
           suf &= suf_m;
           if (gs < gap_s - 1 || gs > gap_s + 1) {
-            gapmer(pref, suf, gs, len - gs, gs, 1).hamming(h_val, callback);
+            if (not gapmer(pref, suf, gs, len - gs, gs, 1)
+                        .hamming(h_val, callback))
+              return false;
           } else if (gs == gap_s) {
             h_val >>= 2;
           }
@@ -958,53 +1058,70 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
         // A...CGTGT -> n..CGTGT, n.CGTGT, nCGTGT
         h_val = ONE << (suffix_len * 2);
         for (uint8_t gl = gap_l - 1; gl > 0; --gl) {
-          gapmer(val, len, 1, gl).hamming(h_val, callback);
+          if (not gapmer(val, len, 1, gl).hamming(h_val, callback))
+            return false;
         }
-        gapmer(val, len, 0, 0).hamming(h_val, callback);
+        if (not gapmer(val, len, 0, 0).hamming(h_val, callback)) return false;
         // A...CGTGT -> An...GTGT
         h_val >>= 2;
-        gapmer(val, len, 2, gap_l).hamming(h_val, callback);
+        if (not gapmer(val, len, 2, gap_l).hamming(h_val, callback))
+          return false;
         // A...CGTGT -> An..CGTG, A..nCGTG
         uint64_t suf = suffix() >> 2;
         suf |= uint64_t(nuc(0)) << (suffix_len * 2);
-        gapmer(suf, len, 1, gap_l - 1).hamming(h_val, callback);
-        gapmer(suf, len, 2, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(suf, len, 1, gap_l - 1).hamming(h_val, callback))
+          return false;
+        if (not gapmer(suf, len, 2, gap_l - 1).hamming(h_val, callback))
+          return false;
       } else if (gap_s == len - 1) {
         // ACGTG...T -> ACGTGn, ACGTG.n, ACGTG..n
-        gapmer(val, len, 0, 0).hamming(ONE, callback);
+        if (not gapmer(val, len, 0, 0).hamming(ONE, callback)) return false;
         for (uint8_t gl = 1; gl < gap_l; ++gl) {
-          gapmer(val, len, len - 1, gl).hamming(ONE, callback);
+          if (not gapmer(val, len, len - 1, gl).hamming(ONE, callback))
+            return false;
         }
         h_val = ONE << 2;
         // ACGTG...T -> CGTGn..T, CGTG..nT, ACGT...nT
-        gapmer(prefix(prefix_len - 1), suffix(), prefix_len - 1, 2, gap_s - 1,
-               gap_l)
-            .hamming(h_val, callback);
+        if (not gapmer(prefix(prefix_len - 1), suffix(), prefix_len - 1, 2,
+                       gap_s - 1, gap_l)
+                    .hamming(h_val, callback))
+          return false;
         // ACGTG...T -> CGTGn..T, CGTG..nT
         uint64_t pref = prefix() << 4;
         pref |= nuc(len - 1);
         pref &= (ONE << (len * 2)) - ONE;
-        gapmer(pref, len, gap_s, gap_l - 1).hamming(h_val, callback);
-        gapmer(pref, len, gap_s - 1, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(pref, len, gap_s, gap_l - 1).hamming(h_val, callback))
+          return false;
+        if (not gapmer(pref, len, gap_s - 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
       } else {
         // ACG...TGT -> ACGn...GT
         h_val = ONE << (suffix_len * 2 - 2);
-        gapmer(val, len, gap_s + 1, gap_l).hamming(h_val, callback);
+        if (not gapmer(val, len, gap_s + 1, gap_l).hamming(h_val, callback))
+          return false;
         // ACG...TGT -> AC...nTGT
         h_val <<= 2;
-        gapmer(val, len, gap_s - 1, gap_l).hamming(h_val, callback);
+        if (not gapmer(val, len, gap_s - 1, gap_l).hamming(h_val, callback))
+          return false;
         // ACG...TGT -> CGn..TGT, CG..nTGT
         uint64_t n_val = prefix() << (suffix_len * 2 + 2);
         n_val |= suffix();
         n_val &= (ONE << (len * 2)) - ONE;
-        gapmer(n_val, len, gap_s, gap_l - 1).hamming(h_val, callback);
-        gapmer(n_val, len, gap_s - 1, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(n_val, len, gap_s, gap_l - 1).hamming(h_val, callback))
+          return false;
+        if (not gapmer(n_val, len, gap_s - 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
         // ACG...TGT -> ACGn..TG, ACG..nTG
         n_val = prefix() << (suffix_len * 2);
         n_val |= suffix() >> 2;
         h_val >>= 2;
-        gapmer(n_val, len, gap_s + 1, gap_l - 1).hamming(h_val, callback);
-        gapmer(n_val, len, gap_s, gap_l - 1).hamming(h_val, callback);
+        if (not gapmer(n_val, len, gap_s + 1, gap_l - 1)
+                    .hamming(h_val, callback))
+          return false;
+        if (not gapmer(n_val, len, gap_s, gap_l - 1).hamming(h_val, callback))
+          return false;
       }
     }
 
@@ -1018,28 +1135,32 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
         uint64_t s = suffix() << 2;
         uint64_t p = nuc(0);
         uint64_t s_s = s & ((ONE << (suffix_len * 2)) - 1);
-        gapmer(s, len).hamming(ONE, callback);
+        if (not gapmer(s, len).hamming(ONE, callback)) return false;
         for (uint8_t i = 1; i <= max_gap; ++i) {
-          gapmer(s, len, uint8_t(len - 1), i).hamming(ONE, callback);
+          if (not gapmer(s, len, uint8_t(len - 1), i).hamming(ONE, callback))
+            return false;
         }
         if (gap_l < max_gap) {
-          gapmer(p, s_s, 1, suffix_len, 1, uint8_t(gap_l + 1))
-              .hamming(ONE, callback);
+          if (not gapmer(p, s_s, 1, suffix_len, 1, uint8_t(gap_l + 1))
+                      .hamming(ONE, callback))
+            return false;
         }
       } else if (gap_s == len - 1) {
         // ACGT.A -> ACG..An, ACGT..n, ACGT..*n
         uint64_t p = prefix() << 2;
         for (uint8_t i = gap_l + 1; i <= max_gap; ++i) {
-          gapmer(p, len, gap_s, i).hamming(ONE, callback);
+          if (not gapmer(p, len, gap_s, i).hamming(ONE, callback)) return false;
         }
         if (gap_l < max_gap) {
-          gapmer(prefix() >> 2, suffix() << 2, prefix_len - 1, 2, gap_s - 1,
-                 gap_l + 1)
-              .hamming(ONE, callback);
+          if (not gapmer(prefix() >> 2, suffix() << 2, prefix_len - 1, 2,
+                         gap_s - 1, gap_l + 1)
+                      .hamming(ONE, callback))
+            return false;
         }
         // ACGT.A -> CGT.An
-        gapmer(suffix(len - 1) << 2, new_len, gap_s - 1, gap_l)
-            .hamming(ONE, callback);
+        if (not gapmer(suffix(len - 1) << 2, new_len, gap_s - 1, gap_l)
+                    .hamming(ONE, callback))
+          return false;
       } else {
         // ACG..TGC -> AC...TGCn, ACG...GCn
         uint64_t p = prefix();
@@ -1047,25 +1168,31 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
         uint64_t s_s = s & ((ONE << (suffix_len * 2)) - 1);
         uint8_t l_g_l = gap_l + 1;
         if (l_g_l <= max_gap) {
-          gapmer(p >> 2, s, prefix_len - 1, suffix_len + 1, gap_s - 1, l_g_l)
-              .hamming(ONE, callback);
-          gapmer(p, s_s, prefix_len, suffix_len, gap_s, l_g_l)
-              .hamming(ONE, callback);
+          if (not gapmer(p >> 2, s, prefix_len - 1, suffix_len + 1, gap_s - 1,
+                         l_g_l)
+                      .hamming(ONE, callback))
+            return false;
+          if (not gapmer(p, s_s, prefix_len, suffix_len, gap_s, l_g_l)
+                      .hamming(ONE, callback))
+            return false;
         }
         // ACG..TGC -> CG..TGCn
-        gapmer(suffix(len - 1) << 2, len, gap_s - 1, gap_l)
-            .hamming(ONE, callback);
+        if (not gapmer(suffix(len - 1) << 2, len, gap_s - 1, gap_l)
+                    .hamming(ONE, callback))
+          return false;
       }
     } else {
       uint64_t n_val = suffix(len - 1) << 2;
       uint64_t suf = n_val;
       uint64_t pref = val & ~uint64_t(0b11);
       // ACGTGC -> CGTGCn
-      gapmer(suf, len).hamming(ONE, val_cb);
+      if (not gapmer(suf, len).hamming(ONE, val_cb)) return false;
       // ACGTGC -> CGTGC.*n ACGTG.*n
       for (uint8_t i = 1; i <= max_gap; ++i) {
-        gapmer(suf, len, len - 1, i).hamming(ONE, callback);
-        gapmer(pref, len, len - 1, i).hamming(ONE, callback);
+        if (not gapmer(suf, len, len - 1, i).hamming(ONE, callback))
+          return false;
+        if (not gapmer(pref, len, len - 1, i).hamming(ONE, callback))
+          return false;
       }
       // ACGTGC -> A.GTGCn, AC.TGCn, ACG.GCn, ACGT.Cn
       uint64_t p = nuc(0);
@@ -1075,7 +1202,9 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
       for (uint8_t i = 1; i < len - 1; ++i) {
         uint64_t g_c = suf >> (2 * s_l + 2);
         suf &= s_l_mask;
-        gapmer(p, suf, i, uint8_t(len - i), i, 1).hamming(ONE, callback);
+        if (not gapmer(p, suf, i, uint8_t(len - i), i, 1)
+                    .hamming(ONE, callback))
+          return false;
         p <<= 2;
         p |= g_c;
         s_l_mask >>= 2;
@@ -1090,13 +1219,14 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
     // Start:
     if (gap_s == 1) {
       // A.CGTA -> CGTA
-      callback(gapmer(suffix(), suffix_len));
+      if (not callback(gapmer(suffix(), suffix_len))) return false;
     } else if (gap_s == 0) {
       // ACGTAC -> CGTAC
-      callback(gapmer(suffix(len - 1), len - 1));
+      if (not callback(gapmer(suffix(len - 1), len - 1))) return false;
     } else {
       // AC..GTC -> C..GTC
-      callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l));
+      if (not callback(gapmer(suffix(len - 1), len - 1, gap_s - 1, gap_l)))
+        return false;
     }
 
     // Middle
@@ -1105,37 +1235,44 @@ void gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(
       // ACGTAC -> A.GTAC, AC.TAC, ACG.AC, ACGT.C
       uint8_t rem = len - 2;
       for (uint8_t i = 1; i < len - 1; ++i) {
-        callback(gapmer(prefix(i), suffix(rem), i, rem, i, 1));
+        if (not callback(gapmer(prefix(i), suffix(rem), i, rem, i, 1)))
+          return false;
         --rem;
       }
     } else {
       if (gap_l < max_gap) {
         if (gap_s > 1) {
           // AA..TGC -> A...TGC
-          callback(gapmer(prefix(prefix_len - 1), suffix(), prefix_len - 1,
-                          suffix_len, gap_s - 1, gap_l + 1));
+          if (not callback(gapmer(prefix(prefix_len - 1), suffix(),
+                                  prefix_len - 1, suffix_len, gap_s - 1,
+                                  gap_l + 1)))
+            return false;
         }
         if (gap_s < len - 1) {
           // AAT..GC -> AAT...C
-          callback(gapmer(prefix(), suffix(suffix_len - 1), prefix_len,
-                          suffix_len - 1, gap_s, gap_l + 1));
+          if (not callback(gapmer(prefix(), suffix(suffix_len - 1), prefix_len,
+                                  suffix_len - 1, gap_s, gap_l + 1)))
+            return false;
         }
       }
     }
     // End
     if (gap_s == len - 1) {
       // CATTA.A -> CATTA
-      callback(gapmer(prefix(), prefix_len));
+      if (not callback(gapmer(prefix(), prefix_len))) return false;
     } else if (gap_s == 0) {
       // CATTATT -> CATTAT
-      callback(gapmer(prefix(len - 1), len - 1));
+      if (not callback(gapmer(prefix(len - 1), len - 1))) return false;
     } else {
       // CAT..ATT -> CAT..AT
       // CA..TAT -> CA..TA
       // CAT..AT -> CAT..A
-      callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l));
+      if (not callback(gapmer(prefix(len - 1), len - 1, gap_s, gap_l)))
+        return false;
     }
   }
+
+  return true;
 }
 
 template <bool middle_gap_only, uint16_t t_max_gap>
@@ -1474,12 +1611,12 @@ void gapmer<middle_gap_only, t_max_gap>::hamming_neighbours(
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool no_smaller, bool no_same, bool no_larger>
-void gapmer<middle_gap_only, t_max_gap>::huddinge_neighbours(
+bool gapmer<middle_gap_only, t_max_gap>::huddinge_neighbours(
     auto&& callback) const {
   if constexpr (middle_gap_only) {
-    middle_gap_neighbours<no_smaller, no_same, no_larger>(callback);
+    return middle_gap_neighbours<no_smaller, no_same, no_larger>(callback);
   } else {
-    all_gap_neighbours<no_smaller, no_same, no_larger>(callback);
+    return all_gap_neighbours<no_smaller, no_same, no_larger>(callback);
   }
 }
 
@@ -1525,6 +1662,7 @@ bool gapmer<middle_gap_only, t_max_gap>::is_canonical() const {
   }
   return true;
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::reverse_complement() const -> gapmer {
