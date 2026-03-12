@@ -76,7 +76,7 @@ class gapmer {
                                                 uint8_t gap_length);
 
   /// Construct from the given data.
-  explicit gapmer(uint64_t data) : data_(data) {}
+  constexpr explicit gapmer(uint64_t data) : data_(data) {}
   /// Construct from the given prefix, suffix, gap position and lengths.
   gapmer(uint64_t prefix, uint64_t suffix, uint8_t p_len, uint8_t s_len,
          uint8_t gap_s, uint8_t gap_l);
@@ -117,7 +117,10 @@ class gapmer {
   void write_4bit_coded_to_buffer(std::span<uint64_t, t_n> span) const;
 
  public:
-  constexpr gapmer() = default;  //< Construct an empty value.
+  /// Construct an empty value.
+  constexpr gapmer() = default;
+  /// Construct an invalid gapmer.
+  constexpr static gapmer make_invalid();
   /// Construct from the given packed data and lengths.
   gapmer(uint64_t v, uint8_t k) : data_(from_value(v, k)) {}
   /// Construct from the given packed data, gap position and lengths.
@@ -207,6 +210,13 @@ class gapmer {
   std::bitset<64> bits() const { return data_; }
 };
 
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+constexpr auto gapmer<middle_gap_only, t_max_gap>::make_invalid() -> gapmer {
+  return gapmer{UINT64_C(0x8000'0000'0000'0000)};
+}
+
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 gapmer<middle_gap_only, t_max_gap>::gapmer(uint64_t prefix, uint64_t suffix,
                                            uint8_t p_len, uint8_t s_len,
@@ -218,6 +228,7 @@ gapmer<middle_gap_only, t_max_gap>::gapmer(uint64_t prefix, uint64_t suffix,
   data_ |= uint64_t(gap_l) << (max_k * 2 + 10);
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::from_value(uint64_t data,
                                                         uint8_t kk) {
@@ -226,6 +237,7 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::from_value(uint64_t data,
   meta <<= 2 * max_k;
   return meta | data;
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::from_value(uint64_t data,
@@ -244,6 +256,7 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::from_value(uint64_t data,
   meta <<= 2 * max_k;
   return meta | data;
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
@@ -282,6 +295,7 @@ uint64_t gapmer<middle_gap_only, t_max_gap>::from_packed_characters(
 
   return head | tail;
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool t_has_gap>
@@ -773,6 +787,7 @@ bool gapmer<middle_gap_only, t_max_gap>::middle_gap_neighbours(
 
   return true;
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool no_smaller, bool no_same, bool no_larger>
@@ -1276,6 +1291,7 @@ bool gapmer<middle_gap_only, t_max_gap>::all_gap_neighbours(auto&& cb) const {
   return true;
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool compare_rc, bool debug>
 bool gapmer<middle_gap_only, t_max_gap>::is_neighbour(
@@ -1410,6 +1426,7 @@ bool gapmer<middle_gap_only, t_max_gap>::is_neighbour(
   return false;
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool compare_rc, bool debug>
 bool gapmer<middle_gap_only, t_max_gap>::aligns_to(gapmer other) const {
@@ -1536,17 +1553,20 @@ bool gapmer<middle_gap_only, t_max_gap>::aligns_to(gapmer other) const {
   return false;
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint16_t gapmer<middle_gap_only, t_max_gap>::gap_start() const {
   uint64_t ret = data_ >> (max_k * 2 + 5);
   return ret & meta_mask;
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint8_t gapmer<middle_gap_only, t_max_gap>::nuc(uint8_t i) const {
   uint64_t v = data_ >> (length() - i - 1) * 2;
   return v & 0b11;
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 uint8_t gapmer<middle_gap_only, t_max_gap>::get_c(uint64_t i) const {
@@ -1559,10 +1579,12 @@ uint8_t gapmer<middle_gap_only, t_max_gap>::get_c(uint64_t i) const {
   return i >= length() ? '.' : v_to_nuc[nuc(i)];
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::next(char c) const -> gapmer {
   return next_(nuc_to_v[c]);
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c) const -> gapmer {
@@ -1575,11 +1597,13 @@ auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c) const -> gapmer {
   return gapmer{(data_ & ~value_mask) | v};
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::next(char c1, char c2) const
     -> gapmer {
   return next_(nuc_to_v[c1], nuc_to_v[c2]);
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c1,
@@ -1597,6 +1621,7 @@ auto gapmer<middle_gap_only, t_max_gap>::next_(std::uint8_t c1,
   return gapmer{(data_ & ~value_mask) | v};
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 void gapmer<middle_gap_only, t_max_gap>::hamming_neighbours(
     auto&& callback) const {
@@ -1610,6 +1635,7 @@ void gapmer<middle_gap_only, t_max_gap>::hamming_neighbours(
   }
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <bool no_smaller, bool no_same, bool no_larger>
 bool gapmer<middle_gap_only, t_max_gap>::huddinge_neighbours(
@@ -1620,6 +1646,7 @@ bool gapmer<middle_gap_only, t_max_gap>::huddinge_neighbours(
     return all_gap_neighbours<no_smaller, no_same, no_larger>(callback);
   }
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 template <typename t_append_cb>
@@ -1641,12 +1668,14 @@ void gapmer<middle_gap_only, t_max_gap>::do_stringify(
   }
 }
 
+
 template <bool middle_gap_only, uint16_t t_max_gap>
 std::string gapmer<middle_gap_only, t_max_gap>::to_string() const {
   std::string retval;
   do_stringify([&retval](char cc) { retval.push_back(cc); });
   return retval;
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 bool gapmer<middle_gap_only, t_max_gap>::is_canonical() const {
@@ -1714,6 +1743,7 @@ auto gapmer<middle_gap_only, t_max_gap>::reverse_complement() const -> gapmer {
   uint8_t g_l = gap_length();
   return {n_v, l, g_s, g_l};
 }
+
 
 template <bool middle_gap_only, uint16_t t_max_gap>
 bool gapmer<middle_gap_only, t_max_gap>::is_valid() const {
