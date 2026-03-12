@@ -203,6 +203,7 @@ class gapmer {
   bool is_canonical() const;
   gapmer reverse_complement() const;  //< Get this’s reverse complement.
   bool is_valid() const;
+  bool is_palindromic() const;
   std::bitset<64> bits() const { return data_; }
 };
 
@@ -1661,6 +1662,30 @@ bool gapmer<middle_gap_only, t_max_gap>::is_canonical() const {
     --b;
   }
   return true;
+}
+
+
+template <bool middle_gap_only, uint16_t t_max_gap>
+bool gapmer<middle_gap_only, t_max_gap>::is_palindromic() const {
+  auto const ll{length()};
+  if (0 == ll) return true;
+
+  auto const gs{gap_start()};
+  auto const gl{gap_length()};
+  if (gl and 1 == ll % 2) return false;
+
+  auto const vv{value()};
+  auto const suffix_length{ll / 2};
+  auto const suffix_mask{
+      ~(UINT64_C(0xFFFF'FFFF'FFFF'FFFF) << (suffix_length * 2))};
+  auto const suffix{vv & suffix_mask};
+  auto const suffix_reversed{[&] -> std::uint64_t {
+    auto const reversed{libbio::reverse_bits(vv)};
+    auto const r1{(reversed & UINT64_C(0x5555'5555'5555'5555)) << 1};
+    auto const r2{(reversed & UINT64_C(0xAAAA'AAAA'AAAA'AAAA)) >> 1};
+    return (r1 | r2) >> (64 - 2 * suffix_length);
+  }()};
+  return suffix == suffix_reversed;
 }
 
 
