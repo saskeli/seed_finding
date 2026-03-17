@@ -27,6 +27,7 @@ namespace sf::detail {
 
 struct huddinge_distance_return_value {
   uint16_t distance{UINT16_MAX};
+  uint16_t max_defined_characters{UINT16_MAX};
   int16_t position{};
 
   auto to_tuple() const { return std::make_tuple(distance, position); }
@@ -101,7 +102,6 @@ class huddinge_distance_calculator_2bit {
   HWY_LANES_CONSTEXPR static hwy_apply_type s_apply{};
 
   huddinge_distance_return_value m_best_alignment{};
-  value_type m_max_defined_characters{};
 
  private:
   template <typename t_cb>
@@ -132,7 +132,9 @@ class huddinge_distance_calculator_2bit {
     return m_best_alignment;
   }
 
-  value_type max_defined_characters() const { return m_max_defined_characters; }
+  value_type max_defined_characters() const {
+    return m_best_alignment.max_defined_characters;
+  }
 
   template <std::size_t t_n>
   inline uint16_t count_defined_characters(span_t<t_n> mask) const;
@@ -208,7 +210,6 @@ class huddinge_distance_calculator_4bit {
   HWY_LANES_CONSTEXPR static hwy_apply_type s_apply{};
 
   huddinge_distance_return_value m_best_alignment{};
-  value_type m_max_defined_characters{};
 
  private:
   template <typename t_cb>
@@ -236,7 +237,9 @@ class huddinge_distance_calculator_4bit {
     return m_best_alignment;
   }
 
-  value_type max_defined_characters() const { return m_max_defined_characters; }
+  value_type max_defined_characters() const {
+    return m_best_alignment.max_defined_characters;
+  }
 
   template <std::size_t t_n>
   inline uint16_t count_defined_characters(span_t<t_n> mask) const;
@@ -290,8 +293,8 @@ template <typename t_tag>
 template <std::size_t t_lhsn, std::size_t t_rhsn>
 void huddinge_distance_calculator_2bit<t_tag>::determine_max_defined_characters(
     span_t<t_lhsn> lhs_mask, span_t<t_rhsn> rhs_mask) {
-  m_max_defined_characters = std::max(count_defined_characters(lhs_mask),
-                                      count_defined_characters(rhs_mask));
+  m_best_alignment.max_defined_characters = std::max(
+      count_defined_characters(lhs_mask), count_defined_characters(rhs_mask));
 }
 
 
@@ -299,7 +302,7 @@ template <typename t_tag>
 template <std::size_t t_lhsn, std::size_t t_rhsn>
 void huddinge_distance_calculator_4bit<t_tag>::determine_max_defined_characters(
     span_t<t_lhsn> lhs, span_t<t_rhsn> rhs) {
-  m_max_defined_characters =
+  m_best_alignment.max_defined_characters =
       std::max(count_defined_characters(lhs), count_defined_characters(rhs));
 }
 
@@ -444,7 +447,7 @@ void huddinge_distance_calculator_2bit<t_tag>::update_best_alignment(
   // Calculate the distances from the scores and find the best score.
   std::conditional_t<t_forward_direction, std::plus<>, std::minus<>> op{};
 
-  auto const max_defined_characters_{s_apply.set(m_max_defined_characters)};
+  auto const max_defined_characters_{s_apply.set(max_defined_characters())};
   alignas(HWY_ALIGNMENT) std::array<uint64_t, s_apply.lanes> distances{};
   s_apply(32U, std::false_type{}, [&](auto& cb) {
     auto const scores_{cb.load(scores.data())};
@@ -468,7 +471,7 @@ void huddinge_distance_calculator_4bit<t_tag>::update_best_alignment(
   // Calculate the distances from the scores and find the best score.
   std::conditional_t<t_forward_direction, std::plus<>, std::minus<>> op{};
 
-  auto const max_defined_characters_{s_apply.set(m_max_defined_characters)};
+  auto const max_defined_characters_{s_apply.set(max_defined_characters())};
   alignas(HWY_ALIGNMENT) std::array<uint64_t, s_apply.lanes> distances{};
   s_apply(16U, std::false_type{}, [&](auto& cb) {
     auto const scores_{cb.load(scores.data())};
@@ -619,11 +622,11 @@ void huddinge_distance_calculator_2bit<t_tag>::shift_word_and_compare_(
   auto const rhs_{s_apply.set(rhs)};
   auto const lhs_mask_{s_apply.set(lhs_mask)};
   auto const rhs_mask_{s_apply.set(rhs_mask)};
-  auto const max_defined_characters([&] {
+  auto const max_defined_characters_([&] {
     struct empty {};
 
     if constexpr (t_uses_fast_path)
-      return s_apply.set(m_max_defined_characters);
+      return s_apply.set(max_defined_characters());
     else
       return empty{};
   }());
@@ -644,7 +647,7 @@ void huddinge_distance_calculator_2bit<t_tag>::shift_word_and_compare_(
 
     if constexpr (t_uses_fast_path)
       update_best_alignment_fast_path<t_forward_direction>(
-          cb, combined_diff, combined_masks, max_defined_characters, scores);
+          cb, combined_diff, combined_masks, max_defined_characters_, scores);
     else
       update_scores_from_diff(cb, combined_diff, combined_masks, scores);
   });
@@ -658,11 +661,11 @@ void huddinge_distance_calculator_4bit<t_tag>::shift_word_and_compare_(
     uint16_t lhsl) {
   auto const lhs_{s_apply.set(lhs)};
   auto const rhs_{s_apply.set(rhs)};
-  auto const max_defined_characters([&] {
+  auto const max_defined_characters_([&] {
     struct empty {};
 
     if constexpr (t_uses_fast_path)
-      return s_apply.set(m_max_defined_characters);
+      return s_apply.set(max_defined_characters());
     else
       return empty{};
   }());
@@ -679,7 +682,7 @@ void huddinge_distance_calculator_4bit<t_tag>::shift_word_and_compare_(
 
     if constexpr (t_uses_fast_path)
       update_best_alignment_fast_path<t_forward_direction>(
-          cb, combined_diff, max_defined_characters, scores);
+          cb, combined_diff, max_defined_characters_, scores);
     else
       update_scores_from_diff(cb, combined_diff, scores);
   });
@@ -772,7 +775,8 @@ HWY_ATTR huddinge_distance_return_value huddinge_distance(
   dc.determine_max_defined_characters(lhs_mask, rhs_mask);
 
   if (0 == lhs.size() || 0 == rhs.size())
-    return huddinge_distance_return_value(dc.max_defined_characters(), 0);
+    return huddinge_distance_return_value(dc.max_defined_characters(),
+                                          dc.max_defined_characters(), 0);
 
   // Case where lhs is shifted to the left, i.e. has negative or zero position
   // w.r.t. rhs.
@@ -814,7 +818,8 @@ HWY_ATTR huddinge_distance_return_value huddinge_distance_4bit(
   dc.determine_max_defined_characters(lhs, rhs);
 
   if (0 == lhs.size() || 0 == rhs.size())
-    return huddinge_distance_return_value(dc.max_defined_characters(), 0);
+    return huddinge_distance_return_value(dc.max_defined_characters(),
+                                          dc.max_defined_characters(), 0);
 
   // Case where lhs is shifted to the left, i.e. has negative or zero position
   // w.r.t. rhs.
