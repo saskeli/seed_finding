@@ -178,6 +178,36 @@ void call_with_constant(bool val, t_cb&& cb) {
 }
 
 
+// Check if callback returns a value and return it;
+// if not, return true.
+template <typename t_callback, typename... t_args>
+struct success_adapter {
+  constexpr static bool returns_void{
+      std::is_void_v<std::invoke_result_t<t_callback, t_args...>>};
+
+  t_callback const& callback;
+
+  explicit success_adapter(t_callback const& callback_) : callback{callback_} {}
+
+  template <typename... t_args_>
+  bool operator()(t_args_&&... args) {
+    if constexpr (returns_void) {
+      callback(std::forward<t_args_>(args)...);
+      return true;
+    } else {
+      return bool(callback(std::forward<t_args_>(args)...));
+    }
+  }
+};
+
+
+template <typename... t_args, typename t_callback>
+auto make_success_adapter(t_callback&& cb) {
+  return success_adapter<std::remove_cvref_t<t_callback>, t_args...>{
+      std::forward<t_callback>(cb)};
+}
+
+
 // OpenMP helpers.
 struct critical_a_bv {
   template <VoidReturning t_cb>
