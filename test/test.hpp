@@ -9,7 +9,16 @@
 #include <iostream>
 
 #include <gtest/gtest.h>		// IWYU pragma: export
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wmissing-braces"
+#pragma clang diagnostic ignored "-Wdeprecated-declarations" // std::aligned_storage is used but has been deprecated in C++23.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // same for GCC
 #include <rapidcheck/gtest.h>	// IWYU pragma: export
+#pragma clang diagnostic pop
+#pragma GCC diagnostic pop
+
 
 namespace sf {
 	// For adding a breakpoint.
