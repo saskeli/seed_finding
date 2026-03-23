@@ -32,28 +32,30 @@ namespace sf {
 template <bool t_middle_gap_only = false, uint16_t t_max_gap = 10>
 class gapmer {
  public:
-  const static constexpr uint64_t max_k{24};
-  const static constexpr uint16_t max_gap{t_max_gap};
-  const static constexpr bool middle_gap_only{t_middle_gap_only};
+  constexpr static uint64_t max_k{24};
+  constexpr static uint16_t max_gap{t_max_gap};
+  constexpr static bool middle_gap_only{t_middle_gap_only};
 
  private:
-  const static constexpr uint64_t ONE = 1;
-  const static constexpr uint64_t value_mask = (ONE << (max_k * 2)) - 1;
-  const static constexpr uint64_t meta_mask = 0b11111;
-  const static constexpr uint8_t meta_length = 5;
+  constexpr static uint64_t ONE = 1;
+  constexpr static uint64_t value_mask = (ONE << (max_k * 2)) - 1;
+  constexpr static uint64_t meta_mask = 0b11111;
+  constexpr static uint64_t mark_mask{UINT64_C(0x8000'0000'0000'0000)};
+  constexpr static uint8_t meta_length = 5;
 
   static_assert(meta_length);
   static_assert(max_gap <= (1 << meta_length) - 1);
 
   // data_ formatted as follows. We denote M = max_k. The length does not
   // include the gap length. The value is stored such that the rightmost
-  // character is at position zero, the next one at position 2 and so on. Note
-  // that the padding must be zeroed to make operator== etc. work.
+  // character is at position zero, the next one at position 2 and so on.
+  // The mark_bit can be used as user data. Note that the padding (if exists)
+  // must be zeroed to make operator== etc. work.
   //
-  //  0                    2M           2M + 5       2M + 10      2M + 15  63
-  // +--------------------+------------+------------+------------+-----------+
-  // | value              | length     | gap_start  | gap_length | padding   |
-  // +--------------------+------------+------------+------------+-----------+
+  //  0                    2M           2M + 5       2M + 10      2M + 15  2M + 16  63
+  // +--------------------+------------+------------+------------+-------------+-----------+
+  // | value              | length     | gap_start  | gap_length | mark_bit    | padding   |
+  // +--------------------+------------+------------+------------+-------------+-----------+
   uint64_t data_{};
 
   template <bool t_has_gap>
@@ -120,7 +122,7 @@ class gapmer {
   /// Construct an empty value.
   constexpr gapmer() = default;
   /// Construct an invalid gapmer.
-  constexpr static gapmer make_invalid();
+  constexpr static gapmer make_marked();
   /// Construct from the given packed data and lengths.
   gapmer(uint64_t v, uint8_t k) : data_(from_value(v, k)) {}
   /// Construct from the given packed data, gap position and lengths.
@@ -208,12 +210,17 @@ class gapmer {
   bool is_valid() const;
   bool is_palindromic() const;
   std::bitset<64> bits() const { return data_; }
+
+  bool is_marked() const { return bool(mark_mask & data_); }
+  void mark() { data_ |= mark_mask; }
+  void clear_mark() { data_ &= ~mark_mask; }
+  gapmer with_mark_cleared() const { return gapmer(data_ & ~mark_mask); }
 };
 
 
 template <bool middle_gap_only, uint16_t t_max_gap>
-constexpr auto gapmer<middle_gap_only, t_max_gap>::make_invalid() -> gapmer {
-  return gapmer{UINT64_C(0x8000'0000'0000'0000)};
+constexpr auto gapmer<middle_gap_only, t_max_gap>::make_marked() -> gapmer {
+  return gapmer{mark_mask};
 }
 
 
