@@ -125,6 +125,7 @@ struct pack_characters_trait<sf::dna_alphabet::dna16, false> {
     auto const append([&](uint64_t val) { dst_word |= val << shift_amt; });
 
     switch (cc) {
+      case '.':
       case '-':
       case 'n': // Gap
         return true;
