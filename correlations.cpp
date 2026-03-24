@@ -51,15 +51,15 @@
 #include <utility>
 #include <vector>
 
-#include "args.hpp"
-#include "configuration.hpp"
-#include "gapmer.hpp"
-#include "huddinge_distance.hpp"
-#include "math.hpp"
-#include "pack_characters.hpp"
-#include "packed_read.hpp"
-#include "reader_adapter.hpp"
-#include "version.hpp"
+#include "include/args.hpp"
+#include "include/configuration.hpp"
+#include "include/gapmer.hpp"
+#include "include/huddinge_distance.hpp"
+#include "include/math.hpp"
+#include "include/pack_characters.hpp"
+#include "include/packed_read.hpp"
+#include "include/reader_adapter.hpp"
+#include "include/version.hpp"
 
 #if defined(__clang__)
 #	define SF_DO_NOT_OPTIMISE __attribute__((optnone))
