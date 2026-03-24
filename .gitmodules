@@ -19,3 +19,6 @@
 [submodule "deps/highway"]
 	path = deps/highway
 	url = https://github.com/google/highway.git
+[submodule "deps/abseil-cpp"]
+	path = deps/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git
