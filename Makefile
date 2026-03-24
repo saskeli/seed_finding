@@ -19,6 +19,7 @@ WARNING_FLAGS = \
 	-Wno-unused-parameter \
 	-Wno-unused-function \
 	-Wno-error=unknown-pragmas \
+	-Wno-shadow \
 	$(WARNING_FLAGS_)
 
 # Determine a suitable value for -march.
@@ -47,12 +48,21 @@ endif
 
 INCLUDE += \
 	-Iinclude \
+	-isystem deps/abseil-cpp \
 	-isystem deps/args \
 	-isystem deps/highway \
 	-isystem deps/libbio/include \
 	-isystem deps/libbio/lib/range-v3/include \
 	-isystem deps/sdsl-lite/include \
 	-isystem deps/seqio/include \
+
+ifeq ($(BOOST_ROOT),)
+CONFIGURE_BOOST_PATH = 
+else
+CONFIGURE_BOOST_PATH = --with-boost="$(BOOST_ROOT)"
+INCLUDE += -isystem $(BOOST_ROOT)/include
+LIBS += -L $(BOOST_ROOT)/lib
+endif
 
 LIBS += -lboost_iostreams -lz -lm
 
@@ -73,7 +83,6 @@ TEST_LDFLAGS			+= -L $(GTEST_DIR)/build/lib -L $(RAPIDCHECK_DIR)/build -lgtest_m
 TEST_COVERAGE_CPPFLAGS	+= $(TEST_CPPFLAGS)
 TEST_COVERAGE_CXXFLAGS	+= -std=c++23 -pthread --coverage $(WARNING_FLAGS) $(TEST_COVERAGE_PERF_FLAGS)
 TEST_COVERAGE_LDFLAGS	+= $(TEST_LDFLAGS)
-
 
 HEADERS =	include/args.hpp \
 			include/bits.hpp \
@@ -203,7 +212,7 @@ $(LIBBIO_DIR)/src/libbio.a: $(LIBBIO_DIR)/local.mk
 	$(MAKE) -C deps/libbio src/libbio.a
 
 $(LIBBIO_DIR)/local.mk: $(LIBBIO_DIR)/configure
-	cd $(LIBBIO_DIR) && CC='$(CC)' CXX='$(CXX)' CPPFLAGS='$(SYSTEM_CPPFLAGS)' LDFLAGS='$(SYSTEM_LDFLAGS)' ./configure --disable-memory-logger-support --disable-bgzf-decompressor --disable-bam-parser
+	cd $(LIBBIO_DIR) && CC='$(CC)' CXX='$(CXX)' CPPFLAGS='$(SYSTEM_CPPFLAGS)' LDFLAGS='$(SYSTEM_LDFLAGS)' ./configure --disable-memory-logger-support --disable-bgzf-decompressor --disable-bam-parser $(CONFIGURE_BOOST_PATH)
 
 $(LIBBIO_DIR)/configure: $(LIBBIO_DIR)/configure.ac
 	cd $(LIBBIO_DIR) && $(AUTORECONF)
