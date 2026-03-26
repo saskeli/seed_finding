@@ -152,7 +152,7 @@ TEST_HEADERS = \
 .PHONY: clean all debug test cover
 
 
-all: motivating huddinge seed_finder comp read_log bincount
+all: motivating huddinge seed_finder comp read_log bincount correlations
 
 debug: seed_finder_deb huddinge_deb
 
