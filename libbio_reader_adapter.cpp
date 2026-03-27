@@ -28,8 +28,8 @@ namespace lb = libbio;
 namespace sf::detail {
 
 constexpr inline unsigned char reverse_bits_8_32b(unsigned char cc) {
-                // From
-                // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
+  // From
+  // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
   return ((cc * UINT32_C(0x0802) & UINT32_C(0x22110)) |
           (cc * UINT32_C(0x8020) & UINT32_C(0x88440))) *
              UINT32_C(0x10101) >>
@@ -38,8 +38,8 @@ constexpr inline unsigned char reverse_bits_8_32b(unsigned char cc) {
 
 
 constexpr inline unsigned char reverse_bits_8_64b(unsigned char cc) {
-                // From
-                // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
+  // From
+  // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith32Bits
   return ((cc * UINT64_C(0x80200802)) & UINT64_C(0x0884422110)) *
              UINT64_C(0x0101010101) >>
          32U;
@@ -47,14 +47,14 @@ constexpr inline unsigned char reverse_bits_8_64b(unsigned char cc) {
 
 
 constexpr inline std::uint64_t reverse_bits_64b(std::uint64_t cc) {
-                // First reverse the 4-byte words, then the 2-byte words, then
-                // bytes, nibbles, groups of 2 bits and finally single bits.
-                //
-                // For x86-64, Clang 21.1.0 produces 20 instructions (excluding ret)
-                // for the extern version of this function, GCC 15 a few more.
-                // (The first two swaps get replaced by something apparently more
-                // efficient.) For ARM, both compilers produce a single instruction,
-                // rbit.
+  // First reverse the 4-byte words, then the 2-byte words, then
+  // bytes, nibbles, groups of 2 bits and finally single bits.
+  //
+  // For x86-64, Clang 21.1.0 produces 20 instructions (excluding ret)
+  // for the extern version of this function, GCC 15 a few more.
+  // (The first two swaps get replaced by something apparently more
+  // efficient.) For ARM, both compilers produce a single instruction,
+  // rbit.
 
   cc = std::rotr(cc, 32);
 
@@ -88,7 +88,7 @@ constexpr inline std::uint64_t reverse_bits_64b(std::uint64_t cc) {
 
 
 constexpr inline std::uint64_t reverse_bits_8x8b(std::uint64_t word) {
-                // This requires way more instructions than reverse_bits_64b.
+  // This requires way more instructions than reverse_bits_64b.
 
   word = std::byteswap(word);
 
@@ -121,13 +121,13 @@ void reverse_complement_packed_scalar_64b(std::span<std::uint64_t> packed_input,
                                           std::uint64_t const length) {
   if (0 == length) return;
 
-                // Reverse the 8-byte words.
+  // Reverse the 8-byte words.
   std::reverse(packed_input.begin(), packed_input.end());
 
   auto const shift_right_amt{(length % 32U) * 2U};
   auto const mask{~(UINT64_C(0xFFFF'FFFF'FFFF'FFFF) >>
-                    shift_right_amt)}; // Avoid UB by replacing shift with
-                                                                                        // rotate + bitwise and.
+                    shift_right_amt)};  // Avoid UB by replacing shift with
+  // rotate + bitwise and.
   packed_input.front() = reverse_complement_packed(packed_input.front());
   packed_input.front() =
       std::rotr(packed_input.front(), shift_right_amt) & mask;
@@ -163,7 +163,9 @@ void libbio_reader_adapter::read_from_path(char const* path) {
   else if (path_.ends_with(".fastq") || path_.ends_with(".fq"))
     m_reader = &m_fastq_reader;
   else {
-    std::cerr << "FATAL: Unexpected suffix in path “" << path << "”.\n";
+    std::cerr << "FATAL: Unexpected suffix in path “" << path
+              << "”, expected one of .fa, .fasta, .fq., .fastq (with .gz "
+                 "appended).\n";
     std::exit(1);
   }
 
