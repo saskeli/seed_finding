@@ -4,6 +4,8 @@
 
 To clone the repository with submodules, please use `git clone --recursive https://github.com/saskeli/seed_finding.git`.
 
+**Please note** that the code generation options for x86-64 as specified in the Makefile cause AVX2 instructions to be produced. These may not be available on CPUs older than those from circa 2013. For ARM64, code for Apple M1 and newer processors is generated.
+
 ### With [Conda-build](https://docs.conda.io/projects/conda-build/)
 
 A conda package can be built with Conda-build as follows. The build script has been tested with Conda-build 25.11.1.
