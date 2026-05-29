@@ -35,7 +35,7 @@ The following software and libraries are required. The tested versions are also 
 - C and C++ compilers. The C++ compiler needs to support C++23. ([GCC 14.2.0](https://gcc.gnu.org/) on Linux, [LLVM 21](https://llvm.org/) on macOS.)
 - [autoconf 2.71](https://www.gnu.org/software/autoconf/)
 - [aclocal (part of automake 1.16.5)](https://www.gnu.org/software/automake/)
-- [Boost 1.83.0](https://www.boost.org)
+- [Boost 1.90.0](https://www.boost.org)
 - [GNU Make 4.3](https://www.gnu.org/software/make/)
 - [Ragel 6.10](http://www.colm.net/open-source/ragel/)
 - [zlib 1.2.13](https://zlib.net)
