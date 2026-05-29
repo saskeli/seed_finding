@@ -15,8 +15,10 @@ A conda package can be built with Conda-build as follows. The build script has b
 
 Conda-build will then report the location of the package. An environment can be created with e.g. the following command:
 ```
-mamba create -n seed-finding -c local -c conda-forge seed_finder
+conda create -n seed-finding -c local -c conda-forge seed_finder
 ```
+
+(For some reason Mamba 2.4.0 is unable to locate the local package.)
 
 ### By Creating a Build Environment with [Apptainer](https://apptainer.org/) (Singularity)
 
