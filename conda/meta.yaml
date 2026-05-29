@@ -17,6 +17,7 @@ requirements:
     - automake # Needed for aclocal only.
     - libboost >=1.83.0
     - libboost-headers >=1.83.0
+    - llvm-openmp # [osx]
     - m4 >=1.4.18
     - make >=4.3
     - ragel >=6.10
