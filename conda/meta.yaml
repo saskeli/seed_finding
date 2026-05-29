@@ -15,8 +15,8 @@ requirements:
     - {{ compiler('cxx') }}
     - autoconf >=2.72
     - automake # Needed for aclocal only.
-    - libboost >=1.83.0
-    - libboost-headers >=1.83.0
+    - libboost >=1.90.0
+    - libboost-headers >=1.90.0
     - llvm-openmp # [osx]
     - m4 >=1.4.18
     - make >=4.3
