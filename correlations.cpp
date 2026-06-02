@@ -21,6 +21,7 @@
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/property_map/property_map.hpp>
+#include <boost/sort/sort.hpp>
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
@@ -1632,12 +1633,25 @@ int main(int argc, char **argv)
 
 					if (not has_neighbours)
 						nodes_without_neighbours.fetch_add(1, std::memory_order_relaxed);
-
-					// Sort to optimise handling in the main thread.
-					std::sort(spec.found_seeds_prev_k.begin(), spec.found_seeds_prev_k.end(), cmp_gapmer_length_value{});
-					std::sort(spec.found_seeds_current_k.begin(), spec.found_seeds_current_k.end(), cmp_gapmer_length_value{});
-					std::sort(spec.discarded_seeds.begin(), spec.discarded_seeds.end(), cmp_gapmer_length_value{});
 				});
+			}
+
+			// Sort to optimise handling.
+			// Placing these in the parallel for above and using a single-threaded sorting algorithm
+			// did not parallelise sorting sufficiently.
+			{
+				lb::log_time(std::cerr) << "  Sorting seeds…" << std::flush;
+				std::size_t idx{};
+				for (auto &spec : partition_specifics)
+				{
+					boost::sort::block_indirect_sort(spec.found_seeds_prev_k.begin(), spec.found_seeds_prev_k.end(), cmp_gapmer_length_value{});
+					boost::sort::block_indirect_sort(spec.found_seeds_current_k.begin(), spec.found_seeds_current_k.end(), cmp_gapmer_length_value{});
+					boost::sort::block_indirect_sort(spec.discarded_seeds.begin(), spec.discarded_seeds.end(), cmp_gapmer_length_value{});
+
+					++idx;
+					std::cerr << ' ' << idx << std::flush;
+				}
+				std::cerr << '\n';
 			}
 
 			lb::log_time(std::cerr) << "  Total number of nodes without neighbours: " << nodes_without_neighbours << '\n';
@@ -1966,6 +1980,8 @@ int main(int argc, char **argv)
 			};
 
 			lb::log_time(std::cerr) << "  Handling semi-local maxima…\n";
+			// FIXME: Parallelising this would be worthwhile but this would involve partitioning
+			// the statistics and adding merge operations to at least some accumulators.
 			for (auto const &kv : semi_local_maximum_statistics)
 			{
 				auto const gg{kv.first};
