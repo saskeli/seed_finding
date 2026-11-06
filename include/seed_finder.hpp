@@ -929,6 +929,8 @@ void seed_finder<t_configuration>::count_short_gapmers(
   if constexpr (enable_smoothing) {
     counts_k.smooth();
   }
+  //gapmer_type gm(uint64_t(0), uint8_t(5));
+  //std::cerr << "Bla " << gm << ": " << counts_k.count(gm).signal_count << std::endl;
 
   for (uint8_t k = 6; k <= lookup_k_; ++k) {
     // Initialize the k + 1 to compute extensions
@@ -1216,7 +1218,7 @@ void seed_finder<t_configuration>::find_seeds() {
         uint64_t offset = counts.offset(gap_s, gap_l);
 #pragma omp parallel for
         for (uint64_t v = 0; v < v_lim; ++v) {
-          gapmer_type const gg(v, lookup_k_, 0, 0);
+          gapmer_type const gg(v, lookup_k_, gap_s, gap_l);
           if (auto const res{filter_count(gg, offset, counts, aa)}; not res) {
             report_enrichment_check_failure(gg, res, "find_seeds",
                                             "filter_count");
